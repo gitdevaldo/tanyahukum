@@ -39,7 +39,7 @@ export interface ChatMessage {
 
 export const RISK_CONFIG = {
   high: {
-    label: "BERISIKO TINGGI",
+    label: "Tinggi",
     color: "text-red-700",
     bg: "bg-red-50",
     border: "border-red-200",
@@ -47,7 +47,7 @@ export const RISK_CONFIG = {
     icon: "🔴",
   },
   medium: {
-    label: "PERHATIAN",
+    label: "Sedang",
     color: "text-amber-700",
     bg: "bg-amber-50",
     border: "border-amber-200",
@@ -55,7 +55,7 @@ export const RISK_CONFIG = {
     icon: "🟡",
   },
   low: {
-    label: "RENDAH",
+    label: "Rendah",
     color: "text-blue-700",
     bg: "bg-blue-50",
     border: "border-blue-200",
@@ -63,7 +63,7 @@ export const RISK_CONFIG = {
     icon: "🔵",
   },
   safe: {
-    label: "AMAN",
+    label: "Tidak Berisiko",
     color: "text-green-700",
     bg: "bg-green-50",
     border: "border-green-200",

@@ -81,6 +81,16 @@ export function ClauseCard({ clause, isActive, onSelect }: ClauseCardProps) {
       {/* Expanded content */}
       {expanded && (
         <div className="px-2.5 sm:px-3.5 pb-2.5 sm:pb-3.5 space-y-3 border-t border-gray-200/50 pt-2.5 sm:pt-3">
+          {/* Full summary */}
+          <div>
+            <h4 className="text-[11px] font-semibold text-neutral-gray uppercase mb-1.5">
+              Ringkasan Analisis
+            </h4>
+            <p className="text-xs text-dark-navy leading-relaxed">
+              {cleanText(clause.summary)}
+            </p>
+          </div>
+
           {/* Clause text */}
           <div>
             <h4 className="text-[11px] font-semibold text-neutral-gray uppercase mb-1.5">

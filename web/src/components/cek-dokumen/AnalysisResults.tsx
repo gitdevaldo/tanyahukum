@@ -80,8 +80,8 @@ export function AnalysisResults({ result, onReset, onClauseSelect, activeClauseI
 
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200/50">
-          <StatItem level="high" label="Berisiko" count={result.high_risk_count} total={result.total_clauses} />
-          <StatItem level="medium" label="Perhatian" count={result.medium_risk_count} total={result.total_clauses} />
+          <StatItem level="high" label="Tinggi" count={result.high_risk_count} total={result.total_clauses} />
+          <StatItem level="medium" label="Sedang" count={result.medium_risk_count} total={result.total_clauses} />
           <StatItem level="low" label="Rendah" count={result.low_risk_count} total={result.total_clauses} />
           <StatItem level="safe" label="Aman" count={result.safe_count} total={result.total_clauses} />
         </div>

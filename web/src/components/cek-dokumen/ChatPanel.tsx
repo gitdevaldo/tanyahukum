@@ -203,11 +203,11 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: Chat
               </button>
             </div>
             <div className="flex items-center justify-between mt-1.5">
-              <p className="text-[10px] text-neutral-gray">
+              <p className="text-[10px] text-neutral-gray text-center flex-1">
                 Bukan nasihat hukum. Konsultasikan dengan pengacara.
               </p>
               {remainingChats !== null && (
-                <p className={`text-[10px] ${remainingChats <= 3 ? "text-red-500" : "text-neutral-gray"}`}>
+                <p className={`text-[10px] flex-shrink-0 ml-2 ${remainingChats <= 3 ? "text-red-500" : "text-neutral-gray"}`}>
                   {remainingChats} chat tersisa
                 </p>
               )}
