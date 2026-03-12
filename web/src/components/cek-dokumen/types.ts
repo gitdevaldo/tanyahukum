@@ -30,6 +30,7 @@ export interface AnalysisResponse {
   clauses: ClauseAnalysis[];
   disclaimer: string;
   analyzed_at: string;
+  remaining_chats?: number;
 }
 
 export interface ChatMessage {

@@ -33,13 +33,16 @@ def save_analysis(analysis_dict: dict, pdf_bytes: bytes) -> None:
 
 
 def get_analysis(analysis_id: str) -> dict | None:
-    """Retrieve analysis result by ID (without PDF binary)."""
+    """Retrieve analysis result by ID (without PDF binary), includes remaining chats."""
     db = get_db()
     col = db[COLLECTION]
 
     doc = col.find_one({"_id": analysis_id}, {"pdf": 0})
     if doc:
-        return doc["result"]
+        result = doc["result"]
+        chat_count = doc.get("chat_count", 0)
+        result["remaining_chats"] = max(0, CHAT_LIMIT - chat_count)
+        return result
     return None
 
 

@@ -184,6 +184,7 @@ export default function ResultsPage() {
         analysisResult={result}
         isOpen={chatOpen}
         onToggle={() => setChatOpen(!chatOpen)}
+        initialRemainingChats={result.remaining_chats ?? null}
       />
     </main>
   );

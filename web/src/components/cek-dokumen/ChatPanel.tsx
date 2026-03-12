@@ -10,6 +10,7 @@ interface ChatPanelProps {
   analysisResult?: AnalysisResponse | null;
   isOpen: boolean;
   onToggle: () => void;
+  initialRemainingChats?: number | null;
 }
 
 function buildAnalysisContext(result: AnalysisResponse): string {
@@ -84,12 +85,12 @@ function RichMessage({ content }: { content: string }) {
   );
 }
 
-export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: ChatPanelProps) {
+export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initialRemainingChats }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [remainingChats, setRemainingChats] = useState<number | null>(null);
-  const [limitReached, setLimitReached] = useState(false);
+  const [remainingChats, setRemainingChats] = useState<number | null>(initialRemainingChats ?? null);
+  const [limitReached, setLimitReached] = useState(initialRemainingChats !== null && initialRemainingChats !== undefined && initialRemainingChats <= 0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
