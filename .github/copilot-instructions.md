@@ -227,3 +227,30 @@ Do NOT assume changes are live. If in doubt, restart. Always verify the service 
 pm2 restart th-web && sleep 10 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3010/
 pm2 restart th-api && sleep 3 && curl -s http://localhost:8000/api/health
 ```
+
+---
+
+## Agent Behavior: Commit & Push After Every Change
+
+**After EVERY code change — no matter how small — the agent MUST commit and push to GitHub.**
+
+### Rules
+1. **Commit immediately** after each logical change (bug fix, feature, config update, docs edit).
+2. Use **conventional commit messages** (e.g., `fix:`, `feat:`, `docs:`, `chore:`, `refactor:`).
+3. Always include the Co-authored-by trailer:
+   ```
+   Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+   ```
+4. **Push to `origin main`** right after committing.
+5. If push fails due to auth, ask the user for the PAT token.
+6. Do NOT batch multiple unrelated changes into one commit — keep commits atomic and descriptive.
+
+### Example Flow
+```bash
+cd /root/tanyahukum
+git add -A
+git commit -m "fix: center chat disclaimer text in ChatPanel
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin main
+```
