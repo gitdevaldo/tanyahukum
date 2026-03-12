@@ -19,10 +19,10 @@
 ### Tech Stack
 - **Frontend**: Next.js 15 + React 19 + Tailwind CSS 4 — self-hosted (NOT Vercel)
 - **Backend**: FastAPI (Python 3.12) — separate service on port 8000
-- **Database**: MongoDB Atlas — 3 collections:
-  - `legal_chunks` (121K+ docs, 4GB+) — regulation text + 1024-dim Mistral embeddings for RAG vector search
-  - `analyses` — saved contract analysis results (PDF text, AI analysis JSON, chat count)
-  - `consultation_bookings` — lawyer consultation booking records
+- **Database**: Qdrant (self-hosted via Docker on port 6333, persistent storage at /data/qdrant) — 3 collections:
+  - `legal_chunks` (121K+ points, 1024-dim cosine vectors) — regulation text + Mistral embeddings for RAG vector search
+  - `analyses` (payload-only, dummy vectors) — saved contract analysis results (JSON result + base64 PDF + chat count)
+  - `bookings` (payload-only, dummy vectors) — lawyer consultation booking records
 - **LLM**: Claude Sonnet 4.6 (`anthropic-claude-4.6-sonnet`) via DigitalOcean Gradient AI — OpenAI-compatible endpoint at `https://inference.do-ai.run/v1`
 - **Embeddings**: Mistral `mistral-embed` (1024 dimensions)
 - **PDF Parsing**: pdfplumber (Python) for both user uploads and regulation ingestion
@@ -76,9 +76,9 @@ User uploads PDF
     ├→ pdfplumber: extract text
     ├→ clause_splitter: regex split by Pasal/BAB/numbered sections
     ├→ Mistral API: embed clauses (1024-dim vectors)
-    ├→ MongoDB Atlas: $vectorSearch in legal_chunks (121K+ chunks)
+    ├→ Qdrant: vector search in legal_chunks (121K+ points, cosine similarity)
     ├→ Claude Sonnet 4.6 (via DO Gradient): analyze risk per clause
-    ├→ MongoDB Atlas: save analysis results to `analyses` collection
+    ├→ Qdrant: save analysis results to `analyses` collection
     └→ guardrails: input validation, citation grounding, topic enforcement
     ↓
 [AnalysisResponse JSON] → risk scores, issues, recommendations, regulation refs
@@ -141,8 +141,8 @@ Each concern is a separate service in `api/services/`:
 - `pdf_extractor.py` — pdfplumber text extraction with `[Halaman N]` page markers
 - `clause_splitter.py` — regex cascade: Pasal → BAB → numbered → paragraph fallback
 - `embeddings.py` — Mistral embed with text sanitization + batch support
-- `rag.py` — MongoDB `$vectorSearch` (index: `vector_index`, path: `embedding`, numCandidates: top_k * 10)
-- `analyzer.py` — orchestrator: clauses → embed → RAG → Claude → structured JSON response; **saves results to MongoDB `analyses` collection**
+- `rag.py` — Qdrant `query_points` cosine vector search on `legal_chunks` collection
+- `analyzer.py` — orchestrator: clauses → embed → RAG → Claude → structured JSON response; **saves results to Qdrant `analyses` collection**
 - `guardrails.py` — PDF magic byte validation, text length check, citation grounding, chat topic keyword filter
 
 ### LLM Integration
@@ -154,6 +154,7 @@ Each concern is a separate service in `api/services/`:
 ### Config
 - `api/config.py` uses Pydantic Settings with `extra = "ignore"` (needed because .env has unrelated vars)
 - All secrets in root `.env` file
+- `QDRANT_URL` defaults to `http://localhost:6333`
 
 ---
 
