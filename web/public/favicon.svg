@@ -1,0 +1,16 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Speech Bubble Background (centered & larger) -->
+  <path d="M 4 10 C 4 6 4 6 8 6 L 56 6 C 60 6 60 6 60 10 L 60 42 C 60 46 60 46 56 46 L 38 46 L 30 56 L 26 46 L 8 46 C 4 46 4 46 4 42 Z" fill="#FF6B35"/>
+  
+  <!-- TH Monogram (centered in bubble) -->
+  <g fill="#FFFFFF">
+    <!-- T Letter -->
+    <rect x="13" y="16" width="14" height="5" rx="1"/>
+    <rect x="17.5" y="16" width="5" height="22" rx="1"/>
+    
+    <!-- H Letter -->
+    <rect x="31" y="16" width="5" height="22" rx="1"/>
+    <rect x="45" y="16" width="5" height="22" rx="1"/>
+    <rect x="31" y="25" width="19" height="5" rx="1"/>
+  </g>
+</svg>

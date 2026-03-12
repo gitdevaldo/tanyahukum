@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PDF Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #fff; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
+  .toolbar-left { display: flex; align-items: center; gap: 8px; }
+  .toolbar-right { display: flex; align-items: center; gap: 4px; }
+  .toolbar span { font-size: 12px; color: #6b7280; }
+  .toolbar button { border: none; background: none; cursor: pointer; padding: 6px; border-radius: 6px; color: #6b7280; font-size: 14px; }
+  .toolbar button:hover { background: #f3f4f6; }
+  .highlight-badge { font-size: 11px; color: #ea580c; font-weight: 600; display: none; align-items: center; gap: 4px; }
+  .highlight-badge.active { display: flex; }
+
+  /* PDF container */
+  .pdf-container { flex: 1; overflow-y: auto; padding: 8px 0; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #525659; }
+
+  /* Page wrapper — continuous scroll, minimal gaps */
+  .page-wrapper { position: relative; background: #fff; }
+
+  /* Text layer */
+  .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; opacity: 0.25; line-height: 1; }
+  .text-layer span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+  .text-layer span.clause-hl { background-color: rgba(251, 146, 60, 0.45); border-radius: 2px; opacity: 1; }
+  .text-layer span::selection { background: rgba(59, 130, 246, 0.3); }
+
+  /* Loading */
+  .loading { display: flex; align-items: center; justify-content: center; height: 100%; color: #6b7280; font-size: 13px; }
+  .spinner { width: 28px; height: 28px; border: 2px solid #e5e7eb; border-top-color: #ea580c; border-radius: 50%; animation: spin 0.7s linear infinite; margin-bottom: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <span id="pageInfo">Memuat...</span>
+    </div>
+    <div class="toolbar-right">
+      <div id="highlightBadge" class="highlight-badge">📍 Klausa dipilih</div>
+      <button onclick="zoomOut()" title="Perkecil">−</button>
+      <span id="zoomLevel">100%</span>
+      <button onclick="zoomIn()" title="Perbesar">+</button>
+    </div>
+  </div>
+  <div class="pdf-container" id="pdfContainer">
+    <div class="loading">
+      <div style="text-align:center">
+        <div class="spinner"></div>
+        <div>Memuat PDF...</div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let pdfDoc = null;
+  let scale = 1.0;
+  let pageTextItems = {}; // pageNum -> [{str, transform, width, height}]
+  const container = document.getElementById('pdfContainer');
+
+  // Receive messages from parent
+  window.addEventListener('message', (e) => {
+    const { type, payload } = e.data;
+    if (type === 'loadPdf') {
+      loadPdf(payload.url);
+    } else if (type === 'highlight') {
+      highlightText(payload.text, payload.color);
+    } else if (type === 'clearHighlight') {
+      clearHighlights();
+    }
+  });
+
+  async function loadPdf(url) {
+    try {
+      pdfDoc = await pdfjsLib.getDocument(url).promise;
+      document.getElementById('pageInfo').textContent = pdfDoc.numPages + ' halaman';
+      container.innerHTML = '';
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        await renderPage(i);
+      }
+      // Notify parent we're ready
+      window.parent.postMessage({ type: 'pdfReady', numPages: pdfDoc.numPages }, '*');
+    } catch (err) {
+      container.innerHTML = '<div class="loading"><div style="color:#ef4444">Gagal memuat PDF</div></div>';
+      console.error(err);
+    }
+  }
+
+  async function renderPage(num) {
+    const page = await pdfDoc.getPage(num);
+    const viewport = page.getViewport({ scale });
+
+    // Wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page-wrapper';
+    wrapper.dataset.page = num;
+    wrapper.style.width = viewport.width + 'px';
+    wrapper.style.height = viewport.height + 'px';
+
+    // Canvas
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = viewport.width * window.devicePixelRatio;
+    canvas.height = viewport.height * window.devicePixelRatio;
+    canvas.style.width = viewport.width + 'px';
+    canvas.style.height = viewport.height + 'px';
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    wrapper.appendChild(canvas);
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    // Text layer
+    const textContent = await page.getTextContent();
+    const textLayer = document.createElement('div');
+    textLayer.className = 'text-layer';
+    textLayer.style.width = viewport.width + 'px';
+    textLayer.style.height = viewport.height + 'px';
+
+    const items = [];
+    textContent.items.forEach((item) => {
+      if (!item.str || !item.str.trim()) return;
+
+      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+      const span = document.createElement('span');
+      span.textContent = item.str;
+
+      const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
+      const left = tx[4];
+      const top = tx[5] - fontSize;
+
+      span.style.left = left + 'px';
+      span.style.top = top + 'px';
+      span.style.fontSize = fontSize + 'px';
+      span.style.fontFamily = item.fontName || 'sans-serif';
+
+      if (item.width > 0) {
+        const renderedWidth = span.offsetWidth || (item.str.length * fontSize * 0.6);
+        const targetWidth = item.width * viewport.scale;
+        if (renderedWidth > 0 && targetWidth > 0) {
+          span.style.transform = 'scaleX(' + (targetWidth / (item.str.length * fontSize * 0.55)).toFixed(3) + ')';
+        }
+      }
+
+      textLayer.appendChild(span);
+      items.push({ str: item.str, span, left, top, fontSize });
+    });
+
+    pageTextItems[num] = items;
+    wrapper.appendChild(textLayer);
+    container.appendChild(wrapper);
+  }
+
+  function clearHighlights() {
+    document.querySelectorAll('.clause-hl').forEach(el => {
+      el.classList.remove('clause-hl');
+      el.style.backgroundColor = '';
+    });
+    document.getElementById('highlightBadge').classList.remove('active');
+  }
+
+  function highlightText(searchText, color) {
+    clearHighlights();
+    if (!searchText || !pdfDoc) return;
+
+    color = color || 'rgba(251, 146, 60, 0.45)';
+
+    // Normalize search text — take first 150 chars for matching
+    const searchNorm = searchText.replace(/\s+/g, ' ').trim().substring(0, 150).toLowerCase();
+    if (searchNorm.length < 8) return;
+
+    let found = false;
+
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+      const items = pageTextItems[pageNum];
+      if (!items || !items.length) continue;
+
+      // Build full page text and map back to spans
+      const fullText = items.map(it => it.str).join(' ').replace(/\s+/g, ' ').toLowerCase();
+      const matchIdx = fullText.indexOf(searchNorm);
+      if (matchIdx === -1) continue;
+
+      // Map character position to items
+      let charCount = 0;
+      const matchEnd = matchIdx + searchNorm.length;
+      let firstSpan = null;
+
+      for (let i = 0; i < items.length; i++) {
+        const itemText = items[i].str;
+        const itemStart = charCount;
+        const itemEnd = charCount + itemText.length + 1; // +1 for the space we joined with
+
+        if (itemEnd > matchIdx && itemStart < matchEnd) {
+          items[i].span.classList.add('clause-hl');
+          items[i].span.style.backgroundColor = color;
+          if (!firstSpan) firstSpan = items[i].span;
+        }
+
+        charCount = itemEnd;
+      }
+
+      if (firstSpan) {
+        // Scroll the page wrapper into view, then scroll to span
+        const wrapper = document.querySelector('[data-page="' + pageNum + '"]');
+        if (wrapper) {
+          wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setTimeout(() => {
+            firstSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }
+        found = true;
+      }
+
+      if (found) break;
+    }
+
+    if (found) {
+      document.getElementById('highlightBadge').classList.add('active');
+    }
+  }
+
+  // Zoom controls
+  function zoomIn() {
+    scale = Math.min(2.5, scale + 0.2);
+    document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
+    rerender();
+  }
+  function zoomOut() {
+    scale = Math.max(0.4, scale - 0.2);
+    document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
+    rerender();
+  }
+  async function rerender() {
+    if (!pdfDoc) return;
+    pageTextItems = {};
+    container.innerHTML = '';
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      await renderPage(i);
+    }
+  }
+</script>
+</body>
+</html>

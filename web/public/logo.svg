@@ -1,0 +1,7 @@
+<svg width="200" height="64" viewBox="0 0 200 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Speech Bubble Background (wider to fit text) -->
+  <path d="M 8 12 C 8 8 8 8 12 8 L 188 8 C 192 8 192 8 192 12 L 192 40 C 192 44 192 44 188 44 L 36 44 L 28 52 L 24 44 L 12 44 C 8 44 8 44 8 40 Z" fill="#FF6B35"/>
+  
+  <!-- TanyaHukum Text -->
+  <text x="100" y="33" font-family="'Quicksand', 'Nunito', 'Rounded', sans-serif" font-size="20" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">TanyaHukum</text>
+</svg>

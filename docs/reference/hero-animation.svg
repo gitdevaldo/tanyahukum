@@ -1,0 +1,320 @@
+<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" style="background:#F9F6F0;">
+
+  <style>
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-12px); }
+    }
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    @keyframes highlight {
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 0.65; }
+    }
+    @keyframes stamp {
+      0%, 85%, 100% { transform: scale(1) rotate(-8deg); opacity: 1; }
+      90% { transform: scale(1.08) rotate(-8deg); opacity: 1; }
+    }
+    @keyframes chatbubble {
+      0%, 100% { transform: translateY(0px) scale(1); }
+      50% { transform: translateY(-6px) scale(1.02); }
+    }
+    @keyframes scanline {
+      0%   { transform: translateY(0px); opacity: 0; }
+      15%  { opacity: 0.9; }
+      85%  { opacity: 0.9; }
+      100% { transform: translateY(90px); opacity: 0; }
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: -40; }
+    }
+
+    .float   { animation: float 3.8s ease-in-out infinite; }
+    .float-2 { animation: float 3.8s ease-in-out infinite; animation-delay: 0.8s; }
+    .float-3 { animation: float 3.8s ease-in-out infinite; animation-delay: 1.5s; }
+
+    .rotate-ring { animation: rotate 35s linear infinite; transform-origin: 250px 235px; }
+
+    .pulse   { animation: pulse 2.4s ease-in-out infinite; }
+    .pulse-2 { animation: pulse 2.4s ease-in-out infinite; animation-delay: 0.7s; }
+    .pulse-3 { animation: pulse 2.4s ease-in-out infinite; animation-delay: 1.4s; }
+
+    .highlight   { animation: highlight 2.8s ease-in-out infinite; }
+    .highlight-2 { animation: highlight 2.8s ease-in-out infinite; animation-delay: 1s; }
+    .highlight-3 { animation: highlight 2.8s ease-in-out infinite; animation-delay: 1.9s; }
+
+    .stamp { animation: stamp 4s ease-in-out infinite; transform-origin: 358px 308px; }
+    .chat  { animation: chatbubble 3.2s ease-in-out infinite; animation-delay: 0.5s; }
+    .scan  { animation: scanline 3s ease-in-out infinite; }
+    .dash  { animation: dash 3s linear infinite; }
+  </style>
+
+  <defs>
+    <radialGradient id="bgGrad" cx="40%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#FFF8EE"/>
+      <stop offset="100%" stop-color="#EDE8DF"/>
+    </radialGradient>
+    <radialGradient id="docGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#C8922A" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#C8922A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#C8922A" flood-opacity="0.15"/>
+    </filter>
+    <filter id="cardshadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#2C1A00" flood-opacity="0.12"/>
+    </filter>
+    <clipPath id="docClip">
+      <rect x="172" y="128" width="148" height="188" rx="10"/>
+    </clipPath>
+  </defs>
+
+  <!-- BG -->
+  <rect width="500" height="500" fill="url(#bgGrad)"/>
+
+  <!-- Subtle texture dots -->
+  <g opacity="0.06" fill="#8B6914">
+    <circle cx="60"  cy="80"  r="2"/><circle cx="100" cy="60"  r="1.5"/>
+    <circle cx="420" cy="90"  r="2"/><circle cx="450" cy="130" r="1.5"/>
+    <circle cx="55"  cy="400" r="2"/><circle cx="90"  cy="440" r="1.5"/>
+    <circle cx="440" cy="410" r="2"/><circle cx="400" cy="450" r="1.5"/>
+    <circle cx="200" cy="470" r="2"/><circle cx="300" cy="475" r="1.5"/>
+  </g>
+
+  <!-- Outer decorative ring -->
+  <circle class="rotate-ring" cx="250" cy="235" r="190"
+    fill="none" stroke="#C8922A" stroke-width="1"
+    stroke-dasharray="4 20" opacity="0.18"/>
+
+  <!-- Soft glow behind document -->
+  <circle cx="248" cy="222" r="130" fill="url(#docGlow)"/>
+
+  <!-- ═══════════════════════════════════════
+       MAIN ELEMENT: CONTRACT DOCUMENT
+  ════════════════════════════════════════ -->
+  <g class="float" filter="url(#cardshadow)">
+
+    <!-- Document shadow layer -->
+    <rect x="178" y="136" width="148" height="188" rx="10" fill="#E8DDCC" opacity="0.6"/>
+
+    <!-- Document body -->
+    <rect x="172" y="128" width="148" height="188" rx="10" fill="#FFFDF8" stroke="#DDD0BB" stroke-width="1.5"/>
+
+    <!-- Header bar -->
+    <rect x="172" y="128" width="148" height="28" rx="10" fill="#2C1A00"/>
+    <rect x="172" y="146" width="148" height="10" fill="#2C1A00"/>
+
+    <!-- Doc title text sim -->
+    <rect x="196" y="137" width="80" height="6" rx="3" fill="#F9F0DC" opacity="0.7"/>
+    <rect x="282" y="139" width="20" height="4" rx="2" fill="#C8922A" opacity="0.6"/>
+
+    <!-- Clause lines group -->
+    <g fill="#C8922A" opacity="0.18">
+      <rect x="186" y="170" width="120" height="4" rx="2"/>
+      <rect x="186" y="179" width="96"  height="4" rx="2"/>
+      <rect x="186" y="188" width="110" height="4" rx="2"/>
+    </g>
+
+    <!-- HIGHLIGHTED RISKY CLAUSE (animated) -->
+    <rect class="highlight" x="183" y="198" width="130" height="13" rx="3" fill="#E8431A" opacity="0.3"/>
+    <rect x="186" y="201" width="102" height="4" rx="2" fill="#2C1A00" opacity="0.45"/>
+    <rect x="186" y="208" width="78"  height="4" rx="2" fill="#2C1A00" opacity="0.3"/>
+
+    <!-- Flag icon on risky clause -->
+    <rect x="309" y="199" width="3"  height="11" rx="1"   fill="#E8431A"/>
+    <path d="M312 200 L320 203 L312 206 Z" fill="#E8431A"/>
+
+    <!-- More clause lines -->
+    <g fill="#C8922A" opacity="0.18">
+      <rect x="186" y="217" width="120" height="4" rx="2"/>
+      <rect x="186" y="226" width="88"  height="4" rx="2"/>
+    </g>
+
+    <!-- SECOND HIGHLIGHTED CLAUSE -->
+    <rect class="highlight-2" x="183" y="236" width="130" height="13" rx="3" fill="#C8922A" opacity="0.25"/>
+    <rect x="186" y="239" width="115" height="4" rx="2" fill="#2C1A00" opacity="0.4"/>
+    <rect x="186" y="246" width="70"  height="4" rx="2" fill="#2C1A00" opacity="0.28"/>
+
+    <!-- More lines -->
+    <g fill="#C8922A" opacity="0.18">
+      <rect x="186" y="256" width="120" height="4" rx="2"/>
+      <rect x="186" y="265" width="100" height="4" rx="2"/>
+      <rect x="186" y="274" width="112" height="4" rx="2"/>
+    </g>
+
+    <!-- THIRD HIGHLIGHTED CLAUSE (safe / green) -->
+    <rect class="highlight-3" x="183" y="284" width="130" height="13" rx="3" fill="#2A7A4B" opacity="0.2"/>
+    <rect x="186" y="287" width="95"  height="4" rx="2" fill="#2C1A00" opacity="0.4"/>
+    <rect x="186" y="294" width="60"  height="4" rx="2" fill="#2C1A00" opacity="0.28"/>
+
+    <!-- Scan line over document -->
+    <g clip-path="url(#docClip)">
+      <rect class="scan" x="172" y="128" width="148" height="3"
+        fill="#C8922A" opacity="0.5"/>
+    </g>
+
+    <!-- Bottom page lines -->
+    <g fill="#C8922A" opacity="0.13">
+      <rect x="186" y="305" width="120" height="3" rx="1.5"/>
+      <rect x="186" y="311" width="88"  height="3" rx="1.5"/>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════
+       STAMP: PASAL CITATION
+  ════════════════════════════════════════ -->
+  <g class="stamp">
+    <rect x="323" y="278" width="74" height="60" rx="8"
+      fill="#FFF8EE" stroke="#C8922A" stroke-width="2.5" opacity="0.96"
+      filter="url(#soft)"/>
+    <text x="360" y="299" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="7.5"
+      fill="#8B6914" letter-spacing="1" opacity="0.7">BERDASARKAN</text>
+    <text x="360" y="314" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="11"
+      fill="#2C1A00" font-weight="bold" letter-spacing="0.5">Pasal 18</text>
+    <text x="360" y="326" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="7"
+      fill="#C8922A" letter-spacing="0.5">UU No. 8/1999</text>
+    <!-- Stamp border ring -->
+    <rect x="327" y="281" width="66" height="54" rx="6"
+      fill="none" stroke="#C8922A" stroke-width="1" opacity="0.35"
+      stroke-dasharray="3 4"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════
+       CHAT BUBBLE: AI RESPONSE
+  ════════════════════════════════════════ -->
+  <g class="chat" filter="url(#cardshadow)">
+    <!-- Bubble body -->
+    <rect x="60" y="148" width="104" height="82" rx="12"
+      fill="#2C1A00" opacity="0.94"/>
+    <!-- Bubble tail -->
+    <path d="M150 218 L164 228 L148 228 Z" fill="#2C1A00"/>
+
+    <!-- Chat header -->
+    <circle cx="80" cy="166" r="7" fill="#C8922A" opacity="0.9"/>
+    <text x="80" y="170" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="8"
+      fill="#FFF8EE" font-weight="bold">T</text>
+
+    <rect x="94" y="161" width="54" height="4" rx="2" fill="#F9F0DC" opacity="0.7"/>
+    <rect x="94" y="168" width="38" height="3" rx="1.5" fill="#C8922A" opacity="0.5"/>
+
+    <!-- Chat text lines -->
+    <rect x="72" y="180" width="78" height="3.5" rx="1.8" fill="#F9F0DC" opacity="0.5"/>
+    <rect x="72" y="187" width="84" height="3.5" rx="1.8" fill="#F9F0DC" opacity="0.4"/>
+    <rect x="72" y="194" width="60" height="3.5" rx="1.8" fill="#F9F0DC" opacity="0.3"/>
+
+    <!-- Typing indicator dots -->
+    <circle class="pulse"   cx="72" cy="208" r="3" fill="#C8922A" opacity="0.7"/>
+    <circle class="pulse-2" cx="82" cy="208" r="3" fill="#C8922A" opacity="0.7"/>
+    <circle class="pulse-3" cx="92" cy="208" r="3" fill="#C8922A" opacity="0.7"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════
+       ICON: LAWYER BOOKING CARD
+  ════════════════════════════════════════ -->
+  <g class="float-3" filter="url(#cardshadow)">
+    <rect x="312" y="140" width="100" height="80" rx="12"
+      fill="#FFFDF8" stroke="#DDD0BB" stroke-width="1.5"/>
+
+    <!-- Avatar circle -->
+    <circle cx="337" cy="163" r="14" fill="#EDE0C8"/>
+    <!-- Person silhouette -->
+    <circle cx="337" cy="158" r="6" fill="#8B6914" opacity="0.5"/>
+    <path d="M326 177 Q327 167 337 167 Q347 167 348 177"
+      fill="#8B6914" opacity="0.35"/>
+
+    <!-- Name & role -->
+    <rect x="357" y="153" width="44" height="5" rx="2.5" fill="#2C1A00" opacity="0.55"/>
+    <rect x="357" y="162" width="34" height="4" rx="2"   fill="#C8922A" opacity="0.5"/>
+    <rect x="357" y="170" width="38" height="3.5" rx="1.8" fill="#2C1A00" opacity="0.28"/>
+
+    <!-- Book button -->
+    <rect x="320" y="185" width="82" height="22" rx="6" fill="#C8922A"/>
+    <text x="361" y="200" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="8.5"
+      fill="#FFFDF8" font-weight="bold" letter-spacing="0.5">Konsultasi</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════
+       RISK BADGE (bottom-left float)
+  ════════════════════════════════════════ -->
+  <g class="float-2">
+    <rect x="58" y="285" width="98" height="72" rx="12"
+      fill="#FFF1EE" stroke="#E8431A" stroke-width="1.5" opacity="0.95"
+      filter="url(#cardshadow)"/>
+
+    <!-- Warning icon -->
+    <path d="M107 300 L118 318 L96 318 Z"
+      fill="none" stroke="#E8431A" stroke-width="2"
+      stroke-linejoin="round"/>
+    <line x1="107" y1="306" x2="107" y2="312"
+      stroke="#E8431A" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="107" cy="315" r="1.5" fill="#E8431A"/>
+
+    <text x="107" y="334" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="7.5"
+      fill="#E8431A" font-weight="bold" letter-spacing="0.5">KLAUSUL RISIKO</text>
+    <text x="107" y="346" text-anchor="middle"
+      font-family="'Georgia', serif" font-size="9"
+      fill="#2C1A00" font-weight="bold">3 Ditemukan</text>
+  </g>
+
+  <!-- ═══════════════════════════════════════
+       DECORATIVE SCALE OF JUSTICE (faint)
+  ════════════════════════════════════════ -->
+  <g opacity="0.07" stroke="#8B6914" stroke-width="2" fill="none" stroke-linecap="round">
+    <!-- Beam -->
+    <line x1="216" y1="88" x2="284" y2="88"/>
+    <!-- Center pole -->
+    <line x1="250" y1="78" x2="250" y2="105"/>
+    <!-- Left pan -->
+    <line x1="216" y1="88" x2="208" y2="100"/>
+    <line x1="208" y1="100" x2="222" y2="100"/>
+    <!-- Right pan -->
+    <line x1="284" y1="88" x2="276" y2="96"/>
+    <line x1="276" y1="96" x2="290" y2="96"/>
+    <!-- Top ornament -->
+    <circle cx="250" cy="78" r="4" fill="#8B6914"/>
+  </g>
+
+  <!-- Corner bracket accents -->
+  <g stroke="#C8922A" stroke-width="1.5" fill="none" opacity="0.2" stroke-linecap="round">
+    <path d="M38 58 L38 40 L56 40"/>
+    <path d="M462 58 L462 40 L444 40"/>
+    <path d="M38 442 L38 460 L56 460"/>
+    <path d="M462 442 L462 460 L444 460"/>
+  </g>
+
+  <!-- Dashed connector lines -->
+  <g stroke="#C8922A" stroke-width="1" fill="none" stroke-dasharray="4 6" opacity="0.2">
+    <line class="dash" x1="164" y1="205" x2="172" y2="220"/>
+    <line class="dash" x1="320" y1="200" x2="312" y2="190"/>
+  </g>
+
+  <!-- Floating accent dots -->
+  <circle class="pulse"   cx="148" cy="120" r="4"   fill="#C8922A" opacity="0.45"/>
+  <circle class="pulse-2" cx="370" cy="255" r="3.5" fill="#E8431A" opacity="0.4"/>
+  <circle class="pulse-3" cx="88"  cy="390" r="3"   fill="#C8922A" opacity="0.35"/>
+  <circle class="pulse"   cx="430" cy="370" r="3"   fill="#2A7A4B" opacity="0.4"/>
+  <circle class="pulse-2" cx="290" cy="440" r="2.5" fill="#C8922A" opacity="0.3"/>
+
+  <!-- ═══════════════════════════════════════
+       WORDMARK
+  ════════════════════════════════════════ -->
+  <text x="250" y="432" text-anchor="middle"
+    font-family="'Georgia', serif" font-size="14"
+    fill="#2C1A00" font-weight="bold" letter-spacing="3" opacity="0.85">TANYAHUKUM</text>
+  <text x="250" y="448" text-anchor="middle"
+    font-family="'Georgia', serif" font-size="7.5"
+    fill="#8B6914" letter-spacing="2.5" opacity="0.55">ASISTEN HUKUM BERBASIS AI</text>
+
+</svg>

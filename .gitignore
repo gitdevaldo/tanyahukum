@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+
+# Data — keep JSON state, ignore large PDFs
+data/regulations/*.pdf
+
+# Next.js
+web/node_modules/
+web/.next/
+web/out/
+
+# OS
+.DS_Store
+Thumbs.db
+data/crawl.log
