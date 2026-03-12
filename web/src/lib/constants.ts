@@ -2,8 +2,8 @@
 
 export const NAV_LINKS = [
   { label: "Beranda", href: "/" },
-  { label: "Fitur", href: "/#fitur" },
-  { label: "Harga", href: "/#pricing" },
+  { label: "Fitur", anchor: "fitur" },
+  { label: "Harga", anchor: "pricing" },
 ] as const;
 
 export const TRUST_PARTNERS = [

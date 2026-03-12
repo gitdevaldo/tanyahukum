@@ -2,16 +2,33 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
 import { NAV_LINKS } from "@/lib/constants";
 
+// Pages that have #fitur and #pricing sections
+const PAGES_WITH_SECTIONS = ["/", "/bisnis"];
+
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Strip trailing slash for comparison
+  const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  const hasLocalSections = PAGES_WITH_SECTIONS.includes(normalizedPath);
+
+  function getHref(link: (typeof NAV_LINKS)[number]) {
+    if ("href" in link && link.href) return link.href;
+    if ("anchor" in link && link.anchor) {
+      // If current page has the section, scroll in-page; otherwise go to homepage
+      return hasLocalSections ? `#${link.anchor}` : `/#${link.anchor}`;
+    }
+    return "/";
+  }
 
   return (
     <header className="bg-light-cream border-b border-border-light px-[5%] py-3 sm:py-4">
       <nav className="mx-auto flex max-w-[1400px] items-center justify-between">
-        {/* Logo — always links to homepage */}
         <Link href="/" className="flex-shrink-0">
           <img src="/logo.svg" alt="TanyaHukum" className="h-10 sm:h-12" />
         </Link>
@@ -19,9 +36,9 @@ export default function Header() {
         {/* Center nav links */}
         <ul className="hidden items-center gap-8 md:flex">
           {NAV_LINKS.map((link) => (
-            <li key={link.href}>
+            <li key={link.label}>
               <Link
-                href={link.href}
+                href={getHref(link)}
                 className="font-medium text-dark-navy hover:text-primary-orange transition-colors"
               >
                 {link.label}
@@ -65,9 +82,9 @@ export default function Header() {
         <div className="md:hidden mt-3 pb-3 border-t border-border-light pt-3">
           <ul className="flex flex-col gap-3">
             {NAV_LINKS.map((link) => (
-              <li key={link.href}>
+              <li key={link.label}>
                 <Link
-                  href={link.href}
+                  href={getHref(link)}
                   onClick={() => setMenuOpen(false)}
                   className="block font-medium text-dark-navy hover:text-primary-orange transition-colors py-1"
                 >
