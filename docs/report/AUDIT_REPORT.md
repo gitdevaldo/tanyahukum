@@ -38,7 +38,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | C-04 | Critical | Race condition on chat limit allows unlimited bypass | `api/routers/chat.py:37-43`, `api/services/storage.py:57-78` | Open |
 | C-05 | Critical | Conversation history injection — system role allowed | `api/routers/chat.py:63-64`, `api/models/schemas.py` | Open |
 | C-06 | Critical | Production secrets in plaintext .env with default perms | `.env` | Open |
-| C-07 | Critical | Hardcoded unauthenticated webhook URL dispenses API key | `scripts/ingest.py:46` | Open |
+| ~~C-07~~ | ~~Critical~~ | ~~Hardcoded unauthenticated webhook URL dispenses API key~~ | ~~`scripts/ingest.py:46`~~ | Not a Problem |
 | C-08 | Critical | 7.4 MB regulations_meta.json committed to git | `data/regulations_meta.json`, `data/ingest_state.json`, `data/crawl.log` | Open |
 | C-09 | Critical | crawl.log committed to git — may contain sensitive data | `data/crawl.log` | Open |
 | H-01 | High | No timeout on LLM API calls | `api/services/analyzer.py`, `api/routers/chat.py` | Open |
@@ -61,7 +61,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-02 | Medium | Duplicate LLM client singletons | `api/services/analyzer.py:22-32`, `api/routers/chat.py:16-26` | Open |
 | M-03 | Medium | MongoDB 16MB doc limit vs 20MB PDF upload limit | `api/services/storage.py:21` | Open |
 | M-04 | Medium | No retry logic for external API calls | `api/services/embeddings.py:23-36`, `api/services/analyzer.py:96-104` | Open |
-| M-05 | Medium | Embedding batch size unlimited — may exceed API limits | `api/services/embeddings.py:21-38` | Open |
+| ~~M-05~~ | ~~Medium~~ | ~~Embedding batch size unlimited — may exceed API limits~~ | ~~`api/services/embeddings.py:21-38`~~ | Not a Problem |
 | M-06 | Medium | analysis_context field has no size limit | `api/models/schemas.py:56` | Open |
 | M-07 | Medium | No MongoDB connection timeout configured | `api/services/rag.py:13` | Open |
 | M-08 | Medium | No security response headers on API | `api/main.py` | Open |
@@ -92,7 +92,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | L-09 | Low | Dead library code — mongodb.ts, rag.ts, embeddings.ts | `web/src/lib/mongodb.ts`, `web/src/lib/rag.ts`, `web/src/lib/embeddings.ts` | Open |
 | L-10 | Low | Placeholder pages with no functionality | `web/src/app/(pages)/chat/page.tsx`, `results/page.tsx`, `upload/page.tsx` | Open |
 | L-11 | Low | "Konsultasi Pengacara" button does nothing | `web/src/components/cek-dokumen/AnalysisResults.tsx:123` | Open |
-| L-12 | Low | Services running as root user | `ecosystem.config.cjs` | Open |
+| ~~L-12~~ | ~~Low~~ | ~~Services running as root user~~ | ~~`ecosystem.config.cjs`~~ | Not a Problem |
 | E-01 | Enhancement | No request tracing / correlation IDs | `api/main.py` | Open |
 | E-02 | Enhancement | No graceful shutdown handling | `api/main.py` | Open |
 | E-03 | Enhancement | No health check for Mistral embeddings API | `api/routers/health.py` | Open |
@@ -258,7 +258,7 @@ chown root:root .env              # Ensure correct ownership
 
 ---
 
-#### C-07 · Hardcoded unauthenticated webhook URL dispenses API key
+#### ~~C-07 · Hardcoded unauthenticated webhook URL dispenses API key~~ — NOT A PROBLEM
 
 **File**: `scripts/ingest.py:46`
 
@@ -699,7 +699,7 @@ def call_llm(...):
 
 ---
 
-#### M-05 · Embedding batch size unlimited
+#### ~~M-05 · Embedding batch size unlimited~~ — NOT A PROBLEM
 
 **File**: `api/services/embeddings.py:21-38`
 
@@ -1085,7 +1085,7 @@ os.replace(f"{path}.tmp", path)
 
 ---
 
-#### L-12 · Services running as root user
+#### ~~L-12 · Services running as root user~~ — NOT A PROBLEM
 
 **File**: `ecosystem.config.cjs`, line 6
 
