@@ -83,8 +83,8 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-24 | Medium | Non-atomic JSON file writes in crawler/ingest | `scripts/crawl_bpk_v2.py`, `scripts/ingest.py` | Fixed |
 | L-01 | Low | CORS origins include hardcoded IP | `api/config.py` | Fixed |
 | L-02 | Low | Import inside function body | `api/services/analyzer.py` | Fixed |
-| L-03 | Low | Unused functions in pdf_extractor | `api/services/pdf_extractor.py:23-40` | Open |
-| L-04 | Low | Redundant `requests` library (already has httpx) | `api/requirements.txt:11` | Open |
+| L-03 | Low | Unused functions in pdf_extractor | `api/services/pdf_extractor.py` | Fixed |
+| L-04 | Low | Redundant requests library (replaced with httpx) | `api/services/embeddings.py` | Fixed |
 | L-05 | Low | CORS allows all methods and headers | `api/main.py` | Fixed |
 | L-06 | Low | No structured logging format | Existing format adequate | Fixed |
 | L-07 | Low | Stale duplicate TypeScript types | `web/src/types/analysis.ts` deleted | Fixed |
