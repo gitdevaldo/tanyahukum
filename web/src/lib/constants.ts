@@ -1,11 +1,9 @@
 // Landing page content — edit here, not in components
 
 export const NAV_LINKS = [
-  { label: "Home", href: "#home" },
-  { label: "Fitur", href: "#features" },
-  { label: "Harga", href: "#pricing" },
-  { label: "Bisnis", href: "/bisnis/" },
-  { label: "F.A.Q.", href: "#faq" },
+  { label: "Beranda", href: "/" },
+  { label: "Fitur", href: "/#fitur" },
+  { label: "Harga", href: "/#pricing" },
 ] as const;
 
 export const TRUST_PARTNERS = [

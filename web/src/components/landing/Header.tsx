@@ -11,9 +11,12 @@ export default function Header() {
   return (
     <header className="bg-light-cream border-b border-border-light px-[5%] py-3 sm:py-4">
       <nav className="mx-auto flex max-w-[1400px] items-center justify-between">
-        <div>
+        {/* Logo — always links to homepage */}
+        <Link href="/" className="flex-shrink-0">
           <img src="/logo.svg" alt="TanyaHukum" className="h-10 sm:h-12" />
-        </div>
+        </Link>
+
+        {/* Center nav links */}
         <ul className="hidden items-center gap-8 md:flex">
           {NAV_LINKS.map((link) => (
             <li key={link.href}>
@@ -25,20 +28,20 @@ export default function Header() {
               </Link>
             </li>
           ))}
-          <li className="flex items-center gap-2">
-            <Button href="/bisnis/" variant="secondary" size="sm">
-              Bisnis
-            </Button>
-            <Button href="/cek-dokumen/" variant="primary" size="sm">
-              Cek Dokumen
-            </Button>
-          </li>
         </ul>
-        {/* Mobile hamburger */}
-        <div className="md:hidden flex items-center gap-2">
-          <Button href="/bisnis/" variant="secondary" size="sm" className="!px-3 !py-1.5 !text-xs">
+
+        {/* Right CTA */}
+        <div className="hidden md:flex items-center gap-2">
+          <Button href="/bisnis/" variant="secondary" size="sm">
             Bisnis
           </Button>
+          <Button href="/cek-dokumen/" variant="primary" size="sm">
+            Cek Dokumen
+          </Button>
+        </div>
+
+        {/* Mobile */}
+        <div className="md:hidden flex items-center gap-2">
           <Button href="/cek-dokumen/" variant="primary" size="sm" className="!px-3 !py-1.5 !text-xs">
             Cek Dokumen
           </Button>
@@ -72,6 +75,15 @@ export default function Header() {
                 </Link>
               </li>
             ))}
+            <li>
+              <Link
+                href="/bisnis/"
+                onClick={() => setMenuOpen(false)}
+                className="block font-medium text-dark-navy hover:text-primary-orange transition-colors py-1"
+              >
+                Bisnis
+              </Link>
+            </li>
           </ul>
         </div>
       )}

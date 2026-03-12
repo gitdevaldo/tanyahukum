@@ -102,7 +102,7 @@ function Problems() {
 /* ─── Solution Section ─── */
 function Solutions() {
   return (
-    <section className="bg-dark-navy px-[5%] py-14 sm:py-24 text-white">
+    <section id="fitur" className="bg-dark-navy px-[5%] py-14 sm:py-24 text-white">
       <div className="mx-auto max-w-[1400px]">
         <SectionHeading
           title="Satu Platform, Semua Kebutuhan Kontrak"

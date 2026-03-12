@@ -3,7 +3,7 @@ import { FEATURES } from "@/lib/constants";
 
 export default function Features() {
   return (
-    <section id="features" className="bg-white px-[5%] py-14 sm:py-24">
+    <section id="fitur" className="bg-white px-[5%] py-14 sm:py-24">
       <div className="mx-auto max-w-[1400px]">
         <SectionHeading
           title="AI yang Bekerja Seperti Anda"
