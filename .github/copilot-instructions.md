@@ -19,7 +19,10 @@
 ### Tech Stack
 - **Frontend**: Next.js 15 + React 19 + Tailwind CSS 4 — self-hosted (NOT Vercel)
 - **Backend**: FastAPI (Python 3.12) — separate service on port 8000
-- **Database**: MongoDB Atlas (vector search, `legal_chunks` collection, 121K+ chunks)
+- **Database**: MongoDB Atlas — 3 collections:
+  - `legal_chunks` (121K+ docs, 4GB+) — regulation text + 1024-dim Mistral embeddings for RAG vector search
+  - `analyses` — saved contract analysis results (PDF text, AI analysis JSON, chat count)
+  - `consultation_bookings` — lawyer consultation booking records
 - **LLM**: Claude Sonnet 4.6 (`anthropic-claude-4.6-sonnet`) via DigitalOcean Gradient AI — OpenAI-compatible endpoint at `https://inference.do-ai.run/v1`
 - **Embeddings**: Mistral `mistral-embed` (1024 dimensions)
 - **PDF Parsing**: pdfplumber (Python) for both user uploads and regulation ingestion
@@ -75,6 +78,7 @@ User uploads PDF
     ├→ Mistral API: embed clauses (1024-dim vectors)
     ├→ MongoDB Atlas: $vectorSearch in legal_chunks (121K+ chunks)
     ├→ Claude Sonnet 4.6 (via DO Gradient): analyze risk per clause
+    ├→ MongoDB Atlas: save analysis results to `analyses` collection
     └→ guardrails: input validation, citation grounding, topic enforcement
     ↓
 [AnalysisResponse JSON] → risk scores, issues, recommendations, regulation refs
@@ -138,7 +142,7 @@ Each concern is a separate service in `api/services/`:
 - `clause_splitter.py` — regex cascade: Pasal → BAB → numbered → paragraph fallback
 - `embeddings.py` — Mistral embed with text sanitization + batch support
 - `rag.py` — MongoDB `$vectorSearch` (index: `vector_index`, path: `embedding`, numCandidates: top_k * 10)
-- `analyzer.py` — orchestrator: clauses → embed → RAG → Claude → structured JSON response
+- `analyzer.py` — orchestrator: clauses → embed → RAG → Claude → structured JSON response; **saves results to MongoDB `analyses` collection**
 - `guardrails.py` — PDF magic byte validation, text length check, citation grounding, chat topic keyword filter
 
 ### LLM Integration
