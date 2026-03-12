@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, MessageCircle, X } from "lucide-react";
 import type { ChatMessage, AnalysisResponse } from "./types";
 import { parseChatBlocks, parseInlineMarkdown } from "./textUtils";
@@ -12,6 +12,15 @@ interface ChatPanelProps {
   onToggle: () => void;
   initialRemainingChats?: number | null;
 }
+
+// Agent flow states for post-limit consultation booking
+type AgentState =
+  | "chat"           // normal AI chat
+  | "offered"        // bot offered consultation, waiting for interest
+  | "collect_name"   // collecting name
+  | "collect_email"  // collecting email
+  | "collect_wa"     // collecting WhatsApp
+  | "done";          // flow complete
 
 function buildAnalysisContext(result: AnalysisResponse): string {
   const lines: string[] = [];
@@ -85,24 +94,111 @@ function RichMessage({ content }: { content: string }) {
   );
 }
 
+const OFFER_MESSAGE = `Batas chat gratis Anda telah tercapai untuk analisis ini. 🙏
+
+Namun jangan khawatir — tim konsultan hukum kami siap membantu Anda memahami kontrak ini lebih dalam, termasuk:
+
+• **Review mendalam** seluruh klausa bermasalah
+• **Rekomendasi revisi** yang bisa Anda ajukan
+• **Pendampingan negosiasi** dengan pihak lawan
+
+Konsultasi awal **gratis** dan tanpa kewajiban. Tertarik untuk dijadwalkan?`;
+
+const THANKS_MESSAGE = "Terima kasih! Semoga analisis ini membantu Anda. Jika berubah pikiran, Anda bisa kembali kapan saja. 😊";
+const ASK_NAME = "Baik, senang sekali! 😊 Untuk menjadwalkan konsultasi, boleh saya tahu **nama lengkap** Anda?";
+const ASK_EMAIL = "Terima kasih, {name}! Sekarang, boleh saya minta **alamat email** Anda untuk mengirimkan detail jadwal?";
+const ASK_WA = "Satu lagi — boleh minta **nomor WhatsApp** Anda? Tim kami akan menghubungi Anda via WhatsApp untuk konfirmasi jadwal.";
+const DONE_MESSAGE = `Sempurna! Data Anda sudah kami catat:
+
+• **Nama:** {name}
+• **Email:** {email}
+• **WhatsApp:** {wa}
+
+Tim konsultan hukum kami akan menghubungi Anda dalam **1x24 jam** untuk menjadwalkan konsultasi. Terima kasih telah mempercayakan TanyaHukum! 🙏`;
+
 export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initialRemainingChats }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [remainingChats, setRemainingChats] = useState<number | null>(initialRemainingChats ?? null);
   const [limitReached, setLimitReached] = useState(initialRemainingChats !== null && initialRemainingChats !== undefined && initialRemainingChats <= 0);
+  const [agentState, setAgentState] = useState<AgentState>(
+    initialRemainingChats !== null && initialRemainingChats !== undefined && initialRemainingChats <= 0 ? "offered" : "chat"
+  );
+  const [contactInfo, setContactInfo] = useState({ name: "", email: "", wa: "" });
+  const offerShown = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  // When limit is reached, show the offer message
+  useEffect(() => {
+    if (limitReached && !offerShown.current) {
+      offerShown.current = true;
+      setAgentState("offered");
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: OFFER_MESSAGE },
+      ]);
+    }
+  }, [limitReached]);
 
-    const userMessage: ChatMessage = { role: "user", content: input.trim() };
+  const addBotMessage = useCallback((content: string) => {
+    setMessages((prev) => [...prev, { role: "assistant", content }]);
+  }, []);
+
+  const addUserMessage = useCallback((content: string) => {
+    setMessages((prev) => [...prev, { role: "user", content }]);
+  }, []);
+
+  // Handle agent flow button clicks and text input during agent flow
+  const handleAgentInput = useCallback((userText: string) => {
+    addUserMessage(userText);
+
+    if (agentState === "offered") {
+      const interested = userText.toLowerCase().includes("tertarik") && !userText.toLowerCase().includes("tidak");
+      if (interested) {
+        setAgentState("collect_name");
+        setTimeout(() => addBotMessage(ASK_NAME), 400);
+      } else {
+        setAgentState("done");
+        setTimeout(() => addBotMessage(THANKS_MESSAGE), 400);
+      }
+    } else if (agentState === "collect_name") {
+      setContactInfo((prev) => ({ ...prev, name: userText }));
+      setAgentState("collect_email");
+      setTimeout(() => addBotMessage(ASK_EMAIL.replace("{name}", userText)), 400);
+    } else if (agentState === "collect_email") {
+      setContactInfo((prev) => ({ ...prev, email: userText }));
+      setAgentState("collect_wa");
+      setTimeout(() => addBotMessage(ASK_WA), 400);
+    } else if (agentState === "collect_wa") {
+      const info = { ...contactInfo, wa: userText };
+      setContactInfo(info);
+      setAgentState("done");
+      setTimeout(() => addBotMessage(
+        DONE_MESSAGE.replace("{name}", info.name).replace("{email}", info.email).replace("{wa}", info.wa)
+      ), 400);
+      // TODO: In the future, send contact info to backend for scheduling
+    }
+  }, [agentState, contactInfo, addBotMessage, addUserMessage]);
+
+  // Send message — either to API (normal chat) or agent flow (post-limit)
+  const sendMessage = async (directText?: string) => {
+    const text = directText || input.trim();
+    if (!text || loading) return;
+    if (!directText) setInput("");
+
+    // If in agent flow (post-limit), handle locally
+    if (agentState !== "chat") {
+      handleAgentInput(text);
+      return;
+    }
+
+    const userMessage: ChatMessage = { role: "user", content: text };
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setLoading(true);
 
     try {
@@ -146,6 +242,18 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
     }
   };
 
+  // Placeholder for agent input field
+  const getInputPlaceholder = () => {
+    switch (agentState) {
+      case "collect_name": return "Ketik nama lengkap Anda...";
+      case "collect_email": return "Ketik alamat email Anda...";
+      case "collect_wa": return "Ketik nomor WhatsApp Anda...";
+      default: return "Ketik pertanyaan...";
+    }
+  };
+
+  const isInputDisabled = agentState === "done" || (agentState === "offered");
+
   if (!isOpen) {
     return (
       <button
@@ -172,7 +280,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 && (
+        {messages.length === 0 && agentState === "chat" && (
           <div className="text-center py-8">
             <MessageCircle size={32} className="text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-neutral-gray">
@@ -186,7 +294,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
               ].map((suggestion) => (
                 <button
                   key={suggestion}
-                  onClick={() => setInput(suggestion)}
+                  onClick={() => sendMessage(suggestion)}
                   className="block w-full text-left text-xs px-3 py-2 bg-gray-50 rounded-lg text-neutral-gray hover:bg-orange-50 hover:text-primary-orange transition-colors"
                 >
                   💬 {suggestion}
@@ -213,6 +321,24 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
           </div>
         ))}
 
+        {/* Quick action buttons for agent offer state */}
+        {agentState === "offered" && messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
+          <div className="flex gap-2 justify-start pl-2">
+            <button
+              onClick={() => handleAgentInput("Saya tertarik")}
+              className="text-xs px-4 py-2 bg-primary-orange text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
+            >
+              ✅ Saya Tertarik
+            </button>
+            <button
+              onClick={() => handleAgentInput("Saya tidak tertarik")}
+              className="text-xs px-4 py-2 bg-gray-200 text-dark-navy rounded-xl font-semibold hover:bg-gray-300 transition-colors"
+            >
+              Tidak, Terima Kasih
+            </button>
+          </div>
+        )}
+
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
@@ -229,9 +355,13 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
 
       {/* Input */}
       <div className="p-3 border-t border-gray-100">
-        {limitReached ? (
+        {isInputDisabled ? (
           <div className="text-center py-2">
-            <p className="text-xs text-neutral-gray">Batas chat tercapai. Konsultasikan dengan konsultan hukum kami.</p>
+            <p className="text-xs text-neutral-gray">
+              {agentState === "done"
+                ? "Terima kasih! Tim kami akan segera menghubungi Anda."
+                : "Pilih salah satu opsi di atas."}
+            </p>
           </div>
         ) : (
           <>
@@ -250,7 +380,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
                   el.style.height = "auto";
                   el.style.height = Math.min(el.scrollHeight, 120) + "px";
                 }}
-                placeholder="Ketik pertanyaan..."
+                placeholder={getInputPlaceholder()}
                 rows={1}
                 maxLength={2000}
                 className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/30 resize-none overflow-y-auto"
@@ -258,7 +388,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
                 aria-label="Pertanyaan chat"
               />
               <button
-                onClick={sendMessage}
+                onClick={() => sendMessage()}
                 disabled={!input.trim() || loading}
                 className="w-10 h-10 flex-shrink-0 bg-primary-orange text-white rounded-xl flex items-center justify-center hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
               >
@@ -269,7 +399,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
               <p className="text-[10px] text-neutral-gray text-left flex-1">
                 Bukan nasihat hukum. Konsultasikan dengan pengacara.
               </p>
-              {remainingChats !== null && (
+              {remainingChats !== null && agentState === "chat" && (
                 <p className={`text-[10px] flex-shrink-0 ml-2 ${remainingChats <= 3 ? "text-red-500" : "text-neutral-gray"}`}>
                   {remainingChats} chat tersisa
                 </p>
