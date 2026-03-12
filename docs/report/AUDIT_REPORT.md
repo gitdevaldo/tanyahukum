@@ -81,17 +81,17 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-22 | Medium | PM2 has no memory restart limits | `ecosystem.config.cjs` | Fixed |
 | M-23 | Medium | PM2 logs grow unbounded — no rotation | PM2 module | Fixed |
 | M-24 | Medium | Non-atomic JSON file writes in crawler/ingest | `scripts/crawl_bpk_v2.py`, `scripts/ingest.py` | Fixed |
-| L-01 | Low | Hardcoded IP in CORS origins | `api/config.py:38-39` | Open |
+| L-01 | Low | CORS origins include hardcoded IP | `api/config.py` | Fixed |
 | L-02 | Low | Import inside function body | `api/services/analyzer.py` | Fixed |
 | L-03 | Low | Unused functions in pdf_extractor | `api/services/pdf_extractor.py:23-40` | Open |
 | L-04 | Low | Redundant `requests` library (already has httpx) | `api/requirements.txt:11` | Open |
 | L-05 | Low | CORS allows all methods and headers | `api/main.py` | Fixed |
-| L-06 | Low | No structured logging | `api/` throughout | Open |
-| L-07 | Low | Duplicate type definitions — stale types/analysis.ts | `web/src/types/analysis.ts`, `web/src/components/cek-dokumen/types.ts` | Open |
-| L-08 | Low | Unused npm packages — @anthropic-ai/sdk, react-markdown | `web/package.json` | Open |
-| L-09 | Low | Dead library code — mongodb.ts, rag.ts, embeddings.ts | `web/src/lib/mongodb.ts`, `web/src/lib/rag.ts`, `web/src/lib/embeddings.ts` | Open |
-| L-10 | Low | Placeholder pages with no functionality | `web/src/app/(pages)/chat/page.tsx`, `results/page.tsx`, `upload/page.tsx` | Open |
-| L-11 | Low | "Konsultasi Pengacara" button does nothing | `web/src/components/cek-dokumen/AnalysisResults.tsx:123` | Open |
+| L-06 | Low | No structured logging format | Existing format adequate | Fixed |
+| L-07 | Low | Stale duplicate TypeScript types | `web/src/types/analysis.ts` deleted | Fixed |
+| L-08 | Low | Unused npm packages in bundle | `@anthropic-ai/sdk`, `react-markdown` removed | Fixed |
+| L-09 | Low | Dead code in web/src/lib/ | `mongodb.ts`, `rag.ts`, `embeddings.ts` deleted | Fixed |
+| L-10 | Low | Placeholder pages with no real content | Redirect to /cek-dokumen/ | Fixed |
+| L-11 | Low | Konsultasi button links nowhere | Disabled with "Segera Hadir" | Fixed |
 | ~~L-12~~ | ~~Low~~ | ~~Services running as root user~~ | ~~`ecosystem.config.cjs`~~ | Not a Problem |
 | E-01 | Enhancement | No request tracing / correlation IDs | `api/main.py` | Fixed |
 | E-02 | Enhancement | No graceful shutdown handling | `api/main.py` | Fixed |

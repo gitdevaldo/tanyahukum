@@ -118,8 +118,12 @@ export function AnalysisResults({ result, onReset, onClauseSelect, activeClauseI
         <p className="text-[11px] sm:text-xs text-gray-400 mb-3">
           Hubungi pengacara mitra kami untuk review mendalam
         </p>
-        <button className="bg-primary-orange text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-orange-600 transition-colors">
-          Konsultasi Pengacara (Rp 150K)
+        <button
+          className="bg-primary-orange text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-orange-600 transition-colors opacity-75 cursor-not-allowed"
+          disabled
+          title="Segera Hadir"
+        >
+          Konsultasi Pengacara — Segera Hadir
         </button>
       </div>
     </div>

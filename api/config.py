@@ -37,8 +37,6 @@ class Settings(BaseSettings):
         "https://tanyahukum.dev",
         "http://localhost:3010",
         "http://localhost:3000",
-        "http://165.245.145.20:3010",
-        "http://165.245.145.20:8000",
     ]
 
     class Config:
