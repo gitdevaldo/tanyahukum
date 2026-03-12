@@ -125,29 +125,29 @@ Menjadi platform tanda tangan digital #1 di Indonesia yang memberdayakan setiap 
 
 ## 3.1 Feature Overview
 
-| # | Fitur | Deskripsi | Priority |
-|---|-------|-----------|----------|
-| F1 | Document Upload & Parsing | Upload PDF / paste teks → ekstrak teks bersih | P0 — MVP |
-| F2 | Clause Extraction | Identifikasi & segmentasi klausa-klausa kunci | P0 — MVP |
-| F3 | Risk Scoring | Skor risiko 0-10 per klausa + label AMAN / PERHATIAN / BERBAHAYA | P0 — MVP |
-| F4 | Legal Citation (RAG) | Setiap skor didukung referensi hukum Indonesia spesifik | P0 — MVP |
-| F5 | AI Legal Chatbot | Tanya jawab lanjutan berbasis konteks dokumen yang diupload | P0 — MVP |
-| F6 | Summary Report | Ringkasan eksekutif: overall score, jumlah klausa per risk level | P0 — MVP |
-| F7 | Consultation Booking | Booking konsultasi pengacara mitra via chatbot agent flow | P0 — MVP |
-| F8 | Demo Documents | Dokumen contoh (PKWT, pinjol, sewa kos) yang bisa dicoba langsung | P0 — MVP |
-| **F9** | **e-Signature** | **Tanda tangan digital pada dokumen** | **P1 — v2.0** |
-| **F10** | **Document Sharing** | **Kirim dokumen ke pihak lain untuk review + co-sign** | **P1 — v2.0** |
-| **F11** | **"Company Pays" Analysis** | **Pengirim menanggung biaya analisis AI untuk penerima** | **P1 — v2.0** |
-| **F12** | **User Accounts & Quota** | **Registrasi, login, manajemen quota analisis + e-sign** | **P1 — v2.0** |
-| F13 | History & Saved Analyses | Simpan & akses kembali hasil analisis sebelumnya | P1 |
-| F14 | Team Management (B2B) | Invite & manage team members, shared quota | P2 — B2B |
-| F15 | Template Library (B2B) | Simpan & reuse template kontrak | P2 — B2B |
-| F16 | Bulk Upload (B2B) | Batch analyze multiple documents | P2 — B2B |
-| F17 | Dashboard & Analytics (B2B) | Track semua dokumen, status signing, analytics | P2 — B2B |
-| F18 | Audit Trail (B2B) | Full compliance log (siapa sign, kapan, IP, device) | P2 — B2B |
-| F19 | Custom Branding (B2B) | White-label email & signing page | P2 — B2B |
-| F20 | API Access (B2B) | REST API untuk integrasi ke sistem internal | P2 — B2B |
-| F21 | Export PDF Report | Download laporan analisis dalam format PDF | P2 |
+| # | Fitur | Deskripsi | Priority | Status |
+|---|-------|-----------|----------|--------|
+| F1 | Document Upload & Parsing | Upload PDF / paste teks → ekstrak teks bersih | P0 — MVP | Done (v1.0) |
+| F2 | Clause Extraction | Identifikasi & segmentasi klausa-klausa kunci | P0 — MVP | Done (v1.0) |
+| F3 | Risk Scoring | Skor risiko 0-10 per klausa + label AMAN / PERHATIAN / BERBAHAYA | P0 — MVP | Done (v1.0) |
+| F4 | Legal Citation (RAG) | Setiap skor didukung referensi hukum Indonesia spesifik | P0 — MVP | Done (v1.0) |
+| F5 | AI Legal Chatbot | Tanya jawab lanjutan berbasis konteks dokumen yang diupload | P0 — MVP | Done (v1.0) |
+| F6 | Summary Report | Ringkasan eksekutif: overall score, jumlah klausa per risk level | P0 — MVP | Done (v1.0) |
+| F7 | Consultation Booking | Booking konsultasi pengacara mitra via chatbot agent flow | P0 — MVP | Done (v1.0) |
+| F8 | Demo Documents | Dokumen contoh (PKWT, pinjol, sewa kos) yang bisa dicoba langsung | P0 — MVP | Done (v1.0) |
+| **F9** | **e-Signature** | **Tanda tangan digital pada dokumen** | **P1 — v2.0** | **Planned** |
+| **F10** | **Document Sharing** | **Kirim dokumen ke pihak lain untuk review + co-sign** | **P1 — v2.0** | **Planned** |
+| **F11** | **"Company Pays" Analysis** | **Pengirim menanggung biaya analisis AI untuk penerima** | **P1 — v2.0** | **Planned** |
+| **F12** | **User Accounts & Quota** | **Registrasi, login, manajemen quota analisis + e-sign** | **P1 — v2.0** | **Planned** |
+| F13 | History & Saved Analyses | Simpan & akses kembali hasil analisis sebelumnya | P1 | Planned |
+| F14 | Team Management (B2B) | Invite & manage team members, shared quota | P2 — B2B | Planned |
+| F15 | Template Library (B2B) | Simpan & reuse template kontrak | P2 — B2B | Planned |
+| F16 | Bulk Upload (B2B) | Batch analyze multiple documents | P2 — B2B | Planned |
+| F17 | Dashboard & Analytics (B2B) | Track semua dokumen, status signing, analytics | P2 — B2B | Planned |
+| F18 | Audit Trail (B2B) | Full compliance log (siapa sign, kapan, IP, device) | P2 — B2B | Planned |
+| F19 | Custom Branding (B2B) | White-label email & signing page | P2 — B2B | Planned |
+| F20 | API Access (B2B) | REST API untuk integrasi ke sistem internal | P2 — B2B | Planned |
+| F21 | Export PDF Report | Download laporan analisis dalam format PDF | P2 | Planned |
 
 ## 3.2 Feature Detail: e-Signature (F9) — NEW
 
