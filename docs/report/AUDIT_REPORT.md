@@ -32,7 +32,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 
 | ID | Severity | Description | File(s) | Status |
 |----|----------|-------------|---------|--------|
-| C-01 | Critical | Sync blocking calls in async handlers freeze event loop | `api/routers/chat.py`, `api/routers/analyze.py`, `api/services/analyzer.py`, `api/services/embeddings.py` | Open |
+| C-01 | Critical | Sync blocking calls in async handlers freeze event loop | `api/routers/chat.py`, `api/routers/analyze.py`, `api/services/analyzer.py`, `api/services/embeddings.py` | Fixed |
 | C-02 | Critical | No authentication on any API endpoint | `api/main.py`, `api/routers/analyze.py`, `api/routers/chat.py` | Open |
 | C-03 | Critical | No request size limit before memory allocation | `api/routers/analyze.py:24` | Open |
 | C-04 | Critical | Race condition on chat limit allows unlimited bypass | `api/routers/chat.py:37-43`, `api/services/storage.py:57-78` | Open |

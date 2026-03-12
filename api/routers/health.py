@@ -1,4 +1,5 @@
 """GET /api/health — Health check endpoint."""
+import asyncio
 from fastapi import APIRouter
 from api.models.schemas import HealthResponse
 from api.services.rag import check_connection, get_chunks_count
@@ -10,8 +11,8 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
     """Check service health: MongoDB, LLM, embeddings."""
-    mongo_ok = check_connection()
-    chunks = get_chunks_count() if mongo_ok else 0
+    mongo_ok = await asyncio.to_thread(check_connection)
+    chunks = await asyncio.to_thread(get_chunks_count) if mongo_ok else 0
 
     return HealthResponse(
         status="ok" if mongo_ok else "degraded",

@@ -2,6 +2,8 @@
 import json
 import uuid
 import logging
+import asyncio
+import concurrent.futures
 from openai import OpenAI
 
 from api.config import settings
@@ -12,24 +14,12 @@ from api.services.pdf_extractor import extract_text_from_pdf
 from api.services.clause_splitter import split_into_clauses
 from api.services.embeddings import embed_single, embed_texts
 from api.services.rag import vector_search
+from api.services.llm import get_llm_client
 from api.services.guardrails import (
     validate_pdf_upload, validate_extracted_text, ground_citations, LEGAL_DISCLAIMER_ID
 )
 
 logger = logging.getLogger(__name__)
-
-# OpenAI-compatible client for DigitalOcean Gradient
-_llm_client = None
-
-
-def get_llm_client() -> OpenAI:
-    global _llm_client
-    if _llm_client is None:
-        _llm_client = OpenAI(
-            base_url=settings.do_inference_url,
-            api_key=settings.do_model_access_key,
-        )
-    return _llm_client
 
 
 ANALYSIS_SYSTEM_PROMPT = """Kamu adalah TanyaHukum, AI ahli analisis kontrak hukum Indonesia.
@@ -194,6 +184,11 @@ Berikan analisis dalam format JSON sesuai instruksi. HANYA output JSON, tanpa te
 
 
 async def analyze_contract(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
+    """Full analysis pipeline — runs sync work in a thread to avoid blocking event loop."""
+    return await asyncio.to_thread(_analyze_contract_sync, pdf_bytes, filename)
+
+
+def _analyze_contract_sync(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
     """Full analysis pipeline: PDF → text → clauses → RAG → LLM → result."""
     # 1. Validate PDF
     valid, error = validate_pdf_upload(pdf_bytes, filename)
@@ -218,8 +213,6 @@ async def analyze_contract(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
     logger.info(f"Analyzing {len(clauses)} clauses from {filename}")
 
     # 4. Batch embed all clauses at once (1 API call instead of N)
-    import concurrent.futures
-
     clause_texts = [c["text"][:2000] for c in clauses]
     logger.info(f"Batch embedding {len(clause_texts)} clauses")
     embeddings = embed_texts(clause_texts)
