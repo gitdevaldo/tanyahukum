@@ -2,7 +2,7 @@
 import io
 import pdfplumber
 
-MAX_PAGES = 200  # H-05: Prevent DoS via enormous PDFs
+MAX_PAGES = 20  # H-05: Limit uploaded PDF page count
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:

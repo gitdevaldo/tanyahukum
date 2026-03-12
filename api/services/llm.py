@@ -17,6 +17,6 @@ def get_llm_client() -> OpenAI:
                 _llm_client = OpenAI(
                     base_url=settings.do_inference_url,
                     api_key=settings.do_model_access_key,
-                    timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0),
+                    timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0),
                 )
     return _llm_client

@@ -2,11 +2,8 @@
 __pycache__/
 *.pyc
 
-# Data — ignore PDFs, state files, and logs
+# Data — ignore PDFs and logs only
 data/regulations/*.pdf
-data/crawl_progress.json
-data/ingest_state.json
-data/regulations_meta.json
 data/crawl.log
 
 # Next.js
