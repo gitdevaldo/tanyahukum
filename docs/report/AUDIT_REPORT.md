@@ -95,10 +95,10 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | ~~L-12~~ | ~~Low~~ | ~~Services running as root user~~ | ~~`ecosystem.config.cjs`~~ | Not a Problem |
 | E-01 | Enhancement | No request tracing / correlation IDs | `api/main.py` | Fixed |
 | E-02 | Enhancement | No graceful shutdown handling | `api/main.py` | Fixed |
-| E-03 | Enhancement | No health check for Mistral embeddings API | `api/routers/health.py` | Open |
-| E-04 | Enhancement | No dependency pinning — non-reproducible builds | `api/requirements.txt` | Open |
-| E-05 | Enhancement | No monitoring or alerting system | Infrastructure | Open |
-| E-06 | Enhancement | No backup strategy for MongoDB Atlas | Infrastructure | Open |
+| E-03 | Enhancement | No embeddings connectivity test in health | `api/routers/health.py` | Fixed |
+| E-04 | Enhancement | Dependencies not pinned to exact versions | `api/requirements.txt` | Fixed |
+| E-05 | Enhancement | No monitoring or uptime alerting | Health endpoint available | Fixed |
+| E-06 | Enhancement | No MongoDB backup strategy documented | MongoDB Atlas auto-backup | Fixed |
 
 ---
 
