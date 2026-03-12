@@ -17,8 +17,10 @@ import os
 import re
 import json
 import time
+import asyncio
 import argparse
 import requests
+import aiohttp
 import fitz  # PyMuPDF
 from pathlib import Path
 from datetime import datetime
@@ -99,10 +101,15 @@ def load_meta() -> dict:
 
 
 # ================================================================
-# MISTRAL API KEY (auto-refresh)
+# MISTRAL API KEY POOL (multi-key for parallel embedding)
 # ================================================================
 
+NUM_API_KEYS        = 10       # number of keys to fetch from webhook
+CONCURRENCY_PER_KEY = 5        # concurrent requests per key
+TOTAL_CONCURRENCY   = NUM_API_KEYS * CONCURRENCY_PER_KEY  # 50 total
+
 _mistral_key = os.getenv("MISTRAL_API_KEY", "")
+_key_pool: list[str] = []
 
 def get_mistral_key() -> str:
     global _mistral_key
@@ -118,6 +125,32 @@ def refresh_mistral_key() -> str:
     except Exception as e:
         console.print(f"  [red]Failed to refresh key: {e}[/red]")
     return _mistral_key
+
+def fetch_key_pool(n: int = NUM_API_KEYS) -> list[str]:
+    """Fetch N unique API keys from the webhook."""
+    global _key_pool
+    keys: list[str] = []
+    seen: set[str] = set()
+    max_attempts = n * 3  # some buffer for duplicates
+    attempts = 0
+
+    console.print(f"  🔑 Fetching {n} API keys from webhook...")
+    while len(keys) < n and attempts < max_attempts:
+        attempts += 1
+        try:
+            r = requests.get(f"{MISTRAL_API_KEY_URL}?v={attempts}", timeout=10)
+            r.raise_for_status()
+            key = r.json().get("apikey", "")
+            if key and key not in seen:
+                keys.append(key)
+                seen.add(key)
+        except Exception as e:
+            console.print(f"  [yellow]Key fetch attempt {attempts} failed: {str(e)[:60]}[/yellow]")
+            time.sleep(0.5)
+
+    _key_pool = keys
+    console.print(f"  ✅ Got {len(keys)} unique API keys")
+    return keys
 
 
 # ================================================================
@@ -336,8 +369,60 @@ def sanitize_text(text: str) -> str:
     return text if text else "empty"
 
 
+async def _async_call_mistral(session: aiohttp.ClientSession, texts: list[str], key: str,
+                              semaphore: asyncio.Semaphore) -> list[list[float]] | None:
+    """Async Mistral embed call with semaphore-based concurrency control."""
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": MISTRAL_MODEL,
+        "input": texts,
+    }
+
+    async with semaphore:
+        for attempt in range(3):
+            try:
+                async with session.post(MISTRAL_EMBED_URL, headers=headers,
+                                        json=payload, timeout=aiohttp.ClientTimeout(total=30)) as r:
+                    if r.status == 429:
+                        wait = float(r.headers.get("retry-after", 2))
+                        await asyncio.sleep(wait)
+                        continue
+                    if r.status in (401, 403):
+                        await asyncio.sleep(1)
+                        continue
+                    if r.status == 400:
+                        return None
+                    r.raise_for_status()
+                    data = await r.json()
+                    return [d["embedding"] for d in data["data"]]
+            except Exception:
+                await asyncio.sleep(1)
+
+    return None
+
+
+async def _async_embed_batch_with_fallback(session: aiohttp.ClientSession, texts: list[str],
+                                           key: str, semaphore: asyncio.Semaphore) -> list[list[float]] | None:
+    """Try batch, fall back to single-item embed on 400."""
+    texts = [sanitize_text(t) for t in texts]
+    result = await _async_call_mistral(session, texts, key, semaphore)
+    if result is not None:
+        return result
+
+    # Fallback: embed one-by-one
+    zero_vec = [0.0] * 1024
+    embeddings = []
+    for text in texts:
+        single = await _async_call_mistral(session, [text], key, semaphore)
+        embeddings.append(single[0] if single else zero_vec)
+    return embeddings
+
+
 def _call_mistral_embed(texts: list[str], key: str) -> tuple[list[list[float]] | None, str]:
-    """Low-level Mistral embed call. Returns (embeddings, updated_key) or (None, key)."""
+    """Sync fallback for single-key mode. Returns (embeddings, key)."""
     headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
@@ -378,33 +463,30 @@ def _call_mistral_embed(texts: list[str], key: str) -> tuple[list[list[float]] |
 
 
 def embed_batch(texts: list[str]) -> list[list[float]] | None:
-    """Embed a batch of texts using Mistral API. Returns list of embeddings or None on failure."""
+    """Embed a batch of texts using Mistral API (sync, single key). Returns list of embeddings or None."""
     key = get_mistral_key()
-
-    # Sanitize all texts before sending
     texts = [sanitize_text(t) for t in texts]
 
-    # Try the whole batch first
     result, key = _call_mistral_embed(texts, key)
     if result is not None:
         return result
 
-    # Batch got 400 — fallback: embed one-by-one, use zero vector for bad ones
+    # Batch got 400 — fallback: embed one-by-one
     console.print(f"  [yellow]Batch 400 error, falling back to single-item embed ({len(texts)} items)...[/yellow]")
     zero_vec = [0.0] * 1024
     embeddings = []
     bad_count = 0
-    for i, text in enumerate(texts):
+    for text in texts:
         single, key = _call_mistral_embed([text], key)
         if single is not None:
             embeddings.append(single[0])
         else:
             bad_count += 1
             embeddings.append(zero_vec)
-        time.sleep(0.2)  # respect rate limit in fallback mode
+        time.sleep(0.2)
 
     if bad_count:
-        console.print(f"  [yellow]  {bad_count}/{len(texts)} chunks got zero vectors (bad input)[/yellow]")
+        console.print(f"  [yellow]  {bad_count}/{len(texts)} chunks got zero vectors[/yellow]")
     return embeddings
 
 
@@ -555,7 +637,7 @@ def run_parse(state: dict, meta: dict, retry_errors: bool = False):
 
 
 def run_embed_and_store(chunks: list[dict], state: dict):
-    """Step 3+4: Embed chunks with Mistral and store in MongoDB."""
+    """Step 3+4: Embed chunks with Mistral (multi-key concurrent) and store in MongoDB."""
     if not chunks:
         console.print("[yellow]No chunks to embed.[/yellow]")
         return
@@ -568,101 +650,112 @@ def run_embed_and_store(chunks: list[dict], state: dict):
         console.print("[yellow]All chunks already embedded.[/yellow]")
         return
 
-    console.print(f"\n[bold blue]Step 3+4: Embed & Store[/bold blue]")
+    console.print(f"\n[bold blue]Step 3+4: Embed & Store (Multi-Key Concurrent)[/bold blue]")
     console.print(f"  Chunks to embed: {len(to_embed)}")
 
     # Build batches
     batches = build_batches(to_embed)
-    console.print(f"  Batches: {len(batches)} (at {MISTRAL_RPS} req/sec)")
+    console.print(f"  Batches: {len(batches)}")
+
+    # Fetch key pool
+    keys = fetch_key_pool(NUM_API_KEYS)
+    if not keys:
+        console.print("[red]No API keys available! Falling back to single key.[/red]")
+        keys = [refresh_mistral_key()]
+
+    console.print(f"  🚀 Running {len(keys)} keys × {CONCURRENCY_PER_KEY} conc = {len(keys) * CONCURRENCY_PER_KEY} parallel workers")
 
     collection, client = get_mongo_collection()
 
-    # Ensure collection exists before creating index
+    # Ensure collection exists
     db = client[MONGODB_DB]
     if "legal_chunks" not in db.list_collection_names():
         db.create_collection("legal_chunks")
         console.print("  ✅ Created 'legal_chunks' collection")
 
-    # Create vector index
     try:
         ensure_vector_index(collection)
     except Exception as e:
         console.print(f"  [yellow]Vector index note: {str(e)[:100]}[/yellow]")
 
-    # Track which doc_ids are in this run for batch state updates
+    # Run async embedding
     doc_ids_in_run = set()
     failed_batches = 0
     inserted = 0
-    rate_interval = 1.0 / MISTRAL_RPS  # time between requests
 
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
-        BarColumn(), TextColumn("{task.completed}/{task.total}"),
-        TimeElapsedColumn(), console=console
-    ) as progress:
-        task = progress.add_task("Embedding & storing", total=len(batches))
+    async def process_all():
+        nonlocal failed_batches, inserted, doc_ids_in_run
 
-        for batch_indices in batches:
-            batch_start = time.time()
+        # Create per-key semaphores (5 concurrent per key)
+        key_semaphores = {key: asyncio.Semaphore(CONCURRENCY_PER_KEY) for key in keys}
 
-            batch_chunks = [to_embed[i] for i in batch_indices]
-            texts = [c["content"] for c in batch_chunks]
+        async with aiohttp.ClientSession() as session:
+            # Assign batches round-robin to keys
+            tasks = []
+            for i, batch_indices in enumerate(batches):
+                key = keys[i % len(keys)]
+                sem = key_semaphores[key]
+                batch_chunks = [to_embed[idx] for idx in batch_indices]
+                tasks.append((batch_chunks, key, sem))
 
-            embeddings = embed_batch(texts)
+            # Process with progress tracking
+            completed = 0
+            total = len(tasks)
 
-            if embeddings is None:
-                # Track which doc_ids failed embedding
-                failed_doc_ids = set(c["doc_id"] for c in batch_chunks)
-                if "embed_errors" not in state:
-                    state["embed_errors"] = {}
-                for did in failed_doc_ids:
-                    prev = state["embed_errors"].get(did, {"attempts": 0})
-                    state["embed_errors"][did] = {
-                        "error": "Mistral returned None (400 or timeout)",
-                        "attempts": prev["attempts"] + 1,
-                    }
-                failed_batches += 1
-                progress.advance(task)
-                continue
+            async def process_one(batch_chunks, key, sem):
+                nonlocal completed, failed_batches, inserted, doc_ids_in_run
+                texts = [c["content"] for c in batch_chunks]
 
-            # Build MongoDB documents
-            docs_to_insert = []
-            for chunk, embedding in zip(batch_chunks, embeddings):
-                docs_to_insert.append({
-                    "doc_id":     chunk["doc_id"],
-                    "pasal_ref":  chunk["pasal_ref"],
-                    "content":    chunk["content"],
-                    "source":     chunk["source"],
-                    "bentuk":     chunk["bentuk"],
-                    "nomor":      chunk["nomor"],
-                    "tahun":      chunk["tahun"],
-                    "subjek":     chunk["subjek"],
-                    "chunk_type": chunk["chunk_type"],
-                    "embedding":  embedding,
-                    "created_at": datetime.now().isoformat(),
-                })
-                doc_ids_in_run.add(chunk["doc_id"])
+                embeddings = await _async_embed_batch_with_fallback(session, texts, key, sem)
 
-            # Batch insert to MongoDB
-            try:
-                collection.insert_many(docs_to_insert)
-                inserted += len(docs_to_insert)
-            except Exception as e:
-                console.print(f"  [red]MongoDB insert error: {str(e)[:80]}[/red]")
-                failed_batches += 1
+                if embeddings is None:
+                    failed_doc_ids = set(c["doc_id"] for c in batch_chunks)
+                    for did in failed_doc_ids:
+                        prev = state.get("embed_errors", {}).get(did, {"attempts": 0})
+                        state.setdefault("embed_errors", {})[did] = {
+                            "error": "Mistral returned None",
+                            "attempts": prev["attempts"] + 1,
+                        }
+                    failed_batches += 1
+                else:
+                    docs_to_insert = []
+                    for chunk, embedding in zip(batch_chunks, embeddings):
+                        docs_to_insert.append({
+                            "doc_id":     chunk["doc_id"],
+                            "pasal_ref":  chunk["pasal_ref"],
+                            "content":    chunk["content"],
+                            "source":     chunk["source"],
+                            "bentuk":     chunk["bentuk"],
+                            "nomor":      chunk["nomor"],
+                            "tahun":      chunk["tahun"],
+                            "subjek":     chunk["subjek"],
+                            "chunk_type": chunk["chunk_type"],
+                            "embedding":  embedding,
+                            "created_at": datetime.now().isoformat(),
+                        })
+                        doc_ids_in_run.add(chunk["doc_id"])
 
-            progress.advance(task)
+                    try:
+                        collection.insert_many(docs_to_insert)
+                        inserted += len(docs_to_insert)
+                    except Exception as e:
+                        console.print(f"  [red]MongoDB insert error: {str(e)[:80]}[/red]")
+                        failed_batches += 1
 
-            # Rate limiting
-            elapsed = time.time() - batch_start
-            if elapsed < rate_interval:
-                time.sleep(rate_interval - elapsed)
+                completed += 1
+                if completed % 20 == 0 or completed == total:
+                    console.print(f"  📊 Progress: {completed}/{total} batches | {inserted} chunks stored | {failed_batches} failed")
 
-            # Save state every 50 batches
-            if (progress.tasks[task].completed % 50) == 0:
-                state["embedded"] = list(set(state["embedded"]) | doc_ids_in_run)
-                state["stats"]["total_embedded"] = inserted
-                save_ingest_state(state)
+                # Periodic state save
+                if completed % 50 == 0:
+                    state["embedded"] = list(set(state["embedded"]) | doc_ids_in_run)
+                    state["stats"]["total_embedded"] = inserted
+                    save_ingest_state(state)
+
+            # Run all tasks with controlled concurrency
+            await asyncio.gather(*[process_one(bc, k, s) for bc, k, s in tasks])
+
+    asyncio.run(process_all())
 
     # Final state save
     state["embedded"] = list(set(state["embedded"]) | doc_ids_in_run)
