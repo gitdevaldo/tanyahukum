@@ -211,9 +211,9 @@ cd /root/tanyahukum && pm2 start ecosystem.config.cjs && pm2 save --force
 
 | Change Type | Action Required |
 |-------------|----------------|
-| `web/src/` files (components, pages, lib) | **None** — Next.js dev server hot-reloads automatically |
-| `web/next.config.mjs`, `web/package.json` | **Restart**: `pm2 restart th-web` |
-| `web/src/app/api/` route files added/deleted | **Restart**: `pm2 restart th-web` (rewrites vs route conflicts) |
+| `web/src/` files (components, pages, lib) | **Build + Restart**: `cd web && npm run build && pm2 restart th-web` — We run `next start` (production), NOT `next dev`. There is NO hot-reload. |
+| `web/next.config.mjs`, `web/package.json` | **Build + Restart**: `cd web && npm run build && pm2 restart th-web` |
+| `web/src/app/api/` route files added/deleted | **Build + Restart**: `cd web && npm run build && pm2 restart th-web` |
 | `api/` Python files (services, routers, models) | **Restart**: `pm2 restart th-api` (uvicorn doesn't hot-reload in production mode) |
 | `api/requirements.txt` | **Install + restart**: `pip install -r api/requirements.txt && pm2 restart th-api` |
 | `.env` changes | **Restart both**: `pm2 restart th-api th-web` |
@@ -222,9 +222,11 @@ cd /root/tanyahukum && pm2 start ecosystem.config.cjs && pm2 save --force
 | `scripts/` Python files | **None** — run manually, not managed by PM2 |
 
 ### Rule
-Do NOT assume changes are live. If in doubt, restart. Always verify the service is responding after restart:
+**We are running PRODUCTION (`next start`), NOT dev (`next dev`).** There is NO hot-reload. Every frontend change requires `npm run build` before `pm2 restart th-web`.
+
+Do NOT assume changes are live. Always build and restart. Verify the service is responding after restart:
 ```bash
-pm2 restart th-web && sleep 10 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3010/
+cd /root/tanyahukum/web && npm run build && pm2 restart th-web && sleep 5 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3010/
 pm2 restart th-api && sleep 3 && curl -s http://localhost:8000/api/health
 ```
 
