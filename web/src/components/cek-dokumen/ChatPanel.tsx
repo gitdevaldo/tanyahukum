@@ -83,7 +83,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: Chat
       } else {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: `Error: ${data.detail || "Terjadi kesalahan"}` },
+          { role: "assistant", content: `Error: ${typeof data.detail === "string" ? data.detail : "Terjadi kesalahan"}` },
         ]);
       }
     } catch {

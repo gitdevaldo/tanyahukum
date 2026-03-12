@@ -53,7 +53,7 @@ class ChatRequest(BaseModel):
     """Chat follow-up request."""
     message: str = Field(min_length=1, max_length=2000)
     analysis_id: str | None = Field(default=None, description="ID of analysis for context")
-    analysis_context: str | None = Field(default=None, max_length=10000, description="Summary of analysis results for chat context")
+    analysis_context: str | None = Field(default=None, max_length=50000, description="Summary of analysis results for chat context")
     conversation_history: list[ChatMessage] = Field(default_factory=list)
 
 
