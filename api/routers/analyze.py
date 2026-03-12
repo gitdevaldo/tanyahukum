@@ -5,19 +5,20 @@ GET /api/analysis/{id}/pdf — Retrieve saved PDF.
 import re
 import asyncio
 import logging
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import Response
 
 from api.models.schemas import AnalysisResponse
 from api.services.analyzer import analyze_contract
 from api.services.storage import save_analysis, get_analysis, get_analysis_pdf
 from api.services.guardrails import MAX_FILE_SIZE
+from api.dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/analyze", response_model=AnalysisResponse)
+@router.post("/analyze", response_model=AnalysisResponse, dependencies=[Depends(verify_api_key)])
 async def analyze_pdf(file: UploadFile = File(...)):
     """Upload a contract PDF for legal risk analysis."""
     if not file.filename:

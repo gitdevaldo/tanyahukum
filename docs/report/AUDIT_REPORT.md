@@ -33,8 +33,8 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | ID | Severity | Description | File(s) | Status |
 |----|----------|-------------|---------|--------|
 | C-01 | Critical | Sync blocking calls in async handlers freeze event loop | `api/routers/chat.py`, `api/routers/analyze.py`, `api/services/analyzer.py`, `api/services/embeddings.py` | Fixed |
-| C-02 | Critical | No authentication on any API endpoint | `api/main.py`, `api/routers/analyze.py`, `api/routers/chat.py` | Open |
-| C-03 | Critical | No request size limit before memory allocation | `api/routers/analyze.py:24` | Open |
+| C-02 | Critical | No authentication on any API endpoint | `api/main.py`, `api/dependencies.py` | Fixed |
+| C-03 | Critical | No request size limit before memory allocation | `api/routers/analyze.py` | Fixed |
 | C-04 | Critical | Race condition on chat limit allows unlimited bypass | `api/routers/chat.py:37-43`, `api/services/storage.py:57-78` | Open |
 | C-05 | Critical | Conversation history injection — system role allowed | `api/routers/chat.py:63-64`, `api/models/schemas.py` | Open |
 | C-06 | Critical | Production secrets in plaintext .env with default perms | `.env` | Open |
@@ -42,13 +42,13 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | C-08 | Critical | 7.4 MB regulations_meta.json committed to git | `data/regulations_meta.json`, `data/ingest_state.json`, `data/crawl.log` | Open |
 | C-09 | Critical | crawl.log committed to git — may contain sensitive data | `data/crawl.log` | Open |
 | H-01 | High | No timeout on LLM API calls | `api/services/analyzer.py`, `api/routers/chat.py` | Open |
-| H-02 | High | Sensitive data exposure in error responses | `api/routers/analyze.py:40`, `api/routers/chat.py:93` | Open |
-| H-03 | High | Content-Disposition header injection risk | `api/routers/analyze.py:61` | Open |
+| H-02 | High | Sensitive data exposure in error responses | `api/routers/analyze.py`, `api/routers/chat.py` | Fixed |
+| H-03 | High | Content-Disposition header injection risk | `api/routers/analyze.py` | Fixed |
 | H-04 | High | No rate limiting on any endpoint | `api/main.py` | Open |
 | H-05 | High | PDF parsing denial of service — no resource limits | `api/services/pdf_extractor.py:14` | Open |
-| H-06 | High | Swagger/ReDoc API docs exposed in production | `api/main.py:14-18` | Open |
+| H-06 | High | Swagger/ReDoc API docs exposed in production | `api/main.py` | Fixed |
 | H-07 | High | Global mutable singletons not thread-safe | `api/services/rag.py:5-6`, `api/services/analyzer.py:22`, `api/routers/chat.py:16` | Open |
-| H-08 | High | Path traversal in API proxy — unsanitized id param | `web/src/app/api/analysis/[id]/route.ts:9`, `web/src/app/api/analysis/[id]/pdf/route.ts:9` | Open |
+| H-08 | High | Path traversal in API proxy — unsanitized id param | `web/src/app/api/analysis/[id]/route.ts` | Fixed |
 | H-09 | High | postMessage with wildcard origin "*" — XSS vector | `web/src/components/cek-dokumen/PdfViewer.tsx:26,37,50,56`, `web/public/pdf-viewer.html:90` | Open |
 | H-10 | High | No origin validation on incoming message events | `web/public/pdf-viewer.html:70-78`, `web/src/components/cek-dokumen/PdfViewer.tsx:18-29` | Open |
 | H-11 | High | External CDN (pdf.js) loaded without SRI | `web/public/pdf-viewer.html:60-62` | Open |
@@ -58,22 +58,22 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | H-15 | High | No rate limiting at Caddy reverse proxy level | `/etc/caddy/Caddyfile` | Open |
 | H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawl_bpk_v2.py:377-418` | Open |
 | M-01 | Medium | `datetime.utcnow()` deprecated in Python 3.12 | `api/models/schemas.py:49` | Open |
-| M-02 | Medium | Duplicate LLM client singletons | `api/services/analyzer.py:22-32`, `api/routers/chat.py:16-26` | Open |
+| M-02 | Medium | Duplicate LLM client singletons | `api/services/llm.py` | Fixed |
 | M-03 | Medium | MongoDB 16MB doc limit vs 20MB PDF upload limit | `api/services/storage.py:21` | Open |
 | M-04 | Medium | No retry logic for external API calls | `api/services/embeddings.py:23-36`, `api/services/analyzer.py:96-104` | Open |
 | ~~M-05~~ | ~~Medium~~ | ~~Embedding batch size unlimited — may exceed API limits~~ | ~~`api/services/embeddings.py:21-38`~~ | Not a Problem |
 | M-06 | Medium | analysis_context field has no size limit | `api/models/schemas.py:56` | Open |
 | M-07 | Medium | No MongoDB connection timeout configured | `api/services/rag.py:13` | Open |
-| M-08 | Medium | No security response headers on API | `api/main.py` | Open |
+| M-08 | Medium | No security response headers on API | `api/main.py` | Fixed |
 | M-09 | Medium | Empty API keys silently accepted at startup | `api/config.py:12-21` | Open |
 | M-10 | Medium | Unvalidated top_k parameter in vector search | `api/services/rag.py:18` | Open |
-| M-11 | Medium | Chat proxy blindly forwards untrusted JSON body | `web/src/app/api/chat/route.ts:5-11` | Open |
+| M-11 | Medium | Chat proxy blindly forwards untrusted JSON body | `web/src/app/api/chat/route.ts` | Fixed |
 | M-12 | Medium | Analyze proxy has no file-type validation | `web/src/app/api/analyze/route.ts:7-13` | Open |
 | M-13 | Medium | Blob URL from user PDF in unsandboxed iframe | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx:55` | Open |
 | M-14 | Medium | Duplicate ChatPanel rendered (page + AnalysisResults) | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx`, `web/src/components/cek-dokumen/AnalysisResults.tsx:128-133` | Open |
 | M-15 | Medium | Text pasted as fake PDF blob — backend will fail | `web/src/app/(pages)/cek-dokumen/page.tsx:29` | Open |
 | M-16 | Medium | No abort/cancellation for in-flight analysis request | `web/src/app/(pages)/cek-dokumen/page.tsx:33-37` | Open |
-| M-17 | Medium | res.json() called without checking Content-Type | `web/src/app/api/analyze/route.ts:15`, `web/src/app/api/chat/route.ts:14` | Open |
+| M-17 | Medium | res.json() called without checking Content-Type | `web/src/app/api/*.ts` | Fixed |
 | M-18 | Medium | Images use `<img>` not Next.js `<Image>` — no optimization | `web/src/components/landing/Hero.tsx`, `Header.tsx`, `Footer.tsx` | Open |
 | M-19 | Medium | Google Fonts via CSS @import — render blocking | `web/src/app/globals.css:2` | Open |
 | M-20 | Medium | PDF viewer hidden on mobile with no alternative | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx:146` | Open |
@@ -82,10 +82,10 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-23 | Medium | No PM2 log rotation configured | `ecosystem.config.cjs` | Open |
 | M-24 | Medium | Non-atomic JSON file writes in crawler/ingest scripts | `scripts/crawl_bpk_v2.py:135-152`, `scripts/ingest.py` | Open |
 | L-01 | Low | Hardcoded IP in CORS origins | `api/config.py:38-39` | Open |
-| L-02 | Low | Import inside function body | `api/services/analyzer.py:221` | Open |
+| L-02 | Low | Import inside function body | `api/services/analyzer.py` | Fixed |
 | L-03 | Low | Unused functions in pdf_extractor | `api/services/pdf_extractor.py:23-40` | Open |
 | L-04 | Low | Redundant `requests` library (already has httpx) | `api/requirements.txt:11` | Open |
-| L-05 | Low | CORS allows all methods and headers | `api/main.py:24-25` | Open |
+| L-05 | Low | CORS allows all methods and headers | `api/main.py` | Fixed |
 | L-06 | Low | No structured logging | `api/` throughout | Open |
 | L-07 | Low | Duplicate type definitions — stale types/analysis.ts | `web/src/types/analysis.ts`, `web/src/components/cek-dokumen/types.ts` | Open |
 | L-08 | Low | Unused npm packages — @anthropic-ai/sdk, react-markdown | `web/package.json` | Open |
@@ -93,8 +93,8 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | L-10 | Low | Placeholder pages with no functionality | `web/src/app/(pages)/chat/page.tsx`, `results/page.tsx`, `upload/page.tsx` | Open |
 | L-11 | Low | "Konsultasi Pengacara" button does nothing | `web/src/components/cek-dokumen/AnalysisResults.tsx:123` | Open |
 | ~~L-12~~ | ~~Low~~ | ~~Services running as root user~~ | ~~`ecosystem.config.cjs`~~ | Not a Problem |
-| E-01 | Enhancement | No request tracing / correlation IDs | `api/main.py` | Open |
-| E-02 | Enhancement | No graceful shutdown handling | `api/main.py` | Open |
+| E-01 | Enhancement | No request tracing / correlation IDs | `api/main.py` | Fixed |
+| E-02 | Enhancement | No graceful shutdown handling | `api/main.py` | Fixed |
 | E-03 | Enhancement | No health check for Mistral embeddings API | `api/routers/health.py` | Open |
 | E-04 | Enhancement | No dependency pinning — non-reproducible builds | `api/requirements.txt` | Open |
 | E-05 | Enhancement | No monitoring or alerting system | Infrastructure | Open |

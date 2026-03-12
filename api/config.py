@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     do_inference_url: str = os.getenv("DO_INFERENCE_URL", "https://inference.do-ai.run/v1")
     do_model: str = os.getenv("DO_MODEL", "anthropic-claude-4.6-sonnet")
 
+    # Internal API key for Next.js → FastAPI auth
+    internal_api_key: str = os.getenv("INTERNAL_API_KEY", "7s9DTtir3BH7TCGDZYGF6UKW--eulLPvEBi6gPMwvUc")
+
     # Analysis settings
     max_upload_size_mb: int = 20
     rag_top_k: int = 5

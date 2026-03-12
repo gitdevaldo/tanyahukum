@@ -1,7 +1,7 @@
 """POST /api/chat — Follow-up chat about analysis results."""
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from api.config import settings
 from api.models.schemas import ChatRequest, ChatResponse
@@ -10,12 +10,13 @@ from api.services.guardrails import (
     is_on_topic, build_chat_system_prompt, CHAT_DISCLAIMER_ID, CHAT_LIMIT_RESPONSE
 )
 from api.services.storage import try_increment_chat, CHAT_LIMIT
+from api.dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
 async def chat(request: ChatRequest):
     """Chat follow-up about contract analysis results.
 
