@@ -84,8 +84,11 @@ def load_ingest_state() -> dict:
 
 def save_ingest_state(state: dict):
     state["last_updated"] = datetime.now().isoformat()
-    with open(INGEST_STATE_F, "w") as f:
+    # M-24: Atomic write
+    tmp = INGEST_STATE_F.with_suffix(".tmp")
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
+    tmp.rename(INGEST_STATE_F)
 
 def load_meta() -> dict:
     if META_F.exists():

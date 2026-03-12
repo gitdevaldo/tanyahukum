@@ -5,8 +5,10 @@ GET /api/analysis/{id}/pdf — Retrieve saved PDF.
 import re
 import asyncio
 import logging
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from fastapi.responses import Response
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.models.schemas import AnalysisResponse
 from api.services.analyzer import analyze_contract
@@ -16,10 +18,12 @@ from api.dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/analyze", response_model=AnalysisResponse, dependencies=[Depends(verify_api_key)])
-async def analyze_pdf(file: UploadFile = File(...)):
+@limiter.limit("5/minute")
+async def analyze_pdf(request: Request, file: UploadFile = File(...)):
     """Upload a contract PDF for legal risk analysis."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename diperlukan.")

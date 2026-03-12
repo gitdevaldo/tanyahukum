@@ -57,7 +57,7 @@
     </div>
   </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -66,8 +66,10 @@
   let pageTextItems = {}; // pageNum -> [{str, transform, width, height}]
   const container = document.getElementById('pdfContainer');
 
-  // Receive messages from parent
+  // H-10: Only accept messages from parent origin
+  const allowedOrigin = window.location.origin;
   window.addEventListener('message', (e) => {
+    if (e.origin !== allowedOrigin) return;
     const { type, payload } = e.data;
     if (type === 'loadPdf') {
       loadPdf(payload.url);
@@ -87,7 +89,7 @@
         await renderPage(i);
       }
       // Notify parent we're ready
-      window.parent.postMessage({ type: 'pdfReady', numPages: pdfDoc.numPages }, '*');
+      window.parent.postMessage({ type: 'pdfReady', numPages: pdfDoc.numPages }, allowedOrigin);
     } catch (err) {
       container.innerHTML = '<div class="loading"><div style="color:#ef4444">Gagal memuat PDF</div></div>';
       console.error(err);

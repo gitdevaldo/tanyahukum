@@ -1,17 +1,26 @@
 """MongoDB vector search for RAG retrieval."""
+import threading
 from pymongo import MongoClient
 from api.config import settings
 
+_lock = threading.Lock()
 _client = None
 _db = None
 
 
 def get_db():
-    """Get cached MongoDB database connection."""
+    """Thread-safe lazy initialization of MongoDB connection (H-07)."""
     global _client, _db
     if _db is None:
-        _client = MongoClient(settings.mongodb_uri)
-        _db = _client[settings.mongodb_db]
+        with _lock:
+            if _db is None:
+                _client = MongoClient(
+                    settings.mongodb_uri,
+                    serverSelectionTimeoutMS=5000,
+                    connectTimeoutMS=5000,
+                    socketTimeoutMS=30000,
+                )
+                _db = _client[settings.mongodb_db]
     return _db
 
 
@@ -20,6 +29,7 @@ def vector_search(query_embedding: list[float], top_k: int = 5) -> list[dict]:
 
     Returns top-k matching regulation chunks with metadata.
     """
+    top_k = max(1, min(top_k, 20))  # M-10: clamp to safe range
     db = get_db()
     collection = db["legal_chunks"]
 

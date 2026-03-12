@@ -26,6 +26,15 @@ export default function ResultsPage() {
   const [activeClauseIndex, setActiveClauseIndex] = useState<number | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
 
+  // H-12: Clean up blob URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (pdfUrl && pdfUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
+
   useEffect(() => {
     // Try in-memory store first (instant after analysis)
     const memData = getAnalysis();

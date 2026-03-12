@@ -136,8 +136,11 @@ def save_progress(p: dict):
     with _save_lock:
         p["last_updated"] = datetime.now().isoformat()
         serializable = {**p, "processed_ids": list(p["processed_ids"])}
-        with open(PROGRESS_F, "w") as f:
+        # M-24: Atomic write — write to temp, then rename
+        tmp = PROGRESS_F.with_suffix(".tmp")
+        with open(tmp, "w") as f:
             json.dump(serializable, f, indent=2)
+        tmp.rename(PROGRESS_F)
 
 def load_meta() -> dict:
     if META_F.exists():
@@ -148,8 +151,11 @@ def load_meta() -> dict:
 
 def save_meta(meta: dict):
     with _save_lock:
-        with open(META_F, "w") as f:
+        # M-24: Atomic write — write to temp, then rename
+        tmp = META_F.with_suffix(".tmp")
+        with open(tmp, "w") as f:
             json.dump(list(meta.values()), f, ensure_ascii=False, indent=2)
+        tmp.rename(META_F)
 
 
 # ================================================================
@@ -402,6 +408,7 @@ def _process_one(session: requests.Session, reg: dict,
             with _save_lock:
                 meta[doc_id] = reg
                 progress["processed_ids"].add(doc_id)
+            # H-16: save calls are outside the lock but have their own internal locks
             save_meta(meta)
             save_progress(progress)
             console.print(

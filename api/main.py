@@ -6,6 +6,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.config import settings
@@ -16,6 +19,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# H-04: Rate limiter (shared instance used by routers via app.state.limiter)
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 # E-02: Graceful shutdown — close MongoDB on app teardown
@@ -45,6 +51,10 @@ app = FastAPI(
     redoc_url="/redoc" if is_dev else None,
     lifespan=lifespan,
 )
+
+# Attach rate limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # M-08: Security response headers middleware

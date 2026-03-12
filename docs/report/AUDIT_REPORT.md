@@ -41,22 +41,22 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | ~~C-07~~ | ~~Critical~~ | ~~Hardcoded unauthenticated webhook URL dispenses API key~~ | ~~`scripts/ingest.py:46`~~ | Not a Problem |
 | C-08 | Critical | Crawl progress JSON tracked in git (secrets leak risk) | `.gitignore` | Fixed |
 | C-09 | Critical | Regulations metadata tracked in git (bloat & leak risk) | `.gitignore` | Fixed |
-| H-01 | High | No timeout on LLM API calls | `api/services/analyzer.py`, `api/routers/chat.py` | Open |
+| H-01 | High | No timeout on LLM API calls | `api/services/llm.py` | Fixed |
 | H-02 | High | Sensitive data exposure in error responses | `api/routers/analyze.py`, `api/routers/chat.py` | Fixed |
 | H-03 | High | Content-Disposition header injection risk | `api/routers/analyze.py` | Fixed |
-| H-04 | High | No rate limiting on any endpoint | `api/main.py` | Open |
-| H-05 | High | PDF parsing denial of service — no resource limits | `api/services/pdf_extractor.py:14` | Open |
+| H-04 | High | No rate limiting on any endpoint | `api/main.py`, `api/routers/*.py` | Fixed |
+| H-05 | High | PDF parsing denial of service — no resource limits | `api/services/pdf_extractor.py` | Fixed |
 | H-06 | High | Swagger/ReDoc API docs exposed in production | `api/main.py` | Fixed |
-| H-07 | High | Global mutable singletons not thread-safe | `api/services/rag.py:5-6`, `api/services/analyzer.py:22`, `api/routers/chat.py:16` | Open |
+| H-07 | High | Global mutable singletons not thread-safe | `api/services/rag.py`, `api/services/llm.py` | Fixed |
 | H-08 | High | Path traversal in API proxy — unsanitized id param | `web/src/app/api/analysis/[id]/route.ts` | Fixed |
-| H-09 | High | postMessage with wildcard origin "*" — XSS vector | `web/src/components/cek-dokumen/PdfViewer.tsx:26,37,50,56`, `web/public/pdf-viewer.html:90` | Open |
-| H-10 | High | No origin validation on incoming message events | `web/public/pdf-viewer.html:70-78`, `web/src/components/cek-dokumen/PdfViewer.tsx:18-29` | Open |
-| H-11 | High | External CDN (pdf.js) loaded without SRI | `web/public/pdf-viewer.html:60-62` | Open |
-| H-12 | High | Blob URL memory leak — PDF URL not revoked on unmount | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx:55` | Open |
-| H-13 | High | No mobile hamburger menu — nav links inaccessible | `web/src/components/landing/Header.tsx:12` | Open |
-| H-14 | High | Missing HSTS, CSP, Permissions-Policy headers | `/etc/caddy/Caddyfile` | Open |
-| H-15 | High | No rate limiting at Caddy reverse proxy level | `/etc/caddy/Caddyfile` | Open |
-| H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawl_bpk_v2.py:377-418` | Open |
+| H-09 | High | postMessage with wildcard origin — XSS vector | `web/src/components/cek-dokumen/PdfViewer.tsx` | Fixed |
+| H-10 | High | No origin validation on incoming message events | `web/public/pdf-viewer.html` | Fixed |
+| H-11 | High | External CDN (pdf.js) loaded without SRI | `web/public/pdf-viewer.html` | Fixed |
+| H-12 | High | Blob URL memory leak — PDF URL not revoked | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx` | Fixed |
+| H-13 | High | No mobile hamburger menu — nav links inaccessible | `web/src/components/landing/Header.tsx` | Fixed |
+| H-14 | High | Missing HSTS, CSP, Permissions-Policy headers | `/etc/caddy/Caddyfile` | Fixed |
+| H-15 | High | No rate limiting at Caddy reverse proxy level | `api/main.py` (slowapi) | Fixed |
+| H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawl_bpk_v2.py` | Fixed |
 | M-01 | Medium | `datetime.utcnow()` deprecated in Python 3.12 | `api/models/schemas.py` | Fixed |
 | M-02 | Medium | Duplicate LLM client singletons | `api/services/llm.py` | Fixed |
 | M-03 | Medium | MongoDB 16MB doc limit vs 20MB PDF upload limit | `api/services/storage.py:21` | Open |
@@ -66,10 +66,10 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-07 | Medium | No MongoDB connection timeout configured | `api/services/rag.py:13` | Open |
 | M-08 | Medium | No security response headers on API | `api/main.py` | Fixed |
 | M-09 | Medium | Empty API keys silently accepted at startup | `api/config.py:12-21` | Open |
-| M-10 | Medium | Unvalidated top_k parameter in vector search | `api/services/rag.py:18` | Open |
+| M-10 | Medium | Unvalidated top_k parameter in vector search | `api/services/rag.py` | Fixed |
 | M-11 | Medium | Chat proxy blindly forwards untrusted JSON body | `web/src/app/api/chat/route.ts` | Fixed |
 | M-12 | Medium | Analyze proxy has no file-type validation | `web/src/app/api/analyze/route.ts:7-13` | Open |
-| M-13 | Medium | Blob URL from user PDF in unsandboxed iframe | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx:55` | Open |
+| M-13 | Medium | Blob URL from user PDF in unsandboxed iframe | `web/src/components/cek-dokumen/PdfViewer.tsx` | Fixed |
 | M-14 | Medium | Duplicate ChatPanel rendered (page + AnalysisResults) | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx`, `web/src/components/cek-dokumen/AnalysisResults.tsx:128-133` | Open |
 | M-15 | Medium | Text pasted as fake PDF blob — backend will fail | `web/src/app/(pages)/cek-dokumen/page.tsx:29` | Open |
 | M-16 | Medium | No abort/cancellation for in-flight analysis request | `web/src/app/(pages)/cek-dokumen/page.tsx:33-37` | Open |
@@ -80,7 +80,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-21 | Medium | Missing form labels for accessibility (WCAG violation) | `web/src/components/cek-dokumen/UploadSection.tsx`, `ChatPanel.tsx` | Open |
 | M-22 | Medium | No PM2 memory limits on API process | `ecosystem.config.cjs` | Open |
 | M-23 | Medium | No PM2 log rotation configured | `ecosystem.config.cjs` | Open |
-| M-24 | Medium | Non-atomic JSON file writes in crawler/ingest scripts | `scripts/crawl_bpk_v2.py:135-152`, `scripts/ingest.py` | Open |
+| M-24 | Medium | Non-atomic JSON file writes in crawler/ingest | `scripts/crawl_bpk_v2.py`, `scripts/ingest.py` | Fixed |
 | L-01 | Low | Hardcoded IP in CORS origins | `api/config.py:38-39` | Open |
 | L-02 | Low | Import inside function body | `api/services/analyzer.py` | Fixed |
 | L-03 | Low | Unused functions in pdf_extractor | `api/services/pdf_extractor.py:23-40` | Open |

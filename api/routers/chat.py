@@ -1,7 +1,9 @@
 """POST /api/chat — Follow-up chat about analysis results."""
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.config import settings
 from api.models.schemas import ChatRequest, ChatResponse
@@ -14,18 +16,20 @@ from api.dependencies import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
-async def chat(request: ChatRequest):
+@limiter.limit("20/minute")
+async def chat(request: Request, chat_request: ChatRequest):
     """Chat follow-up about contract analysis results.
 
     Includes topic guardrails and per-analysis chat limits.
     """
     # Atomic chat limit check + increment (fixes C-04 race condition)
-    if request.analysis_id:
+    if chat_request.analysis_id:
         allowed, current_count = await asyncio.to_thread(
-            try_increment_chat, request.analysis_id, CHAT_LIMIT
+            try_increment_chat, chat_request.analysis_id, CHAT_LIMIT
         )
         if not allowed:
             return ChatResponse(
@@ -35,7 +39,7 @@ async def chat(request: ChatRequest):
             )
 
     # Topic guardrail
-    if not is_on_topic(request.message):
+    if not is_on_topic(chat_request.message):
         return ChatResponse(
             message="Maaf, saya hanya bisa membantu terkait analisis kontrak dan hukum Indonesia. "
                     "Apakah ada pertanyaan tentang kontrak atau hasil analisis Anda?",
@@ -43,20 +47,20 @@ async def chat(request: ChatRequest):
         )
 
     # Build conversation
-    analysis_context = request.analysis_context
-    if not analysis_context and request.analysis_id:
-        analysis_context = f"Analisis ID: {request.analysis_id}"
+    analysis_context = chat_request.analysis_context
+    if not analysis_context and chat_request.analysis_id:
+        analysis_context = f"Analisis ID: {chat_request.analysis_id}"
 
     system_prompt = build_chat_system_prompt(analysis_context)
 
     messages = [{"role": "system", "content": system_prompt}]
 
     # Add conversation history — only user/assistant roles (fixes C-05)
-    for msg in request.conversation_history[-10:]:
+    for msg in chat_request.conversation_history[-10:]:
         if msg.role in ("user", "assistant"):
             messages.append({"role": msg.role, "content": msg.content})
 
-    messages.append({"role": "user", "content": request.message})
+    messages.append({"role": "user", "content": chat_request.message})
 
     try:
         client = get_llm_client()
@@ -71,7 +75,7 @@ async def chat(request: ChatRequest):
         reply = response.choices[0].message.content.strip()
 
         remaining = CHAT_LIMIT
-        if request.analysis_id:
+        if chat_request.analysis_id:
             remaining = max(0, CHAT_LIMIT - current_count)
 
         return ChatResponse(
