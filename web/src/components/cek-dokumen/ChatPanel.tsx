@@ -181,7 +181,18 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
       setTimeout(() => addBotMessage(
         DONE_MESSAGE.replace("{name}", info.name).replace("{email}", info.email).replace("{wa}", info.wa)
       ), 400);
-      // TODO: In the future, send contact info to backend for scheduling
+
+      // Send consultation booking to backend
+      fetch("/api/consultation/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: info.name,
+          email: info.email,
+          whatsapp: info.wa,
+          analysis_id: analysisId,
+        }),
+      }).catch((err) => console.error("Failed to submit consultation:", err));
     }
   }, [agentState, contactInfo, addBotMessage, addUserMessage]);
 

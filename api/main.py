@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.config import settings
-from api.routers import analyze, chat, health
+from api.routers import analyze, chat, health, booking
 
 logging.basicConfig(
     level=logging.INFO,
@@ -90,6 +90,7 @@ app.add_middleware(
 
 app.include_router(analyze.router, prefix="/api", tags=["Analysis"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
+app.include_router(booking.router, prefix="/api", tags=["Booking"])
 app.include_router(health.router, prefix="/api", tags=["Health"])
 
 

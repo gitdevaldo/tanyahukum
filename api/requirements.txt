@@ -7,5 +7,7 @@ openai==2.26.0
 httpx==0.28.1
 python-dotenv==1.2.2
 pydantic==2.12.5
+pydantic[email]==2.12.5
 pydantic-settings==2.13.1
 slowapi==0.1.9
+resend==2.7.0

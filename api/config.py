@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     do_inference_url: str = os.getenv("DO_INFERENCE_URL", "https://inference.do-ai.run/v1")
     do_model: str = os.getenv("DO_MODEL", "anthropic-claude-4.6-sonnet")
 
+    # Resend (transactional email)
+    resend_api_key: str = os.getenv("RESEND_API_KEY", "")
+    resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "TanyaHukum <noreply@app.tanyahukum.dev>")
+    admin_email: str = os.getenv("ADMIN_EMAIL", "aldodkris@gmail.com")
+
     # Internal API key for Next.js → FastAPI auth
     internal_api_key: str = os.getenv("INTERNAL_API_KEY", "7s9DTtir3BH7TCGDZYGF6UKW--eulLPvEBi6gPMwvUc")
 
