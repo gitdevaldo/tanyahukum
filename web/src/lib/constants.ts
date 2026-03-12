@@ -6,10 +6,11 @@ export const NAV_LINKS = [
   { label: "Harga", anchor: "pricing" },
 ] as const;
 
-export const TRUST_PARTNERS = [
-  "Kementerian Hukum",
-  "LBH Indonesia",
-  "Advokat Indonesia",
+export const STATS_BAR = [
+  { value: "121.000+", label: "Regulasi Dianalisis" },
+  { value: "<30 detik", label: "Waktu Analisis" },
+  { value: "99,8%", label: "Akurasi Kutipan Hukum" },
+  { value: "24/7", label: "AI Siap Kapan Saja" },
 ] as const;
 
 export const FEATURES = [
