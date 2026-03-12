@@ -245,7 +245,7 @@ Prinsip: **Generous di e-sign, terbatas di analisis AI** — analisis AI adalah 
 
 | Fitur | Gratis | Starter (Rp 29K/bln) | Plus (Rp 79K/bln) |
 |-------|--------|----------------------|---------------------|
-| **e-Sign** | 5/bulan | 30/bulan | 100/bulan |
+| **e-Sign** | 50/bulan | Unlimited | Unlimited |
 | **AI Analysis** | 3/bulan | 10/bulan | 30/bulan |
 | AI Chatbot per dokumen | 10 pesan | 20 pesan | 50 pesan |
 | Consultation booking | Tersedia | Tersedia | Tersedia |
@@ -258,8 +258,8 @@ Ditampilkan di halaman `/untuk-perusahaan/`.
 
 | Fitur | Starter (Rp 499K/bln) | Business (Rp 1.5M/bln) | Enterprise (Custom) |
 |-------|------------------------|-------------------------|---------------------|
-| **e-Sign** | 100/bulan | 500/bulan | Unlimited |
-| **AI Analysis** | 50/bulan | 200/bulan | Unlimited |
+| **e-Sign** | Unlimited | Unlimited | Unlimited |
+| **AI Analysis** | 250/bulan | 1.000/bulan | Unlimited |
 | Team members | 5 | 20 | Unlimited |
 | Kirim dokumen & co-sign | Tersedia | Tersedia | Tersedia |
 | "Company Pays" analysis | Tersedia | Tersedia | Tersedia |
