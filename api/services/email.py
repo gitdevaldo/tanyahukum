@@ -7,6 +7,36 @@ logger = logging.getLogger(__name__)
 
 resend.api_key = settings.resend_api_key
 
+LOGO_URL = "https://tanyahukum.dev/logo.svg"
+
+
+def _circle_number(num: int) -> str:
+    """Render a perfect circle number using a fixed-size table cell."""
+    return (
+        f'<td width="28" height="28" align="center" valign="middle" '
+        f'style="width:28px;height:28px;min-width:28px;max-width:28px;'
+        f'background-color:#FF6B35;color:#FFFFFF;font-size:13px;font-weight:700;'
+        f'border-radius:14px;mso-border-alt:none;text-align:center;'
+        f'font-family:Arial,Helvetica,sans-serif;line-height:28px;">{num}</td>'
+    )
+
+
+def _step_row(num: int, title: str, desc: str, is_last: bool = False) -> str:
+    """Render a numbered step row with perfect circle."""
+    pb = "" if is_last else "padding-bottom:16px;"
+    return f"""\
+<tr>
+  <td style="{pb}">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+      {_circle_number(num)}
+      <td style="padding-left:14px;font-size:14px;color:#1A2332;line-height:1.5;">
+        <strong>{title}</strong><br>
+        <span style="color:#6B7280;font-size:13px;">{desc}</span>
+      </td>
+    </tr></table>
+  </td>
+</tr>"""
+
 
 def _base_layout(content_html: str) -> str:
     """Wrap content in the branded TanyaHukum email layout."""
@@ -22,21 +52,10 @@ def _base_layout(content_html: str) -> str:
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(26,35,50,0.08);">
 
-<!-- Header -->
+<!-- Header with logo -->
 <tr>
-<td style="background:linear-gradient(135deg,#1A2332 0%,#2A3A4F 100%);padding:28px 32px;text-align:center;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <span style="font-size:24px;font-weight:800;color:#FF6B35;letter-spacing:-0.5px;">Tanya</span><span style="font-size:24px;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;">Hukum</span>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" style="padding-top:6px;">
-      <span style="font-size:11px;color:#8B9BB4;letter-spacing:1.5px;text-transform:uppercase;">Analisis Kontrak Berbasis AI</span>
-    </td>
-  </tr>
-  </table>
+<td style="background:linear-gradient(135deg,#1A2332 0%,#2A3A4F 100%);padding:24px 32px;text-align:center;">
+  <img src="{LOGO_URL}" alt="TanyaHukum" width="160" height="52" style="display:block;margin:0 auto;max-width:160px;height:auto;" />
 </td>
 </tr>
 
@@ -49,23 +68,21 @@ def _base_layout(content_html: str) -> str:
 
 <!-- Footer -->
 <tr>
-<td style="background-color:#F8F5F1;padding:24px 32px;border-top:1px solid #EDE8E3;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-  <tr>
-    <td align="center">
-      <p style="margin:0 0 8px;font-size:12px;color:#6B7280;">
-        Email ini dikirim oleh <strong style="color:#1A2332;">TanyaHukum</strong>
+<td style="padding:0 32px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E5E7EB;padding-top:24px;">
+  <tr><td>
+    <p style="margin:0 0 16px;font-size:12px;color:#9CA3AF;line-height:1.5;">
+      Email ini dikirim otomatis oleh TanyaHukum — analisis kontrak berbasis AI untuk masyarakat Indonesia.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#1A2332;border-radius:8px;">
+    <tr><td style="padding:14px 18px;">
+      <p style="margin:0;font-size:11px;color:#94A3B8;line-height:1.6;">
+        <strong style="color:#FF6B35;">Demo</strong> &mdash; Layanan ini masih dalam tahap pengembangan.
+        Hasil analisis bukan merupakan nasihat hukum. Selalu konsultasikan dengan pengacara profesional untuk keputusan hukum.
       </p>
-      <p style="margin:0 0 12px;font-size:11px;color:#9CA3AF;">
-        Analisis kontrak cerdas untuk masyarakat Indonesia
-      </p>
-      <p style="margin:0;padding:12px 16px;background-color:#FFF5F0;border-radius:8px;border-left:3px solid #FF6B35;font-size:11px;color:#92400E;line-height:1.5;">
-        ⚠️ <strong>Disclaimer:</strong> Ini adalah layanan demo dalam tahap pengembangan. 
-        Hasil analisis bukan nasihat hukum. Selalu konsultasikan dengan pengacara profesional 
-        untuk keputusan hukum.
-      </p>
-    </td>
-  </tr>
+    </td></tr>
+    </table>
+  </td></tr>
   </table>
 </td>
 </tr>
@@ -95,26 +112,26 @@ def send_user_confirmation(
             badge_color, badge_bg, badge_label = "#059669", "#D1FAE5", "Risiko Rendah"
         score_badge = f"""\
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-<tr><td>
-  <table role="presentation" cellpadding="0" cellspacing="0" style="background-color:#F8F5F1;border-radius:12px;padding:16px 20px;width:100%;">
-  <tr>
-    <td style="padding:16px 20px;">
-      <p style="margin:0 0 4px;font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Dokumen yang dianalisis</p>
-      <p style="margin:0 0 12px;font-size:14px;color:#1A2332;font-weight:600;">{analysis_filename or 'Kontrak'}</p>
-      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-        <td style="background-color:{badge_bg};color:{badge_color};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;">
-          Skor {overall_score}/10 — {badge_label}
-        </td>
-      </tr></table>
+<tr><td style="background-color:#F8F5F1;border-radius:12px;padding:16px 20px;">
+  <p style="margin:0 0 4px;font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Dokumen yang dianalisis</p>
+  <p style="margin:0 0 12px;font-size:14px;color:#1A2332;font-weight:600;">{analysis_filename or 'Kontrak'}</p>
+  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td style="background-color:{badge_bg};color:{badge_color};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;">
+      Skor {overall_score}/10 &mdash; {badge_label}
     </td>
-  </tr>
-  </table>
+  </tr></table>
 </td></tr>
 </table>"""
 
+    steps = (
+        _step_row(1, "Tim kami menerima data Anda", "Data kontak Anda telah tercatat di sistem kami")
+        + _step_row(2, "Kami menghubungi Anda via WhatsApp", "Staf kami akan menghubungi dalam 1x24 jam untuk konfirmasi jadwal")
+        + _step_row(3, "Konsultasi awal gratis", "Sesi konsultasi pertama tanpa biaya dan tanpa kewajiban", is_last=True)
+    )
+
     content = f"""\
 <h1 style="margin:0 0 8px;font-size:22px;color:#1A2332;font-weight:700;">
-  Halo, {user_name}! 👋
+  Halo, {user_name}!
 </h1>
 <p style="margin:0 0 24px;font-size:15px;color:#4B5563;line-height:1.6;">
   Permintaan konsultasi hukum Anda telah kami terima.
@@ -128,39 +145,7 @@ def send_user_confirmation(
     Apa yang akan terjadi selanjutnya?
   </h2>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td style="padding-bottom:12px;">
-        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-          <td style="background-color:#FF6B35;color:#FFFFFF;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;vertical-align:top;">1</td>
-          <td style="padding-left:12px;font-size:14px;color:#1A2332;line-height:1.5;">
-            <strong>Tim kami menerima data Anda</strong><br>
-            <span style="color:#6B7280;font-size:13px;">Data kontak Anda telah tercatat di sistem kami</span>
-          </td>
-        </tr></table>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding-bottom:12px;">
-        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-          <td style="background-color:#FF6B35;color:#FFFFFF;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;vertical-align:top;">2</td>
-          <td style="padding-left:12px;font-size:14px;color:#1A2332;line-height:1.5;">
-            <strong>Kami menghubungi Anda via WhatsApp</strong><br>
-            <span style="color:#6B7280;font-size:13px;">Staf kami akan menghubungi dalam 1x24 jam untuk konfirmasi jadwal</span>
-          </td>
-        </tr></table>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-          <td style="background-color:#FF6B35;color:#FFFFFF;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;vertical-align:top;">3</td>
-          <td style="padding-left:12px;font-size:14px;color:#1A2332;line-height:1.5;">
-            <strong>Konsultasi awal gratis</strong><br>
-            <span style="color:#6B7280;font-size:13px;">Sesi konsultasi pertama tanpa biaya dan tanpa kewajiban</span>
-          </td>
-        </tr></table>
-      </td>
-    </tr>
+    {steps}
   </table>
 </td></tr>
 </table>
@@ -208,7 +193,7 @@ def send_admin_notification(
     content = f"""\
 <div style="margin-bottom:20px;padding:16px 20px;background-color:#FEF3C7;border-radius:12px;border-left:4px solid #F59E0B;">
   <p style="margin:0;font-size:14px;color:#92400E;font-weight:600;">
-    🔔 Permintaan Konsultasi Baru
+    Permintaan Konsultasi Baru
   </p>
 </div>
 
@@ -283,7 +268,7 @@ def send_admin_notification(
         params: resend.Emails.SendParams = {
             "from": settings.resend_from_email,
             "to": [settings.admin_email],
-            "subject": f"🔔 Konsultasi Baru — {user_name} (Skor {overall_score or '?'}/10)",
+            "subject": f"Konsultasi Baru — {user_name} (Skor {overall_score or '?'}/10)",
             "html": html,
             "reply_to": user_email,
         }

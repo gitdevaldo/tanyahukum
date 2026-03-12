@@ -94,7 +94,7 @@ function RichMessage({ content }: { content: string }) {
   );
 }
 
-const OFFER_MESSAGE = `Batas chat gratis Anda telah tercapai untuk analisis ini. 🙏
+const OFFER_MESSAGE = `Batas chat gratis Anda telah tercapai untuk analisis ini.
 
 Namun jangan khawatir — tim konsultan hukum kami siap membantu Anda memahami kontrak ini lebih dalam, termasuk:
 
@@ -104,8 +104,8 @@ Namun jangan khawatir — tim konsultan hukum kami siap membantu Anda memahami k
 
 Konsultasi awal **gratis** dan tanpa kewajiban. Tertarik untuk dijadwalkan?`;
 
-const THANKS_MESSAGE = "Terima kasih! Semoga analisis ini membantu Anda. Jika berubah pikiran, Anda bisa kembali kapan saja. 😊";
-const ASK_NAME = "Baik, senang sekali! 😊 Untuk menjadwalkan konsultasi, boleh saya tahu **nama lengkap** Anda?";
+const THANKS_MESSAGE = "Terima kasih! Semoga analisis ini membantu Anda. Jika berubah pikiran, Anda bisa kembali kapan saja.";
+const ASK_NAME = "Baik, senang sekali! Untuk menjadwalkan konsultasi, boleh saya tahu **nama lengkap** Anda?";
 const ASK_EMAIL = "Terima kasih, {name}! Sekarang, boleh saya minta **alamat email** Anda untuk mengirimkan detail jadwal?";
 const ASK_WA = "Satu lagi — boleh minta **nomor WhatsApp** Anda? Tim kami akan menghubungi Anda via WhatsApp untuk konfirmasi jadwal.";
 const DONE_MESSAGE = `Sempurna! Data Anda sudah kami catat:
@@ -114,7 +114,7 @@ const DONE_MESSAGE = `Sempurna! Data Anda sudah kami catat:
 • **Email:** {email}
 • **WhatsApp:** {wa}
 
-Tim konsultan hukum kami akan menghubungi Anda dalam **1x24 jam** untuk menjadwalkan konsultasi. Terima kasih telah mempercayakan TanyaHukum! 🙏`;
+Tim konsultan hukum kami akan menghubungi Anda dalam **1x24 jam** untuk menjadwalkan konsultasi. Terima kasih telah mempercayakan TanyaHukum!`;
 
 export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initialRemainingChats }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -308,7 +308,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
                   onClick={() => sendMessage(suggestion)}
                   className="block w-full text-left text-xs px-3 py-2 bg-gray-50 rounded-lg text-neutral-gray hover:bg-orange-50 hover:text-primary-orange transition-colors"
                 >
-                  💬 {suggestion}
+                  {suggestion}
                 </button>
               ))}
             </div>

@@ -123,6 +123,7 @@ User uploads PDF
 - `components/cek-dokumen/` — 5 MVP feature components with barrel export
 - Button component has variants: `primary`, `secondary`, `outline`, `dark` and sizes: `sm`, `md`, `lg`
 - **No icons in buttons** — across the entire app, buttons must be text-only. No emoji, no SVG icons, no icon components inside `<button>` elements. This applies to all pages including cek-dokumen, landing, chatbot, and any future pages.
+- **No icons or emoji in chatbot** — chatbot messages (bot replies, suggestion buttons, offer messages, agent flow text) must never contain emoji or icon characters. Keep all chatbot text plain — professional and clean.
 
 ### Section IDs (for anchor nav)
 `id="home"` (Hero), `id="features"` (Features), `id="pricing"` (CTAPricing), `id="faq"` (FAQ)
