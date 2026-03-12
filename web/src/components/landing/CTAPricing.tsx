@@ -6,12 +6,11 @@ export default function CTAPricing() {
     <section id="pricing" className="bg-dark-navy px-[5%] py-14 sm:py-24 text-white">
       <div className="mx-auto max-w-[1400px] text-center">
         <h2 className="mb-3 sm:mb-4 text-3xl sm:text-4xl font-bold">
-          Bergabung dengan Ribuan Profesional Hukum yang Sudah Bekerja Lebih
-          Cerdas
+          Pahami Dulu, Baru Tanda Tangan
         </h2>
         <p className="mx-auto mb-8 sm:mb-12 max-w-[800px] text-base sm:text-lg text-muted-text">
-          Dari freelancer hingga law firm, TanyaHukum membantu siapapun memahami
-          hukum dengan lebih cepat dan akurat.
+          Mulai gratis dengan 50 tanda tangan digital dan 3 analisis AI per bulan.
+          Upgrade kapan saja untuk kuota lebih besar.
         </p>
 
         <div className="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-3">

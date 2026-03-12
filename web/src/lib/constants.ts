@@ -17,25 +17,25 @@ export const FEATURES = [
     icon: "🔍",
     title: "Analisis Kontrak Otomatis",
     description:
-      "AI kami membaca setiap klausul dan membandingkannya dengan ribuan regulasi Indonesia untuk menemukan potensi risiko yang tersembunyi.",
+      "AI membaca setiap klausul dan membandingkannya dengan 121.000+ regulasi Indonesia untuk menemukan potensi risiko yang tersembunyi — dalam hitungan detik.",
   },
   {
     icon: "⚖️",
-    title: "Validasi Hukum Real-Time",
+    title: "Kutipan Hukum yang Akurat",
     description:
-      "Setiap analisis didukung oleh kutipan hukum yang aktual dari UU, Perpres, dan regulasi resmi pemerintah Indonesia.",
+      "Setiap skor risiko didukung referensi hukum spesifik dari UU, PP, POJK, dan regulasi resmi yang berlaku. Bukan opini umum, tapi dasar hukum yang jelas.",
   },
   {
-    icon: "🔒",
-    title: "Deteksi Klausul Berbahaya",
+    icon: "✍️",
+    title: "Tanda Tangan Digital",
     description:
-      "Sistem kami secara otomatis menandai klausul yang merugikan, tidak adil, atau bertentangan dengan hukum konsumen Indonesia.",
+      "Tanda tangani dokumen secara digital setelah memahami isinya. Kirim ke pihak lain untuk review dan co-sign — semua tercatat dengan audit trail lengkap.",
   },
   {
     icon: "💬",
-    title: "Chat Legal AI 24/7",
+    title: "Chat Legal AI",
     description:
-      "Tanyakan pertanyaan lanjutan tentang kontrak Anda kapan saja. AI kami siap menjawab dengan referensi hukum yang jelas.",
+      "Tanyakan pertanyaan lanjutan tentang kontrak Anda. AI menjawab berdasarkan isi dokumen dan referensi hukum Indonesia yang relevan.",
   },
 ] as const;
 
@@ -70,65 +70,63 @@ export const HOW_IT_WORKS_STEPS = [
 ] as const;
 
 export const ALL_PRICING_FEATURES = [
-  "Analisis kontrak",
-  "Chat AI",
-  "Database hukum",
-  "Priority support",
-  "API access",
-  "Custom training",
-  "Dedicated support",
+  "Tanda tangan digital",
+  "Analisis AI",
+  "Chat AI per dokumen",
+  "Riwayat analisis",
+  "Consultation booking",
+  "Export ringkasan PDF",
 ] as const;
 
 export const PRICING_PLANS = [
   {
-    name: "Free Tier",
+    name: "Gratis",
     price: "Rp 0",
     period: "Per bulan",
     included: [
-      "5 analisis kontrak/bulan",
-      "Chat AI basic",
-      "Database hukum terbatas",
+      "50 tanda tangan digital/bulan",
+      "3 analisis AI/bulan",
+      "10 pesan chat per dokumen",
+      "Riwayat analisis 30 hari",
+      "Consultation booking",
     ],
     excluded: [
-      "Priority support",
-      "API access",
-      "Custom training",
-      "Dedicated support",
+      "Export ringkasan PDF",
     ],
-    cta: "Coba Gratis",
+    cta: "Mulai Gratis",
     ctaHref: "/cek-dokumen/",
     primary: false,
     disabled: false,
   },
   {
-    name: "Professional",
-    price: "Rp 99.000",
+    name: "Starter",
+    price: "Rp 29.000",
     period: "Per bulan",
     included: [
-      "Unlimited analisis kontrak",
-      "Chat AI advanced",
-      "Full database hukum",
-      "Priority support",
+      "Tanda tangan digital unlimited",
+      "10 analisis AI/bulan",
+      "20 pesan chat per dokumen",
+      "Riwayat analisis 90 hari",
+      "Consultation booking",
+      "Export ringkasan PDF",
     ],
-    excluded: [
-      "API access",
-      "Custom training",
-      "Dedicated support",
-    ],
+    excluded: [],
     cta: "Segera Hadir",
     ctaHref: null,
     primary: true,
     disabled: true,
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    period: "Hubungi kami",
+    name: "Plus",
+    price: "Rp 79.000",
+    period: "Per bulan",
     included: [
-      "Semua fitur Professional",
-      "API access",
-      "Custom training",
-      "Dedicated support",
+      "Tanda tangan digital unlimited",
+      "30 analisis AI/bulan",
+      "50 pesan chat per dokumen",
+      "Riwayat analisis 1 tahun",
+      "Consultation booking",
+      "Export ringkasan PDF",
     ],
     excluded: [],
     cta: "Segera Hadir",
@@ -162,7 +160,7 @@ export const FAQ_ITEMS = [
   {
     question: "Apakah ada trial gratis?",
     answer:
-      "Ya! Kami menyediakan tier gratis yang memungkinkan Anda menganalisis hingga 5 kontrak per bulan tanpa biaya apapun. Tidak perlu kartu kredit untuk memulai.",
+      "Ya! Paket Gratis memberikan Anda 50 tanda tangan digital dan 3 analisis AI per bulan tanpa biaya apapun. Tidak perlu kartu kredit untuk memulai.",
   },
   {
     question: "Bagaimana cara membatalkan langganan?",
