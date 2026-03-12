@@ -234,20 +234,32 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: Chat
           </div>
         ) : (
           <>
-            <div className="flex gap-2">
-              <input
-                type="text"
+            <div className="flex gap-2 items-end">
+              <textarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                onChange={(e) => { if (e.target.value.length <= 2000) setInput(e.target.value); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                }}
                 placeholder="Ketik pertanyaan..."
-                className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/30"
+                rows={1}
+                maxLength={2000}
+                className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/30 resize-none overflow-y-auto"
+                style={{ maxHeight: "120px" }}
                 aria-label="Pertanyaan chat"
               />
               <button
                 onClick={sendMessage}
                 disabled={!input.trim() || loading}
-                className="w-10 h-10 bg-primary-orange text-white rounded-xl flex items-center justify-center hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+                className="w-10 h-10 flex-shrink-0 bg-primary-orange text-white rounded-xl flex items-center justify-center hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
               >
                 <Send size={16} />
               </button>
