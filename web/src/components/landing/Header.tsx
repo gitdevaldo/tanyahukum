@@ -92,16 +92,15 @@ export default function Header() {
                 </Link>
               </li>
             ))}
-            <li>
-              <Link
-                href="/bisnis/"
-                onClick={() => setMenuOpen(false)}
-                className="block font-medium text-dark-navy hover:text-primary-orange transition-colors py-1"
-              >
-                Bisnis
-              </Link>
-            </li>
           </ul>
+          <div className="mt-3 pt-3 border-t border-border-light flex flex-col gap-2">
+            <Button href="/bisnis/" variant="secondary" size="sm" className="w-full text-center">
+              Bisnis
+            </Button>
+            <Button href="/cek-dokumen/" variant="primary" size="sm" className="w-full text-center">
+              Cek Dokumen
+            </Button>
+          </div>
         </div>
       )}
     </header>
