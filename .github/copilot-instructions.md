@@ -122,7 +122,7 @@ User uploads PDF
 - `components/landing/` — 12 landing page sections with barrel export
 - `components/cek-dokumen/` — 5 MVP feature components with barrel export
 - Button component has variants: `primary`, `secondary`, `outline`, `dark` and sizes: `sm`, `md`, `lg`
-- **No icons in buttons** on the cek-dokumen page
+- **No icons in buttons** — across the entire app, buttons must be text-only. No emoji, no SVG icons, no icon components inside `<button>` elements. This applies to all pages including cek-dokumen, landing, chatbot, and any future pages.
 
 ### Section IDs (for anchor nav)
 `id="home"` (Hero), `id="features"` (Features), `id="pricing"` (CTAPricing), `id="faq"` (FAQ)

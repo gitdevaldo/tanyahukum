@@ -100,7 +100,7 @@ Namun jangan khawatir — tim konsultan hukum kami siap membantu Anda memahami k
 
 • **Review mendalam** seluruh klausa bermasalah
 • **Rekomendasi revisi** yang bisa Anda ajukan
-• **Pendampingan negosiasi** dengan pihak lawan
+• **Pendampingan negosiasi** dengan pihak terkait
 
 Konsultasi awal **gratis** dan tanpa kewajiban. Tertarik untuk dijadwalkan?`;
 
@@ -328,7 +328,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
               onClick={() => handleAgentInput("Saya tertarik")}
               className="text-xs px-4 py-2 bg-primary-orange text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
             >
-              ✅ Saya Tertarik
+              Saya Tertarik
             </button>
             <button
               onClick={() => handleAgentInput("Saya tidak tertarik")}
