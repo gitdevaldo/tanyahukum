@@ -49,23 +49,35 @@ async def book_consultation(req: ConsultationRequest, request: Request):
             high_risk_count = analysis.get("high_risk_count", 0)
             total_clauses = analysis.get("total_clauses", 0)
 
-    # Save booking to MongoDB
+    # Save booking to Qdrant
     try:
-        from api.services.rag import get_db
-        db = get_db()
-        db["consultation_bookings"].insert_one({
-            "name": req.name,
-            "email": req.email,
-            "whatsapp": req.whatsapp,
-            "analysis_id": req.analysis_id,
-            "analysis_filename": analysis_filename,
-            "overall_score": overall_score,
-            "created_at": datetime.now(timezone.utc),
-            "status": "pending",
-        })
+        from api.services.rag import get_qdrant
+        from qdrant_client.models import PointStruct
+        client = get_qdrant()
+
+        info = client.get_collection("bookings")
+        next_id = (info.points_count or 0)
+
+        client.upsert(
+            collection_name="bookings",
+            points=[PointStruct(
+                id=next_id,
+                vector=[0.0, 0.0, 0.0, 0.0],
+                payload={
+                    "name": req.name,
+                    "email": req.email,
+                    "whatsapp": req.whatsapp,
+                    "analysis_id": req.analysis_id,
+                    "analysis_filename": analysis_filename,
+                    "overall_score": overall_score,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "pending",
+                },
+            )],
+        )
         logger.info(f"Consultation booking saved for {req.email}")
     except Exception as e:
-        logger.error(f"Failed to save booking to MongoDB: {e}", exc_info=True)
+        logger.error(f"Failed to save booking: {e}", exc_info=True)
 
     # Send emails (non-blocking — don't fail the request if email fails)
     user_email_sent = send_user_confirmation(

@@ -1,0 +1,327 @@
+================================================================================
+COMPLETE LIST OF ALL MONGODB USAGES IN TANYAHUKUM
+================================================================================
+
+SUMMARY:
+  Total Files: 8 
+  Total Touchpoints: 25+
+  Collections Referenced: 3
+  
+================================================================================
+1. PYMONGO IMPORTS & LIBRARY USAGE
+================================================================================
+
+FILE: api/services/rag.py
+  Line 3:    from pymongo import MongoClient
+  Lines 17-23: MongoClient(...) initialization
+  Lines 11-24: get_db() function with MongoDB connection logic
+
+FILE: scripts/ingest.py
+  Line 28:   from pymongo import MongoClient
+  Line 29:   from pymongo.operations import InsertOne
+  Line 521:  MongoClient(MONGODB_URI) initialization
+
+FILE: api/services/storage.py
+  Line 4:    from bson.binary import Binary
+  Line 5:    from api.services.rag import get_db
+
+FILE: api/requirements.txt
+  pymongo==4.16.0
+
+================================================================================
+2. CONFIGURATION & ENVIRONMENT VARIABLES
+================================================================================
+
+FILE: .env
+  Line 1:    MONGODB_URI=mongodb+srv://...
+  Line 2:    MONGODB_DB=tanyahukum
+
+FILE: api/config.py
+  Line 11:   mongodb_uri: str = os.getenv("MONGODB_URI", "")
+  Line 12:   mongodb_db: str = os.getenv("MONGODB_DB", "tanyahukum")
+  Line 34:   max_upload_size_mb: int = 15  # M-03: stay under MongoDB 16MB BSON limit
+  Line 55:   if not settings.mongodb_uri:
+  Line 56:   raise ValueError("MONGODB_URI is required — set it in .env")
+
+FILE: scripts/ingest.py
+  Line 46:   MONGODB_URI     = os.getenv("MONGODB_URI")
+  Line 47:   MONGODB_DB      = os.getenv("MONGODB_DB", "tanyahukum")
+
+================================================================================
+3. COLLECTION: legal_chunks (121K+ documents, ~4GB)
+================================================================================
+
+Description: Regulation chunks with 1024-dim Mistral vector embeddings
+
+READ OPERATIONS:
+  FILE: api/services/rag.py
+    Line 34:   collection = db["legal_chunks"]
+    Line 36-44: $vectorSearch aggregation pipeline
+    Line 67:   db["legal_chunks"].estimated_document_count()
+
+WRITE OPERATIONS:
+  FILE: scripts/ingest.py
+    Line 523:  return db["legal_chunks"], client
+    Line 739:  collection.insert_many(docs_to_insert)
+
+Schema Fields (inferred):
+  - _id: string (document ID)
+  - embedding: float[] (1024 dimensions)
+  - content: string (regulation text)
+  - source: string (regulation name)
+  - pasal_ref: string (section reference)
+  - category: string
+  - doc_id: string
+  - chunk_index: integer
+
+Vector Search Config:
+  - Index: "vector_index"
+  - Distance: Cosine similarity
+  - Dimensions: 1024
+  - Limit: top_k (clamped to 1-20)
+
+================================================================================
+4. COLLECTION: analyses (Analysis Results)
+================================================================================
+
+Description: Contract analysis results + PDF binary storage
+
+Functions in api/services/storage.py:
+
+  1. save_analysis() [Lines 15-32]
+     - db[COLLECTION].insert_one(doc)
+     - Stores: _id, result JSON, PDF binary, chat_count, created_at
+
+  2. get_analysis() [Lines 35-46]
+     - db[COLLECTION].find_one({"_id": analysis_id}, {"pdf": 0})
+     - Returns analysis result without PDF
+
+  3. get_analysis_pdf() [Lines 49-57]
+     - db[COLLECTION].find_one({"_id": analysis_id}, {"pdf": 1})
+     - Returns only PDF binary
+
+  4. get_chat_usage() [Lines 60-67]
+     - db[COLLECTION].find_one({"_id": analysis_id}, {"chat_count": 1})
+     - Returns chat count and limit
+
+  5. increment_chat_count() [Lines 70-81]
+     - db[COLLECTION].find_one_and_update()
+     - Increments chat_count and returns new value
+
+  6. try_increment_chat() [Lines 84-101]
+     - db[COLLECTION].find_one_and_update() - ATOMIC OPERATION
+     - Checks chat_count < limit, increments, returns success
+     - Fixes race condition C-04
+
+Schema:
+  {
+    "_id": string (analysis_id, UUID format),
+    "result": dict (analysis JSON),
+    "pdf": Binary (PDF bytes, up to 20MB),
+    "chat_count": integer (0-10),
+    "created_at": datetime (UTC)
+  }
+
+API Usage:
+  FILE: api/routers/analyze.py
+    Line 48: await asyncio.to_thread(save_analysis, result.model_dump(), pdf_bytes)
+
+  FILE: api/routers/chat.py
+    Line 31: await asyncio.to_thread(try_increment_chat, chat_request.analysis_id, CHAT_LIMIT)
+
+================================================================================
+5. COLLECTION: consultation_bookings
+================================================================================
+
+Description: Lawyer consultation booking records
+
+Write Operation:
+  FILE: api/routers/booking.py
+    Lines 52-65: db["consultation_bookings"].insert_one({...})
+
+Schema:
+  {
+    "name": string (2-100 chars),
+    "email": string (EmailStr),
+    "whatsapp": string (8-20 chars, phone number),
+    "analysis_id": string (optional, FK to analyses._id),
+    "analysis_filename": string (optional),
+    "overall_score": float (optional),
+    "created_at": datetime (UTC),
+    "status": string ("pending")
+  }
+
+Related Code:
+  FILE: api/routers/booking.py
+    Line 45: analysis = get_analysis(req.analysis_id)
+    (Uses storage.py functions to fetch analysis metadata)
+
+================================================================================
+6. DATABASE OPERATIONS BY TYPE
+================================================================================
+
+VECTOR SEARCH (Aggregation Pipeline):
+  Location: api/services/rag.py, lines 27-61
+  Collection: legal_chunks
+  Operation: $vectorSearch aggregation
+  Returns: Top-k matching chunks with embeddings
+  Called By: api/services/analyzer.py line 226
+
+INSERT OPERATIONS:
+  Location 1: api/services/storage.py line 29 (save_analysis)
+  Location 2: api/routers/booking.py line 56 (consultation booking)
+  Location 3: scripts/ingest.py line 739 (bulk ingestion)
+
+FIND OPERATIONS:
+  Location 1: api/services/storage.py line 40 (get_analysis)
+  Location 2: api/services/storage.py line 54 (get_analysis_pdf)
+  Location 3: api/services/storage.py line 65 (get_chat_usage)
+
+FIND_ONE_AND_UPDATE (ATOMIC):
+  Location 1: api/services/storage.py line 75 (increment_chat_count)
+  Location 2: api/services/storage.py line 92 (try_increment_chat)
+
+COUNT OPERATIONS:
+  Location: api/services/rag.py line 67 (get_chunks_count)
+  Returns: estimated_document_count()
+
+CONNECTION HEALTH CHECK:
+  Location: api/services/rag.py lines 70-77 (check_connection)
+  Operation: db.command("ping")
+
+================================================================================
+7. INITIALIZATION & LIFECYCLE
+================================================================================
+
+Connection Initialization:
+  FILE: api/services/rag.py, lines 11-24
+  Pattern: Thread-safe lazy singleton
+  Global Variables: _lock, _client, _db
+  Entry Point: get_db() function
+
+Graceful Shutdown:
+  FILE: api/main.py, lines 27-40
+  Lifespan: @asynccontextmanager
+  Shutdown Code: _client.close()
+  Triggered: On SIGTERM/app shutdown
+
+Health Check:
+  FILE: api/routers/health.py, lines 24-40
+  Checks: MongoDB connection, chunk count
+  Used By: Frontend monitoring, deployment health probes
+
+================================================================================
+8. DIRECT MONGODB API CALLS SUMMARY
+================================================================================
+
+Insert Operations:
+  - insert_one() [storage.py:29, booking.py:56]
+  - insert_many() [ingest.py:739]
+
+Find Operations:
+  - find_one() [storage.py:40, 54, 65]
+  - find_one_and_update() [storage.py:75, 92] ← ATOMIC
+
+Aggregation:
+  - collection.aggregate() [rag.py:60]
+  - Pipeline: $vectorSearch → $project
+
+Other:
+  - estimated_document_count() [rag.py:67]
+  - list_search_indexes() [ingest.py:528]
+  - create_search_index() [ingest.py:530-544]
+  - db.command("ping") [rag.py:74]
+
+================================================================================
+9. CRITICAL SECTIONS REQUIRING CAREFUL MIGRATION
+================================================================================
+
+SECTION A: Vector Search (RAG)
+  File: api/services/rag.py
+  Lines: 27-61
+  Complexity: HIGH
+  Contains: Aggregation pipeline, vector scoring, metadata projection
+  Testing: Vector search accuracy on 121K docs, similarity scores
+
+SECTION B: Storage Layer (Analysis + Chat Counting)
+  File: api/services/storage.py
+  Lines: 15-101
+  Complexity: CRITICAL
+  Contains: Binary PDF storage, atomic operations, race condition fix
+  Testing: PDF binary handling, chat count atomicity, data retrieval
+
+SECTION C: Bulk Ingestion
+  File: scripts/ingest.py
+  Lines: 28-29, 46-47, 519-545, 739
+  Complexity: HIGH
+  Contains: 121K+ document batch insertion, vector index creation
+  Testing: Ingestion performance, vector index creation, document integrity
+
+SECTION D: Atomic Race Condition Fix (C-04)
+  File: api/services/storage.py
+  Lines: 84-101
+  Complexity: CRITICAL
+  Issue: MongoDB $inc is atomic; Qdrant is not
+  Solution: Redis locks or application-level mutex required
+
+================================================================================
+10. VERIFICATION CHECKLIST
+================================================================================
+
+Configuration Files:
+  ✓ .env (2 variables: MONGODB_URI, MONGODB_DB)
+  ✓ api/config.py (2 config fields + validation)
+  ✓ api/requirements.txt (pymongo dependency)
+  ✓ scripts/ingest.py (2 config variables)
+
+Imports:
+  ✓ api/services/rag.py (MongoClient)
+  ✓ scripts/ingest.py (MongoClient, InsertOne)
+  ✓ api/services/storage.py (Binary, get_db)
+  ✓ api/routers/booking.py (indirect: get_db import)
+
+Collections Referenced:
+  ✓ legal_chunks (121K+ docs, vector search)
+  ✓ analyses (analysis results + PDF)
+  ✓ consultation_bookings (booking records)
+
+Database Operations:
+  ✓ Vector search (RAG)
+  ✓ Insert operations (3 locations)
+  ✓ Find operations (3 locations)
+  ✓ Atomic find_one_and_update (2 locations)
+  ✓ Count operations (1 location)
+  ✓ Connection health checks
+
+API Integration:
+  ✓ Health check endpoint
+  ✓ Analysis router
+  ✓ Chat router
+  ✓ Booking router
+  ✓ Graceful shutdown
+
+================================================================================
+TOTAL MIGRATION EFFORT ESTIMATE
+================================================================================
+
+Critical Sections:
+  1. Vector Search (rag.py): 45 min
+  2. Storage Layer (storage.py): 60 min
+  3. Ingestion Script (ingest.py): 45 min
+
+High Priority Sections:
+  4. Booking Router (booking.py): 15 min
+  5. Health Check (health.py): 15 min
+  6. App Lifecycle (main.py): 10 min
+
+Configuration:
+  7. Config Files (.env, config.py, requirements.txt): 15 min
+
+Additional (Not directly code):
+  8. Atomic Operations Solution (Redis/Locks): 30+ min
+  9. Binary Storage Solution (S3 or base64): 30+ min
+  10. Testing & Validation: 60+ min
+
+TOTAL: 3-4 hours for code migration + testing
+
+================================================================================

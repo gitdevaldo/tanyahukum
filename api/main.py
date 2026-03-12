@@ -24,17 +24,17 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
-# E-02: Graceful shutdown — close MongoDB on app teardown
+# Graceful shutdown — close Qdrant client on app teardown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("TanyaHukum API starting up")
     yield
-    # Shutdown: close MongoDB connections
+    # Shutdown: close Qdrant connection
     try:
         from api.services.rag import _client
         if _client:
             _client.close()
-            logger.info("MongoDB connection closed")
+            logger.info("Qdrant connection closed")
     except Exception:
         pass
     logger.info("TanyaHukum API shut down")

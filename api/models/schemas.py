@@ -74,7 +74,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
     status: str = "ok"
     service: str = "tanyahukum-api"
-    mongodb: str = "unknown"
+    mongodb: str = "unknown"  # kept as "mongodb" for API backward compatibility
     llm: str = "unknown"
     embeddings: str = "unknown"
     chunks_count: int = 0

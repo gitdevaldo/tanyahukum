@@ -8,9 +8,8 @@ load_dotenv(env_path)
 
 
 class Settings(BaseSettings):
-    # MongoDB
-    mongodb_uri: str = os.getenv("MONGODB_URI", "")
-    mongodb_db: str = os.getenv("MONGODB_DB", "tanyahukum")
+    # Qdrant (vector database)
+    qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
 
     # Mistral (embeddings)
     mistral_api_key: str = os.getenv("MISTRAL_API_KEY", "")
@@ -31,7 +30,7 @@ class Settings(BaseSettings):
     internal_api_key: str = os.getenv("INTERNAL_API_KEY", "7s9DTtir3BH7TCGDZYGF6UKW--eulLPvEBi6gPMwvUc")
 
     # Analysis settings
-    max_upload_size_mb: int = 15  # M-03: stay under MongoDB 16MB BSON limit
+    max_upload_size_mb: int = 15
     rag_top_k: int = 5
     max_clauses: int = 100
 
@@ -51,8 +50,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# M-09: Validate critical API keys at import time
-if not settings.mongodb_uri:
-    raise ValueError("MONGODB_URI is required — set it in .env")
+# Validate critical config at import time
+if not settings.qdrant_url:
+    raise ValueError("QDRANT_URL is required — set it in .env")
 if not settings.do_model_access_key:
     raise ValueError("DO_MODEL_ACCESS_KEY is required — set it in .env")
