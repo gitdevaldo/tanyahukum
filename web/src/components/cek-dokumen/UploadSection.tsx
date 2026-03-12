@@ -119,6 +119,7 @@ export function UploadSection({ onAnalyze, error }: UploadSectionProps) {
             onChange={(e) => setText(e.target.value)}
             placeholder="Tempel teks kontrak atau perjanjian di sini...&#10;&#10;Contoh: Pasal 1 - Pihak Pertama setuju untuk..."
             className="w-full h-48 sm:h-64 p-4 sm:p-6 text-dark-navy resize-none focus:outline-none text-sm sm:text-base"
+            aria-label="Teks kontrak"
           />
           <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-sm text-neutral-gray">
             {text.length} karakter {text.length < 50 && text.length > 0 && "• Minimal 50 karakter"}

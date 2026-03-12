@@ -193,6 +193,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: Chat
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 placeholder="Ketik pertanyaan..."
                 className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/30"
+                aria-label="Pertanyaan chat"
               />
               <button
                 onClick={sendMessage}

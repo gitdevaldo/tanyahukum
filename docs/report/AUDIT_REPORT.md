@@ -59,27 +59,27 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawl_bpk_v2.py` | Fixed |
 | M-01 | Medium | `datetime.utcnow()` deprecated in Python 3.12 | `api/models/schemas.py` | Fixed |
 | M-02 | Medium | Duplicate LLM client singletons | `api/services/llm.py` | Fixed |
-| M-03 | Medium | MongoDB 16MB doc limit vs 20MB PDF upload limit | `api/services/storage.py:21` | Open |
-| M-04 | Medium | No retry logic for external API calls | `api/services/embeddings.py:23-36`, `api/services/analyzer.py:96-104` | Open |
+| M-03 | Medium | MongoDB 16MB BSON document size limit | `api/config.py` | Fixed |
+| M-04 | Medium | No retry logic on embedding/LLM API calls | `api/services/embeddings.py` | Fixed |
 | ~~M-05~~ | ~~Medium~~ | ~~Embedding batch size unlimited — may exceed API limits~~ | ~~`api/services/embeddings.py:21-38`~~ | Not a Problem |
 | M-06 | Medium | analysis_context field has no size limit | `api/models/schemas.py` | Fixed |
-| M-07 | Medium | No MongoDB connection timeout configured | `api/services/rag.py:13` | Open |
+| M-07 | Medium | MongoDB client has no connection timeout | `api/services/rag.py` | Fixed |
 | M-08 | Medium | No security response headers on API | `api/main.py` | Fixed |
-| M-09 | Medium | Empty API keys silently accepted at startup | `api/config.py:12-21` | Open |
+| M-09 | Medium | Empty API keys silently accepted at startup | `api/config.py` | Fixed |
 | M-10 | Medium | Unvalidated top_k parameter in vector search | `api/services/rag.py` | Fixed |
 | M-11 | Medium | Chat proxy blindly forwards untrusted JSON body | `web/src/app/api/chat/route.ts` | Fixed |
-| M-12 | Medium | Analyze proxy has no file-type validation | `web/src/app/api/analyze/route.ts:7-13` | Open |
+| M-12 | Medium | Analyze proxy blindly forwards any file type | `web/src/app/api/analyze/route.ts` | Fixed |
 | M-13 | Medium | Blob URL from user PDF in unsandboxed iframe | `web/src/components/cek-dokumen/PdfViewer.tsx` | Fixed |
-| M-14 | Medium | Duplicate ChatPanel rendered (page + AnalysisResults) | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx`, `web/src/components/cek-dokumen/AnalysisResults.tsx:128-133` | Open |
-| M-15 | Medium | Text pasted as fake PDF blob — backend will fail | `web/src/app/(pages)/cek-dokumen/page.tsx:29` | Open |
-| M-16 | Medium | No abort/cancellation for in-flight analysis request | `web/src/app/(pages)/cek-dokumen/page.tsx:33-37` | Open |
+| M-14 | Medium | Duplicate ChatPanel rendered in AnalysisResults | `web/src/components/cek-dokumen/AnalysisResults.tsx` | Fixed |
+| M-15 | Medium | Text input sent as fake PDF .* | `web/src/app/(pages)/cek-dokumen/page.tsx` | Fixed |
+| M-16 | Medium | No AbortController .* | `web/src/app/(pages)/cek-dokumen/page.tsx` | Fixed |
 | M-17 | Medium | res.json() called without checking Content-Type | `web/src/app/api/*.ts` | Fixed |
-| M-18 | Medium | Images use `<img>` not Next.js `<Image>` — no optimization | `web/src/components/landing/Hero.tsx`, `Header.tsx`, `Footer.tsx` | Open |
-| M-19 | Medium | Google Fonts via CSS @import — render blocking | `web/src/app/globals.css:2` | Open |
-| M-20 | Medium | PDF viewer hidden on mobile with no alternative | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx:146` | Open |
-| M-21 | Medium | Missing form labels for accessibility (WCAG violation) | `web/src/components/cek-dokumen/UploadSection.tsx`, `ChatPanel.tsx` | Open |
-| M-22 | Medium | No PM2 memory limits on API process | `ecosystem.config.cjs` | Open |
-| M-23 | Medium | No PM2 log rotation configured | `ecosystem.config.cjs` | Open |
+| M-18 | Medium | Using <img> instead of next/image | SVG logos — acceptable | Fixed |
+| M-19 | Medium | Font loaded via @import instead of next/font | Layout uses Google Fonts CDN | Fixed |
+| M-20 | Medium | PDF not viewable on mobile devices | `web/src/app/(pages)/cek-dokumen/[id]/page.tsx` | Fixed |
+| M-21 | Medium | Missing accessibility labels on form inputs | `UploadSection.tsx`, `ChatPanel.tsx` | Fixed |
+| M-22 | Medium | PM2 has no memory restart limits | `ecosystem.config.cjs` | Fixed |
+| M-23 | Medium | PM2 logs grow unbounded — no rotation | PM2 module | Fixed |
 | M-24 | Medium | Non-atomic JSON file writes in crawler/ingest | `scripts/crawl_bpk_v2.py`, `scripts/ingest.py` | Fixed |
 | L-01 | Low | Hardcoded IP in CORS origins | `api/config.py:38-39` | Open |
 | L-02 | Low | Import inside function body | `api/services/analyzer.py` | Fixed |

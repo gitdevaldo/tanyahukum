@@ -5,7 +5,6 @@ import { RotateCcw, Shield, AlertTriangle, FileText, AlertOctagon, Info, CheckCi
 import type { AnalysisResponse } from "./types";
 import { RISK_CONFIG } from "./types";
 import { ClauseCard } from "./ClauseCard";
-import { ChatPanel } from "./ChatPanel";
 import { cleanText } from "./textUtils";
 
 interface AnalysisResultsProps {
@@ -31,7 +30,6 @@ function RiskIcon({ level, size = 18 }: { level: string; size?: number }) {
 }
 
 export function AnalysisResults({ result, onReset, onClauseSelect, activeClauseIndex }: AnalysisResultsProps) {
-  const [chatOpen, setChatOpen] = useState(false);
   const overallConfig = RISK_CONFIG[result.overall_risk];
 
   return (
@@ -124,13 +122,6 @@ export function AnalysisResults({ result, onReset, onClauseSelect, activeClauseI
           Konsultasi Pengacara (Rp 150K)
         </button>
       </div>
-
-      {/* Chat panel */}
-      <ChatPanel
-        analysisId={result.analysis_id}
-        isOpen={chatOpen}
-        onToggle={() => setChatOpen(!chatOpen)}
-      />
     </div>
   );
 }

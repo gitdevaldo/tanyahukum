@@ -26,8 +26,9 @@ export default function CekDokumenPage() {
       if (file) {
         formData.append("file", file);
       } else if (text) {
-        const blob = new Blob([text], { type: "application/pdf" });
-        formData.append("file", blob, "dokumen-teks.pdf");
+        // M-15: Send as plain text file, not fake PDF
+        const blob = new Blob([text], { type: "text/plain" });
+        formData.append("file", blob, "dokumen-teks.txt");
       }
 
       const res = await fetch("/api/analyze/", {

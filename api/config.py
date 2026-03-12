@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     internal_api_key: str = os.getenv("INTERNAL_API_KEY", "7s9DTtir3BH7TCGDZYGF6UKW--eulLPvEBi6gPMwvUc")
 
     # Analysis settings
-    max_upload_size_mb: int = 20
+    max_upload_size_mb: int = 15  # M-03: stay under MongoDB 16MB BSON limit
     rag_top_k: int = 5
     max_clauses: int = 100
 
@@ -47,3 +47,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# M-09: Validate critical API keys at import time
+if not settings.mongodb_uri:
+    raise ValueError("MONGODB_URI is required — set it in .env")
+if not settings.do_model_access_key:
+    raise ValueError("DO_MODEL_ACCESS_KEY is required — set it in .env")

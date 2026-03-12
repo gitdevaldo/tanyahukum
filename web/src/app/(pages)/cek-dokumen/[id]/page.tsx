@@ -141,6 +141,18 @@ export default function ResultsPage() {
         {/* Left panel — Analysis results */}
         <div className="w-full md:w-[60%] overflow-y-auto border-b md:border-b-0 md:border-r border-gray-200 min-h-0 flex-1 md:flex-none">
           <div className="p-3 sm:p-4 lg:p-6">
+            {/* M-20: Mobile PDF download button */}
+            {pdfUrl && (
+              <div className="md:hidden mb-3">
+                <a
+                  href={pdfUrl}
+                  download={result.filename || "dokumen.pdf"}
+                  className="flex items-center justify-center gap-2 w-full py-2 bg-dark-navy text-white rounded-xl text-xs font-semibold hover:bg-gray-800 transition-colors"
+                >
+                  📄 Lihat PDF
+                </a>
+              </div>
+            )}
             <AnalysisResults
               result={result}
               onReset={handleReset}
