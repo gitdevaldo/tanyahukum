@@ -6,6 +6,38 @@ import type { ClauseAnalysis } from "./types";
 import { RISK_CONFIG } from "./types";
 import { cleanText, formatClauseText } from "./textUtils";
 
+/** Indonesian minor words that stay lowercase in title case (unless first word) */
+const MINOR_WORDS = new Set([
+  "dan", "atau", "di", "ke", "dari", "yang", "untuk", "dengan", "pada",
+  "atas", "oleh", "dalam", "serta", "maupun", "tentang", "terhadap",
+  "secara", "antara", "sebagai", "tanpa", "melalui", "bagi",
+]);
+
+/** Convert text to proper Indonesian title case: "PENEMPATAN DAN JABATAN" → "Penempatan dan Jabatan" */
+function toTitleCase(text: string): string {
+  const words = text.trim().split(/\s+/);
+  return words
+    .map((word, i) => {
+      const lower = word.toLowerCase();
+      // First word always capitalized; minor words stay lowercase
+      if (i > 0 && MINOR_WORDS.has(lower)) return lower;
+      // Capitalize first letter, lowercase the rest
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+/** Extract clause title from clause_text, e.g. "PASAL 1 — PENEMPATAN DAN JABATAN\n..." → "Penempatan dan Jabatan" */
+function extractClauseTitle(clauseText: string): string | null {
+  // Match patterns like "PASAL 1 — TITLE" or "PASAL 1 - TITLE" or "Pasal 1: TITLE"
+  const match = clauseText.match(/^(?:PASAL|Pasal|BAB)\s+\S+\s*[—\-–:]\s*(.+?)(?:\n|$)/i);
+  if (match) {
+    const raw = match[1].replace(/\[Halaman\s+\d+\]/g, "").trim();
+    if (raw.length > 0 && raw.length <= 100) return toTitleCase(raw);
+  }
+  return null;
+}
+
 function ClauseRiskIcon({ level, size = 18 }: { level: string; size?: number }) {
   switch (level) {
     case "high":
@@ -63,8 +95,8 @@ export function ClauseCard({ clause, isActive, onSelect }: ClauseCardProps) {
               {clause.risk_score}/10
             </span>
           </div>
-          <p className={`font-medium text-xs sm:text-sm ${config.color} line-clamp-1 leading-snug`}>
-            Klausa {clause.clause_index}: {cleanText(clause.summary).split(/[.!?]/)[0]}
+          <p className={`font-medium text-xs sm:text-sm ${config.color} leading-snug`}>
+            Klausa {clause.clause_index}: {extractClauseTitle(clause.clause_text) || cleanText(clause.summary).split(/[.!?]/)[0]}
           </p>
         </div>
 
