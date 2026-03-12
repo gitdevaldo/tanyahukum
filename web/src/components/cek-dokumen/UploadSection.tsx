@@ -13,6 +13,29 @@ export function UploadSection({ onAnalyze, error }: UploadSectionProps) {
   const [mode, setMode] = useState<"file" | "text">("file");
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState("");
+  const [loadingDemo, setLoadingDemo] = useState<string | null>(null);
+
+  const DEMO_DOCS = [
+    { id: "pkwt", label: "Kontrak Kerja Startup (PKWT)", file: "/demo/kontrak-kerja-startup.pdf" },
+    { id: "pinjol", label: "Perjanjian Pinjaman Online", file: "/demo/perjanjian-pinjaman-online.pdf" },
+    { id: "kos", label: "Perjanjian Sewa Kos", file: "/demo/perjanjian-sewa-kos.pdf" },
+  ];
+
+  const loadDemoDoc = async (doc: typeof DEMO_DOCS[0]) => {
+    setLoadingDemo(doc.id);
+    try {
+      const res = await fetch(doc.file);
+      const blob = await res.blob();
+      const filename = doc.file.split("/").pop() || "demo.pdf";
+      const demoFile = new File([blob], filename, { type: "application/pdf" });
+      setFile(demoFile);
+      setMode("file");
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingDemo(null);
+    }
+  };
 
   const onDrop = useCallback((accepted: File[]) => {
     if (accepted.length > 0) {
@@ -132,6 +155,34 @@ export function UploadSection({ onAnalyze, error }: UploadSectionProps) {
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
           <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-red-700 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* Demo documents */}
+      {mode === "file" && (
+        <div className="mt-5">
+          <p className="text-xs text-neutral-gray text-center mb-2.5">Atau coba dengan dokumen contoh:</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {DEMO_DOCS.map((doc) => {
+              const isSelected = file?.name === doc.file.split("/").pop();
+              return (
+                <button
+                  key={doc.id}
+                  onClick={() => !isSelected && loadDemoDoc(doc)}
+                  disabled={isSelected || loadingDemo !== null}
+                  className={`flex-1 text-xs sm:text-sm px-3 py-2.5 rounded-lg font-medium transition-all ${
+                    isSelected
+                      ? "bg-green-50 text-green-700 border border-green-300 !cursor-default"
+                      : loadingDemo === doc.id
+                      ? "bg-gray-100 text-gray-400 border border-gray-200"
+                      : "bg-white text-dark-navy border border-gray-200 hover:border-primary-orange hover:text-primary-orange cursor-pointer"
+                  }`}
+                >
+                  {loadingDemo === doc.id ? "Memuat..." : isSelected ? `${doc.label} (terpilih)` : doc.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
