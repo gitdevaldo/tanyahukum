@@ -19,6 +19,115 @@ export function cleanText(text: string): string {
 }
 
 /**
+ * Parse markdown-like LLM output into structured blocks for rich rendering.
+ * Returns an array of block objects: paragraph, bullet, numbered.
+ */
+export type ChatBlock =
+  | { type: "paragraph"; content: string }
+  | { type: "bullet"; items: string[] }
+  | { type: "numbered"; items: string[] };
+
+export function parseChatBlocks(text: string): ChatBlock[] {
+  if (!text) return [];
+
+  const blocks: ChatBlock[] = [];
+  const lines = text.split("\n");
+
+  let currentBullets: string[] = [];
+  let currentNumbered: string[] = [];
+  let currentParagraph: string[] = [];
+
+  const flushParagraph = () => {
+    if (currentParagraph.length > 0) {
+      const content = currentParagraph.join("\n").trim();
+      if (content) blocks.push({ type: "paragraph", content });
+      currentParagraph = [];
+    }
+  };
+  const flushBullets = () => {
+    if (currentBullets.length > 0) {
+      blocks.push({ type: "bullet", items: currentBullets });
+      currentBullets = [];
+    }
+  };
+  const flushNumbered = () => {
+    if (currentNumbered.length > 0) {
+      blocks.push({ type: "numbered", items: currentNumbered });
+      currentNumbered = [];
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+
+    // Bullet: "- ", "* ", "+ ", "• "
+    const bulletMatch = line.match(/^\s*[-*+•]\s+(.+)/);
+    if (bulletMatch) {
+      flushParagraph();
+      flushNumbered();
+      currentBullets.push(bulletMatch[1].trim());
+      continue;
+    }
+
+    // Numbered: "1. ", "2) "
+    const numMatch = line.match(/^\s*\d+[.)]\s+(.+)/);
+    if (numMatch) {
+      flushParagraph();
+      flushBullets();
+      currentNumbered.push(numMatch[1].trim());
+      continue;
+    }
+
+    // Empty line — flush everything
+    if (line.trim() === "") {
+      flushBullets();
+      flushNumbered();
+      flushParagraph();
+      continue;
+    }
+
+    // Regular text
+    flushBullets();
+    flushNumbered();
+    currentParagraph.push(line);
+  }
+
+  flushBullets();
+  flushNumbered();
+  flushParagraph();
+
+  return blocks;
+}
+
+/**
+ * Render inline markdown: **bold**, *italic*, `code`
+ * Returns an array of React-friendly segments.
+ */
+export function parseInlineMarkdown(text: string): { text: string; bold?: boolean; italic?: boolean; code?: boolean }[] {
+  const segments: { text: string; bold?: boolean; italic?: boolean; code?: boolean }[] = [];
+  // Pattern: **bold**, *italic*, `code`
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, match.index) });
+    }
+    if (match[2]) segments.push({ text: match[2], bold: true });
+    else if (match[3]) segments.push({ text: match[3], italic: true });
+    else if (match[4]) segments.push({ text: match[4], code: true });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex) });
+  }
+
+  return segments.length > 0 ? segments : [{ text }];
+}
+
+/**
  * Split text into paragraphs for rendering.
  * Handles both \n\n paragraph breaks and single \n with bullet points.
  */

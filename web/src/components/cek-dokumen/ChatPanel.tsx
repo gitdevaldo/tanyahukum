@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, MessageCircle, X } from "lucide-react";
 import type { ChatMessage, AnalysisResponse } from "./types";
-import { cleanText } from "./textUtils";
+import { parseChatBlocks, parseInlineMarkdown } from "./textUtils";
 
 interface ChatPanelProps {
   analysisId: string;
@@ -33,6 +33,55 @@ function buildAnalysisContext(result: AnalysisResponse): string {
     lines.push("");
   }
   return lines.join("\n");
+}
+
+function InlineText({ text }: { text: string }) {
+  const segments = parseInlineMarkdown(text);
+  return (
+    <>
+      {segments.map((seg, i) => {
+        if (seg.bold) return <strong key={i} className="font-semibold">{seg.text}</strong>;
+        if (seg.italic) return <em key={i}>{seg.text}</em>;
+        if (seg.code) return <code key={i} className="bg-black/10 px-1 py-0.5 rounded text-xs font-mono">{seg.text}</code>;
+        return <span key={i}>{seg.text}</span>;
+      })}
+    </>
+  );
+}
+
+function RichMessage({ content }: { content: string }) {
+  const blocks = parseChatBlocks(content);
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, i) => {
+        if (block.type === "bullet") {
+          return (
+            <ul key={i} className="space-y-1.5 pl-1">
+              {block.items.map((item, j) => (
+                <li key={j} className="flex gap-2">
+                  <span className="text-primary-orange mt-0.5 flex-shrink-0">•</span>
+                  <span><InlineText text={item} /></span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        if (block.type === "numbered") {
+          return (
+            <ol key={i} className="space-y-1.5 pl-1">
+              {block.items.map((item, j) => (
+                <li key={j} className="flex gap-2">
+                  <span className="text-primary-orange font-semibold flex-shrink-0">{j + 1}.</span>
+                  <span><InlineText text={item} /></span>
+                </li>
+              ))}
+            </ol>
+          );
+        }
+        return <p key={i}><InlineText text={block.content} /></p>;
+      })}
+    </div>
+  );
 }
 
 export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: ChatPanelProps) {
@@ -152,13 +201,13 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: Chat
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line ${
+              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-primary-orange text-white rounded-br-md"
+                  ? "bg-primary-orange text-white rounded-br-md whitespace-pre-line"
                   : "bg-gray-100 text-dark-navy rounded-bl-md"
               }`}
             >
-              {msg.role === "user" ? msg.content : cleanText(msg.content)}
+              {msg.role === "user" ? msg.content : <RichMessage content={msg.content} />}
             </div>
           </div>
         ))}
