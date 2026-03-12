@@ -2,8 +2,12 @@
 __pycache__/
 *.pyc
 
-# Data — keep JSON state, ignore large PDFs
+# Data — ignore PDFs, state files, and logs
 data/regulations/*.pdf
+data/crawl_progress.json
+data/ingest_state.json
+data/regulations_meta.json
+data/crawl.log
 
 # Next.js
 web/node_modules/
@@ -13,4 +17,3 @@ web/out/
 # OS
 .DS_Store
 Thumbs.db
-data/crawl.log

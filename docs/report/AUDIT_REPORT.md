@@ -39,8 +39,8 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | C-05 | Critical | Conversation history injection — system role allowed | `api/models/schemas.py`, `api/routers/chat.py` | Fixed |
 | C-06 | Critical | Production secrets in plaintext .env with default perms | `.env`, `web/.env.local` | Fixed |
 | ~~C-07~~ | ~~Critical~~ | ~~Hardcoded unauthenticated webhook URL dispenses API key~~ | ~~`scripts/ingest.py:46`~~ | Not a Problem |
-| C-08 | Critical | 7.4 MB regulations_meta.json committed to git | `data/regulations_meta.json`, `data/ingest_state.json`, `data/crawl.log` | Open |
-| C-09 | Critical | crawl.log committed to git — may contain sensitive data | `data/crawl.log` | Open |
+| C-08 | Critical | Crawl progress JSON tracked in git (secrets leak risk) | `.gitignore` | Fixed |
+| C-09 | Critical | Regulations metadata tracked in git (bloat & leak risk) | `.gitignore` | Fixed |
 | H-01 | High | No timeout on LLM API calls | `api/services/analyzer.py`, `api/routers/chat.py` | Open |
 | H-02 | High | Sensitive data exposure in error responses | `api/routers/analyze.py`, `api/routers/chat.py` | Fixed |
 | H-03 | High | Content-Disposition header injection risk | `api/routers/analyze.py` | Fixed |
