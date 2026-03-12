@@ -35,8 +35,8 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | C-01 | Critical | Sync blocking calls in async handlers freeze event loop | `api/routers/chat.py`, `api/routers/analyze.py`, `api/services/analyzer.py`, `api/services/embeddings.py` | Fixed |
 | C-02 | Critical | No authentication on any API endpoint | `api/main.py`, `api/dependencies.py` | Fixed |
 | C-03 | Critical | No request size limit before memory allocation | `api/routers/analyze.py` | Fixed |
-| C-04 | Critical | Race condition on chat limit allows unlimited bypass | `api/routers/chat.py:37-43`, `api/services/storage.py:57-78` | Open |
-| C-05 | Critical | Conversation history injection — system role allowed | `api/routers/chat.py:63-64`, `api/models/schemas.py` | Open |
+| C-04 | Critical | Race condition on chat limit allows unlimited bypass | `api/services/storage.py`, `api/routers/chat.py` | Fixed |
+| C-05 | Critical | Conversation history injection — system role allowed | `api/models/schemas.py`, `api/routers/chat.py` | Fixed |
 | C-06 | Critical | Production secrets in plaintext .env with default perms | `.env` | Open |
 | ~~C-07~~ | ~~Critical~~ | ~~Hardcoded unauthenticated webhook URL dispenses API key~~ | ~~`scripts/ingest.py:46`~~ | Not a Problem |
 | C-08 | Critical | 7.4 MB regulations_meta.json committed to git | `data/regulations_meta.json`, `data/ingest_state.json`, `data/crawl.log` | Open |
@@ -57,12 +57,12 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | H-14 | High | Missing HSTS, CSP, Permissions-Policy headers | `/etc/caddy/Caddyfile` | Open |
 | H-15 | High | No rate limiting at Caddy reverse proxy level | `/etc/caddy/Caddyfile` | Open |
 | H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawl_bpk_v2.py:377-418` | Open |
-| M-01 | Medium | `datetime.utcnow()` deprecated in Python 3.12 | `api/models/schemas.py:49` | Open |
+| M-01 | Medium | `datetime.utcnow()` deprecated in Python 3.12 | `api/models/schemas.py` | Fixed |
 | M-02 | Medium | Duplicate LLM client singletons | `api/services/llm.py` | Fixed |
 | M-03 | Medium | MongoDB 16MB doc limit vs 20MB PDF upload limit | `api/services/storage.py:21` | Open |
 | M-04 | Medium | No retry logic for external API calls | `api/services/embeddings.py:23-36`, `api/services/analyzer.py:96-104` | Open |
 | ~~M-05~~ | ~~Medium~~ | ~~Embedding batch size unlimited — may exceed API limits~~ | ~~`api/services/embeddings.py:21-38`~~ | Not a Problem |
-| M-06 | Medium | analysis_context field has no size limit | `api/models/schemas.py:56` | Open |
+| M-06 | Medium | analysis_context field has no size limit | `api/models/schemas.py` | Fixed |
 | M-07 | Medium | No MongoDB connection timeout configured | `api/services/rag.py:13` | Open |
 | M-08 | Medium | No security response headers on API | `api/main.py` | Fixed |
 | M-09 | Medium | Empty API keys silently accepted at startup | `api/config.py:12-21` | Open |

@@ -76,3 +76,23 @@ def increment_chat_count(analysis_id: str) -> int:
         projection={"chat_count": 1},
     )
     return result["chat_count"] if result else 0
+
+
+def try_increment_chat(analysis_id: str, limit: int) -> tuple[bool, int]:
+    """Atomically check and increment chat count. Returns (allowed, new_count).
+
+    Uses a single atomic MongoDB operation to prevent race conditions (C-04).
+    """
+    db = get_db()
+    col = db[COLLECTION]
+
+    result = col.find_one_and_update(
+        {"_id": analysis_id, "chat_count": {"$lt": limit}},
+        {"$inc": {"chat_count": 1}},
+        return_document=True,
+        projection={"chat_count": 1},
+    )
+    if result is None:
+        doc = col.find_one({"_id": analysis_id}, {"chat_count": 1})
+        return False, doc.get("chat_count", limit) if doc else limit
+    return True, result["chat_count"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class RiskLevel(str, Enum):
@@ -46,20 +46,20 @@ class AnalysisResponse(BaseModel):
     summary: str
     clauses: list[ClauseAnalysis]
     disclaimer: str = "⚠️ Hasil analisis ini bukan nasihat hukum. Selalu konsultasikan dengan pengacara profesional untuk keputusan hukum."
-    analyzed_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    analyzed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class ChatRequest(BaseModel):
     """Chat follow-up request."""
     message: str = Field(min_length=1, max_length=2000)
     analysis_id: str | None = Field(default=None, description="ID of analysis for context")
-    analysis_context: str | None = Field(default=None, description="Summary of analysis results for chat context")
+    analysis_context: str | None = Field(default=None, max_length=10000, description="Summary of analysis results for chat context")
     conversation_history: list[ChatMessage] = Field(default_factory=list)
 
 
 class ChatMessage(BaseModel):
     """A single chat message."""
-    role: str = Field(pattern="^(user|assistant|system)$")
+    role: str = Field(pattern="^(user|assistant)$")
     content: str
 
 
