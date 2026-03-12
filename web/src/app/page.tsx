@@ -1,6 +1,7 @@
 import {
   Header,
   Hero,
+  B2BBanner,
   TrustBar,
   Features,
   PricingComparison,
@@ -18,6 +19,7 @@ export default function HomePage() {
     <>
       <Header />
       <Hero />
+      <B2BBanner />
       <TrustBar />
       <Features />
       <PricingComparison />
