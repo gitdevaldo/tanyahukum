@@ -2,7 +2,7 @@
 
 export const B2B_HERO = {
   title: "Kontrak Transparan, Bisnis Terlindungi",
-  highlight: "TanyaHukum untuk Perusahaan",
+  highlight: "TanyaHukum Bisnis",
   description:
     "Kirim kontrak ke karyawan, mitra, atau klien — lengkap dengan analisis AI yang membantu mereka memahami setiap klausa sebelum menandatangani. Bukti informed consent yang melindungi kedua belah pihak.",
   cta: "Coba Analisis Dokumen",

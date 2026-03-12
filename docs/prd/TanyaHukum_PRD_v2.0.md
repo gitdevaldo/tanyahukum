@@ -254,7 +254,7 @@ Prinsip: **Generous di e-sign, terbatas di analisis AI** — analisis AI adalah 
 
 ## 4.3 B2B Plans (Perusahaan)
 
-Ditampilkan di halaman `/untuk-perusahaan/`.
+Ditampilkan di halaman `/bisnis/`.
 
 | Fitur | Starter (Rp 499K/bln) | Business (Rp 1.5M/bln) | Enterprise (Custom) |
 |-------|------------------------|-------------------------|---------------------|
@@ -528,7 +528,7 @@ Crawler otomatis (`scripts/crawl_bpk_v2.py`) dengan:
 | v2.0-D | "Company Pays" analysis flag | P1 |
 | v2.0-E | Signing notification emails (branded Resend templates) | P1 |
 | v2.0-F | Signed document certificate + PDF download | P1 |
-| v2.0-G | `/untuk-perusahaan/` landing page with B2B pricing | P1 |
+| v2.0-G | `/bisnis/` landing page with B2B pricing | P1 |
 | v2.0-H | Personal pricing section update | P1 |
 | v2.0-I | Team management (B2B) | P2 |
 | v2.0-J | Dashboard & analytics (B2B) | P2 |
@@ -547,7 +547,7 @@ Crawler otomatis (`scripts/crawl_bpk_v2.py`) dengan:
 - "Company Pays" toggle when sharing
 - Signing status tracking
 - Notification emails via Resend
-- `/untuk-perusahaan/` page with B2B pitch + pricing
+- `/bisnis/` page with B2B pitch + pricing
 
 **OUT OF SCOPE (Post-Hackathon):**
 

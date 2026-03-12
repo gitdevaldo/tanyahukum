@@ -13,7 +13,7 @@ import {
 } from "@/lib/b2b-constants";
 
 export const metadata: Metadata = {
-  title: "TanyaHukum untuk Perusahaan — Analisis Kontrak AI & Tanda Tangan Digital",
+  title: "TanyaHukum Bisnis — Analisis Kontrak AI & Tanda Tangan Digital untuk Perusahaan",
   description:
     "Kirim kontrak dengan analisis AI ke karyawan dan mitra bisnis. Tanda tangan digital dengan bukti informed consent. Lindungi bisnis Anda.",
 };

@@ -25,7 +25,10 @@ export default function Header() {
               </Link>
             </li>
           ))}
-          <li>
+          <li className="flex items-center gap-2">
+            <Button href="/bisnis/" variant="secondary" size="sm">
+              Bisnis
+            </Button>
             <Button href="/cek-dokumen/" variant="primary" size="sm">
               Cek Dokumen
             </Button>
@@ -33,6 +36,9 @@ export default function Header() {
         </ul>
         {/* Mobile hamburger */}
         <div className="md:hidden flex items-center gap-2">
+          <Button href="/bisnis/" variant="secondary" size="sm" className="!px-3 !py-1.5 !text-xs">
+            Bisnis
+          </Button>
           <Button href="/cek-dokumen/" variant="primary" size="sm" className="!px-3 !py-1.5 !text-xs">
             Cek Dokumen
           </Button>

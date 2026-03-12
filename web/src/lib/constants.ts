@@ -4,7 +4,7 @@ export const NAV_LINKS = [
   { label: "Home", href: "#home" },
   { label: "Fitur", href: "#features" },
   { label: "Harga", href: "#pricing" },
-  { label: "Untuk Perusahaan", href: "/untuk-perusahaan/" },
+  { label: "Bisnis", href: "/bisnis/" },
   { label: "F.A.Q.", href: "#faq" },
 ] as const;
 
@@ -178,7 +178,7 @@ export const FOOTER_SECTIONS = [
     title: "Product",
     links: [
       { label: "Cek Dokumen", href: "/cek-dokumen/" },
-      { label: "Untuk Perusahaan", href: "/untuk-perusahaan/" },
+      { label: "Bisnis", href: "/bisnis/" },
       { label: "Pricing", href: "#pricing" },
       { label: "API", href: "#" },
     ],
