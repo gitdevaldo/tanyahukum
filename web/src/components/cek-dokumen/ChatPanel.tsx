@@ -253,7 +253,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle }: Chat
               </button>
             </div>
             <div className="flex items-center justify-between mt-1.5">
-              <p className="text-[10px] text-neutral-gray text-center flex-1">
+              <p className="text-[10px] text-neutral-gray text-left flex-1">
                 Bukan nasihat hukum. Konsultasikan dengan pengacara.
               </p>
               {remainingChats !== null && (
