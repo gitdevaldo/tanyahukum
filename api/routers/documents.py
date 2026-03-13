@@ -326,6 +326,7 @@ async def quick_sign(
 
 
 @router.get("/documents/{document_id}/pdf")
+@router.get("/documents/{document_id}/pdf/")
 @limiter.limit("60/minute")
 async def get_document_pdf(
     request: Request,

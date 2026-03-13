@@ -66,13 +66,27 @@ export default function SigningEditorPage() {
         setDocInfo(doc);
 
         // Fetch PDF file from backend
-        const pdfRes = await fetch(`/api/documents/${documentId}/pdf`, {
+        const pdfRes = await fetch(`/api/documents/${documentId}/pdf/`, {
           headers: { Authorization: `Bearer ${token}` },
+          redirect: 'manual',
         });
         if (pdfRes.ok) {
           const blob = await pdfRes.blob();
           const url = URL.createObjectURL(blob);
           setPdfUrl(url);
+        } else if (pdfRes.status === 307 || pdfRes.status === 308) {
+          // Handle redirect by following it with auth headers
+          const redirectUrl = pdfRes.headers.get('location');
+          if (redirectUrl) {
+            const retryRes = await fetch(redirectUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (retryRes.ok) {
+              const blob = await retryRes.blob();
+              const url = URL.createObjectURL(blob);
+              setPdfUrl(url);
+            }
+          }
         }
 
         // Get signature data from sessionStorage (passed from parent tab)
