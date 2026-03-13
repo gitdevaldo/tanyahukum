@@ -1173,7 +1173,12 @@ def save_visual_signature(
     user_agent: str | None = None,
     request_id: str | None = None,
 ) -> dict:
-    """Save visually signed PDF and record signature in document."""
+    """Save visually signed PDF and record signature in document.
+    
+    Handles two cases:
+    1. Owner signing their analyzed document (creates signer record, 0/1 → 1/1)
+    2. Co-signer signing shared document (updates existing signer record)
+    """
     from datetime import datetime, timezone
     
     sb = get_supabase_client()
@@ -1186,17 +1191,45 @@ def save_visual_signature(
         if not doc:
             raise SupabaseServiceError(status_code=404, detail="Dokumen tidak ditemukan.")
         
-        # Get signer record
-        signer_result = sb.table("document_signers").select("*").eq("document_id", document_id).eq("signer_email", owner_email).single().execute()
-        signer = signer_result.data
-        if not signer:
-            raise SupabaseServiceError(status_code=404, detail="Signer tidak ditemukan.")
+        # Check if signer record exists
+        signer_result = sb.table("document_signers").select("*").eq("document_id", document_id).eq("signer_email", owner_email).execute()
+        signer = signer_result.data[0] if signer_result.data else None
         
-        # Update signer status to signed
-        sb.table("document_signers").update({
-            "status": "signed",
-            "signed_at": now.isoformat(),
-        }).eq("document_id", document_id).eq("signer_email", owner_email).execute()
+        if not signer:
+            # Case 1: Owner signing analyzed document - create signer record
+            if doc["owner_id"] != owner_id:
+                raise SupabaseServiceError(status_code=403, detail="Hanya pemilik atau penerima undangan yang dapat menandatangani.")
+            
+            # Create signer record for owner
+            sb.table("document_signers").insert({
+                "document_id": document_id,
+                "signer_email": owner_email,
+                "signer_name": signer_name.strip(),
+                "role": "sender",
+                "status": "signed",
+                "signed_at": now.isoformat(),
+            }).execute()
+            
+            new_signers_total = 1
+            new_signers_signed = 1
+            new_status = "completed"
+        else:
+            # Case 2: Co-signer signing shared document - update existing signer
+            sb.table("document_signers").update({
+                "status": "signed",
+                "signed_at": now.isoformat(),
+            }).eq("document_id", document_id).eq("signer_email", owner_email).execute()
+            
+            # Count signers
+            all_signers = sb.table("document_signers").select("*").eq("document_id", document_id).execute()
+            signed_count = len([s for s in all_signers.data if s["status"] == "signed"])
+            total_count = len(all_signers.data)
+            
+            remaining = sb.table("document_signers").select("*").eq("document_id", document_id).neq("status", "signed").execute()
+            
+            new_signers_signed = signed_count
+            new_signers_total = total_count
+            new_status = "completed" if len(remaining.data) == 0 else "partially_signed"
         
         # Store signed PDF in Supabase storage
         storage_path = f"signed_documents/{owner_id}/{document_id}/{now.timestamp()}.pdf"
@@ -1213,13 +1246,11 @@ def save_visual_signature(
             "metadata": {"request_id": request_id},
         }).execute()
         
-        # Check if all signers have signed
-        remaining = sb.table("document_signers").select("*").eq("document_id", document_id).neq("status", "signed").execute()
-        new_status = "completed" if len(remaining.data) == 0 else "partially_signed"
-        
-        # Update document status
+        # Update document status and signer counts
         sb.table("documents").update({
             "status": new_status,
+            "signers_signed": new_signers_signed,
+            "signers_total": new_signers_total,
             "updated_at": now.isoformat(),
         }).eq("document_id", document_id).execute()
         
@@ -1231,6 +1262,8 @@ def save_visual_signature(
             "signer_name": signer_name,
             "signed_at": now.isoformat(),
             "new_status": new_status,
+            "signers_signed": new_signers_signed,
+            "signers_total": new_signers_total,
         }
         
     except SupabaseServiceError:

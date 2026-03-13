@@ -1728,7 +1728,10 @@ export default function DashboardPage() {
     };
 
     const panelDoc = signPanelDocId ? documents.find((d) => d.document_id === signPanelDocId) : null;
-    const canSign = panelDoc && panelDoc.my_signer_status === "pending";
+    const canSign = panelDoc && (
+      (panelDoc.status === "analyzed" && panelDoc.my_signer_role === "sender") ||
+      panelDoc.my_signer_status === "pending"
+    );
     const canReject = panelDoc && panelDoc.my_signer_status === "pending";
     const isCompleted = panelDoc?.status === "completed";
 
