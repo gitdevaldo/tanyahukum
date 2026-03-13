@@ -27,6 +27,7 @@ export default function SigningEditorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   
   // Get signature data from URL or sessionStorage
   const [signatureData, setSignatureData] = useState<{
@@ -37,6 +38,7 @@ export default function SigningEditorPage() {
 
   const [signatureLocation, setSignatureLocation] = useState<SignatureLocation | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [placedOnce, setPlacedOnce] = useState(false);
   const draggableRef = useRef<HTMLDivElement>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +64,16 @@ export default function SigningEditorPage() {
         if (!doc) throw new Error("Document not found");
 
         setDocInfo(doc);
+
+        // Fetch PDF file from backend
+        const pdfRes = await fetch(`/api/documents/${documentId}/download`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (pdfRes.ok) {
+          const blob = await pdfRes.blob();
+          const url = URL.createObjectURL(blob);
+          setPdfUrl(url);
+        }
 
         // Get signature data from sessionStorage (passed from parent tab)
         const sigData = sessionStorage.getItem(`sig_data_${documentId}`);
@@ -116,6 +128,7 @@ export default function SigningEditorPage() {
         y: Math.max(0, Math.min(y, rect.height - 50)),
         page: 1,
       });
+      setPlacedOnce(true);
     }
   };
 
@@ -259,8 +272,8 @@ export default function SigningEditorPage() {
         onDragOver={handleDragOver}
         onDrop={handleDragEnd}
       >
-        {/* Draggable Signature */}
-        {signatureData && (
+        {/* Draggable Signature - only visible after placed once */}
+        {signatureData && placedOnce && signatureLocation && (
           <div
             ref={draggableRef}
             draggable
@@ -268,8 +281,8 @@ export default function SigningEditorPage() {
             onDragEnd={handleDragEnd}
             className={styles.draggableSignature}
             style={{
-              left: signatureLocation?.x || "50px",
-              top: signatureLocation?.y || "100px",
+              left: signatureLocation.x,
+              top: signatureLocation.y,
               cursor: "grab",
             }}
           >
@@ -295,13 +308,25 @@ export default function SigningEditorPage() {
           </div>
         )}
 
-        {/* PDF Placeholder - actual PDF rendering would go here */}
-        <div style={{ padding: 20, textAlign: "center", color: "#999" }}>
-          <p style={{ fontSize: 14, marginTop: 50 }}>PDF Viewer Area</p>
-          <p style={{ fontSize: 12, color: "#bbb" }}>
-            Drag your signature from the left to place it on the document
-          </p>
-        </div>
+        {/* PDF Viewer */}
+        {pdfUrl ? (
+          <iframe
+            src={pdfUrl}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "none",
+            }}
+            title="Document"
+          />
+        ) : (
+          <div style={{ padding: 20, textAlign: "center", color: "#999" }}>
+            <p style={{ fontSize: 14, marginTop: 50 }}>PDF Viewer Area</p>
+            <p style={{ fontSize: 12, color: "#bbb" }}>
+              Drag your signature from the left to place it on the document
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
