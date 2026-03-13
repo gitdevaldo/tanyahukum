@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import styles from "./SignatureCreator.module.css";
 import { getValidAccessToken } from "@/lib/auth-session";
+
+interface UserSignature {
+  id: string;
+  type: "text" | "drawn" | "image";
+  display_name: string;
+  content: string;
+  created_at: string;
+}
 
 interface SignatureCreatorProps {
   onSignatureCreated: (sig: { type: "text" | "drawn" | "image"; content: string; displayName: string }) => void;
@@ -10,6 +18,10 @@ interface SignatureCreatorProps {
 }
 
 export function SignatureCreator({ onSignatureCreated, onCanSignChange }: SignatureCreatorProps) {
+  const [mode, setMode] = useState<"loading" | "select" | "create">("loading");
+  const [savedSignatures, setSavedSignatures] = useState<UserSignature[]>([]);
+  const [selectedSignatureId, setSelectedSignatureId] = useState<string | null>(null);
+  
   const [displayName, setDisplayName] = useState("");
   const [signatureType, setSignatureType] = useState<"text" | "drawn" | "image">("text");
   const [drawnSignature, setDrawnSignature] = useState<string | null>(null);
@@ -17,6 +29,30 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
   const [saving, setSaving] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
+
+  // Load user's saved signatures on mount
+  useEffect(() => {
+    const loadSignatures = async () => {
+      try {
+        const token = await getValidAccessToken();
+        if (!token) throw new Error("Not authenticated");
+
+        const res = await fetch("/api/signatures/user/list", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) throw new Error("Failed to load signatures");
+        const data = await res.json();
+        setSavedSignatures(data.signatures || []);
+        setMode(data.signatures?.length > 0 ? "select" : "create");
+      } catch (err) {
+        console.error("Error loading signatures:", err);
+        setMode("create");
+      }
+    };
+
+    loadSignatures();
+  }, []);
 
   // Check if form is complete
   const isComplete = useCallback(() => {
@@ -92,6 +128,15 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
     reader.readAsDataURL(file);
   };
 
+  const handleUseSignature = (sig: UserSignature) => {
+    onSignatureCreated({
+      type: sig.type,
+      content: sig.content,
+      displayName: sig.display_name,
+    });
+    onCanSignChange(true);
+  };
+
   const handleCreateSignature = async () => {
     if (!isComplete() || saving) return;
 
@@ -151,121 +196,176 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
 
   return (
     <div className={styles.container}>
-      <div className={styles.formGroup}>
-        <label className={styles.label}>Nama Penandatangan</label>
-        <input
-          type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="Masukkan nama Anda"
-          className={styles.input}
-        />
-      </div>
+      {/* Loading State */}
+      {mode === "loading" && <p className={styles.loading}>Memuat tanda tangan...</p>}
 
-      <div className={styles.formGroup}>
-        <label className={styles.label}>Jenis Tanda Tangan</label>
-        <div className={styles.radioGroup}>
-          <label className={styles.radioLabel}>
-            <input
-              type="radio"
-              value="text"
-              checked={signatureType === "text"}
-              onChange={(e) => setSignatureType(e.target.value as "text")}
-            />
-            Nama Saja
-          </label>
-          <label className={styles.radioLabel}>
-            <input
-              type="radio"
-              value="drawn"
-              checked={signatureType === "drawn"}
-              onChange={(e) => setSignatureType(e.target.value as "drawn")}
-            />
-            Tanda Tangan
-          </label>
-          <label className={styles.radioLabel}>
-            <input
-              type="radio"
-              value="image"
-              checked={signatureType === "image"}
-              onChange={(e) => setSignatureType(e.target.value as "image")}
-            />
-            Upload Gambar
-          </label>
+      {/* Select Mode - Show saved signatures */}
+      {mode === "select" && (
+        <div>
+          <h3 className={styles.modeTitle}>Pilih Tanda Tangan</h3>
+          <div className={styles.signatureList}>
+            {savedSignatures.map((sig) => (
+              <div key={sig.id} className={styles.signatureItem}>
+                <div className={styles.signaturePreview}>
+                  {sig.type === "text" && (
+                    <p style={{ fontSize: 16, fontFamily: "Segoe Print, serif" }}>
+                      {sig.display_name}
+                    </p>
+                  )}
+                  {(sig.type === "drawn" || sig.type === "image") && (
+                    <img src={sig.content} alt={sig.display_name} />
+                  )}
+                </div>
+                <p className={styles.signatureName}>{sig.display_name}</p>
+                <button
+                  type="button"
+                  onClick={() => handleUseSignature(sig)}
+                  className={styles.useBtn}
+                >
+                  Gunakan
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMode("create")}
+            className={styles.createNewBtn}
+          >
+            Buat Tanda Tangan Baru
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Canvas for Drawing */}
-      {signatureType === "drawn" && (
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Gambar Tanda Tangan Anda</label>
-          <canvas
-            ref={canvasRef}
-            width={280}
-            height={120}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-            className={styles.canvas}
-          />
-          {drawnSignature && (
-            <button type="button" onClick={clearCanvas} className={styles.clearBtn}>
-              Hapus & Mulai Ulang
+      {/* Create Mode - Form to create new signature */}
+      {mode === "create" && (
+        <div>
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Nama Penandatangan</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Masukkan nama Anda"
+              className={styles.input}
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Jenis Tanda Tangan</label>
+            <div className={styles.radioGroup}>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  value="text"
+                  checked={signatureType === "text"}
+                  onChange={(e) => setSignatureType(e.target.value as "text")}
+                />
+                Nama Saja
+              </label>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  value="drawn"
+                  checked={signatureType === "drawn"}
+                  onChange={(e) => setSignatureType(e.target.value as "drawn")}
+                />
+                Tanda Tangan
+              </label>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  value="image"
+                  checked={signatureType === "image"}
+                  onChange={(e) => setSignatureType(e.target.value as "image")}
+                />
+                Upload Gambar
+              </label>
+            </div>
+          </div>
+
+          {/* Canvas for Drawing */}
+          {signatureType === "drawn" && (
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Gambar Tanda Tangan Anda</label>
+              <canvas
+                ref={canvasRef}
+                width={280}
+                height={120}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                className={styles.canvas}
+              />
+              {drawnSignature && (
+                <button type="button" onClick={clearCanvas} className={styles.clearBtn}>
+                  Hapus & Mulai Ulang
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Image Upload */}
+          {signatureType === "image" && (
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Upload Gambar Tanda Tangan</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className={styles.fileInput}
+              />
+              {uploadedImage && (
+                <div className={styles.imagePreview}>
+                  <img src={uploadedImage} alt="Signature preview" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preview */}
+          {drawnSignature && signatureType === "drawn" && (
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Preview</label>
+              <img src={drawnSignature} alt="Drawn signature preview" className={styles.preview} />
+            </div>
+          )}
+
+          {uploadedImage && signatureType === "image" && (
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Preview</label>
+              <img src={uploadedImage} alt="Uploaded signature preview" className={styles.preview} />
+            </div>
+          )}
+
+          {signatureType === "text" && displayName && (
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Preview</label>
+              <div className={styles.textPreview}>{displayName}</div>
+            </div>
+          )}
+
+          {/* Create Button */}
+          <button
+            type="button"
+            onClick={handleCreateSignature}
+            disabled={!isComplete() || saving}
+            className={styles.createBtn}
+          >
+            {saving ? "Menyimpan..." : "Simpan & Lanjutkan"}
+          </button>
+          {savedSignatures.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMode("select")}
+              className={styles.backBtn}
+            >
+              Kembali
             </button>
           )}
         </div>
       )}
-
-      {/* Image Upload */}
-      {signatureType === "image" && (
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Upload Gambar Tanda Tangan</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageUpload}
-            className={styles.fileInput}
-          />
-          {uploadedImage && (
-            <div className={styles.imagePreview}>
-              <img src={uploadedImage} alt="Signature preview" />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Preview */}
-      {drawnSignature && signatureType === "drawn" && (
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Preview</label>
-          <img src={drawnSignature} alt="Drawn signature preview" className={styles.preview} />
-        </div>
-      )}
-
-      {uploadedImage && signatureType === "image" && (
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Preview</label>
-          <img src={uploadedImage} alt="Uploaded signature preview" className={styles.preview} />
-        </div>
-      )}
-
-      {signatureType === "text" && displayName && (
-        <div className={styles.formGroup}>
-          <label className={styles.label}>Preview</label>
-          <div className={styles.textPreview}>{displayName}</div>
-        </div>
-      )}
-
-      {/* Create Button */}
-      <button
-        type="button"
-        onClick={handleCreateSignature}
-        disabled={!isComplete() || saving}
-        className={styles.createBtn}
-      >
-        {saving ? "Menyimpan..." : "Simpan & Lanjutkan"}
-      </button>
     </div>
   );
 }
