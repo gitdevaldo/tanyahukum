@@ -19,6 +19,8 @@ type DocumentStatus =
   | "expired"
   | "rejected";
 
+const SIDEBAR_STORAGE_KEY = "th_dashboard_sidebar_collapsed";
+
 type QuotaInfo = {
   analysis_used: number;
   analysis_limit: number | null;
@@ -245,6 +247,7 @@ export default function DashboardPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [shareForm, setShareForm] = useState({
     filename: "",
     analysisId: "",
@@ -451,6 +454,17 @@ export default function DashboardPage() {
   }, [loadData]);
 
   useEffect(() => {
+    const persisted = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (persisted === "1") {
+      setSidebarCollapsed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
     if (!selectedDocumentId) {
       setSelectedSigners(null);
       setSelectedEvents(null);
@@ -655,6 +669,7 @@ export default function DashboardPage() {
     () => documents.filter((doc) => doc.my_signer_status === "pending").slice(0, 8),
     [documents],
   );
+  const userInitial = profile?.name?.trim()?.charAt(0)?.toUpperCase() || "A";
 
   function renderOverview() {
     const recentDocuments = documents.slice(0, 6);
@@ -1320,9 +1335,9 @@ export default function DashboardPage() {
 
   return (
     <main className={styles.app}>
-      <aside className={styles.sidebar}>
+      <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         <div className={styles.sidebarHeader}>
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className={styles.sidebarBrand}>
             <img src="/logo.svg" alt="TanyaHukum" className="h-7" />
             <span className={styles.logoText}>TanyaHukum</span>
           </Link>
@@ -1336,34 +1351,37 @@ export default function DashboardPage() {
               className={sectionButtonClass("overview")}
               onClick={() => setActiveSection("overview")}
             >
-              Overview
+              {sidebarCollapsed ? "OV" : "Overview"}
             </button>
             <button
               type="button"
               className={sectionButtonClass("documents")}
               onClick={() => setActiveSection("documents")}
             >
-              Document Center
+              {sidebarCollapsed ? "DOC" : "Document Center"}
             </button>
             <button
               type="button"
               className={sectionButtonClass("account")}
               onClick={() => setActiveSection("account")}
             >
-              Account
+              {sidebarCollapsed ? "ACC" : "Account"}
             </button>
           </div>
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <p className={styles.userName}>{profile?.name || "Akun"}</p>
-          <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
-          <p className="mt-2 text-[11px] text-neutral-gray">
-            Plan <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
-          </p>
-          <p className="mt-1 text-[11px] text-neutral-gray">
-            Chat limit/dokumen <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
-          </p>
+          <p className={styles.userName}>{sidebarCollapsed ? userInitial : profile?.name || "Akun"}</p>
+          <div className={styles.sidebarMeta}>
+            <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
+            <p className="mt-2 text-[11px] text-neutral-gray">
+              Plan <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
+            </p>
+            <p className="mt-1 text-[11px] text-neutral-gray">
+              Chat limit/dokumen{" "}
+              <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
+            </p>
+          </div>
         </div>
       </aside>
 
@@ -1375,6 +1393,13 @@ export default function DashboardPage() {
           </div>
 
           <div className={styles.topbarActions}>
+            <button
+              type="button"
+              className={`${styles.actionBtn} ${styles.sidebarToggleButton}`}
+              onClick={() => setSidebarCollapsed((prev) => !prev)}
+            >
+              {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            </button>
             <Link href="/cek-dokumen/" className={styles.actionBtn}>
               Cek Dokumen
             </Link>

@@ -12,6 +12,13 @@
   background: #ffffff;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  transition: width 0.22s ease, min-width 0.22s ease;
+}
+
+.sidebarCollapsed {
+  width: 76px;
+  min-width: 76px;
 }
 
 .sidebarHeader {
@@ -23,11 +30,22 @@
   border-bottom: 1px solid #f1f1f1;
 }
 
+.sidebarBrand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
 .logoText {
   font-size: 17px;
   font-weight: 600;
   color: #1a2332;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.16s ease;
 }
 
 .nav {
@@ -78,6 +96,10 @@
 .sidebarFooter {
   border-top: 1px solid #f1f1f1;
   padding: 12px 14px 14px;
+}
+
+.sidebarMeta {
+  margin-top: 2px;
 }
 
 .userName {
@@ -159,6 +181,10 @@
 
 .actionBtn:hover {
   border-color: #1a2332;
+}
+
+.sidebarToggleButton {
+  white-space: nowrap;
 }
 
 .primaryBtn {
@@ -426,6 +452,43 @@
   color: #9ca3af;
 }
 
+.sidebarCollapsed .sidebarHeader {
+  justify-content: center;
+  padding: 0 10px;
+}
+
+.sidebarCollapsed .logoText {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.sidebarCollapsed .navLabel {
+  opacity: 0;
+  padding: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sidebarCollapsed .navItem {
+  text-align: center;
+  font-size: 11px;
+  padding: 9px 6px;
+}
+
+.sidebarCollapsed .sidebarFooter {
+  padding: 12px 8px 14px;
+}
+
+.sidebarCollapsed .userName {
+  text-align: center;
+  font-size: 15px;
+}
+
+.sidebarCollapsed .sidebarMeta {
+  display: none;
+}
+
 @media (max-width: 1200px) {
   .statGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -442,6 +505,10 @@
 
 @media (max-width: 980px) {
   .sidebar {
+    display: none;
+  }
+
+  .sidebarToggleButton {
     display: none;
   }
 
