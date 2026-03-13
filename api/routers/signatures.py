@@ -10,6 +10,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
 from api.dependencies import verify_bearer_token
+from api.services.supabase_auth import get_auth_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/signatures", tags=["signatures"])
@@ -191,7 +192,7 @@ class CreateSignatureRequest(BaseModel):
 @router.post("/user")
 async def create_user_signature(
     body: CreateSignatureRequest,
-    auth_user_id: str = Depends(verify_bearer_token),
+    access_token: str = Depends(verify_bearer_token),
 ):
     """Create and save a reusable signature for the user."""
     if not body.type or body.type not in ["text", "drawn", "image"]:
@@ -200,8 +201,16 @@ async def create_user_signature(
             detail="Invalid signature type. Must be 'text', 'drawn', or 'image'."
         )
     
+    try:
+        # Extract user_id from token
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_id = auth_user["id"]
+    except Exception as e:
+        logger.error(f"Error extracting user from token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
     result = save_user_signature(
-        user_id=auth_user_id,
+        user_id=user_id,
         signature_type=body.type,
         display_name=body.display_name,
         content=body.content,
@@ -218,48 +227,62 @@ async def create_user_signature(
 
 
 @router.get("/user/list")
-async def list_user_signatures(auth_user_id: str = Depends(verify_bearer_token)):
+async def list_user_signatures(access_token: str = Depends(verify_bearer_token)):
     """Get all signatures for the current user."""
-    signatures = get_user_signatures(auth_user_id)
+    try:
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_id = auth_user["id"]
+    except Exception as e:
+        logger.error(f"Error extracting user from token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    signatures = get_user_signatures(user_id)
     return {"signatures": signatures}
 
 
 @router.get("/user/default")
-async def get_default_user_signature(auth_user_id: str = Depends(verify_bearer_token)):
+async def get_default_user_signature(access_token: str = Depends(verify_bearer_token)):
     """Get the user's default signature."""
-    signature = get_default_signature(auth_user_id)
+    try:
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_id = auth_user["id"]
+    except Exception as e:
+        logger.error(f"Error extracting user from token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    signature = get_default_signature(user_id)
     return {"signature": signature}
 
 
 @router.put("/user/{signature_id}/default")
 async def set_signature_as_default(
     signature_id: str,
-    auth_user_id: str = Depends(verify_bearer_token)
+    access_token: str = Depends(verify_bearer_token),
 ):
-    """Set a signature as the user's default."""
-    success = set_default_signature(signature_id, auth_user_id)
+    """Set a signature as the default for the user."""
+    try:
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_id = auth_user["id"]
+    except Exception as e:
+        logger.error(f"Error extracting user from token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
     
-    if not success:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to set default signature"
-        )
-    
-    return {"success": True}
+    result = set_default_signature(signature_id, user_id)
+    return {"success": result}
 
 
 @router.delete("/user/{signature_id}")
-async def delete_signature(
+async def delete_user_signature(
     signature_id: str,
-    auth_user_id: str = Depends(verify_bearer_token)
+    access_token: str = Depends(verify_bearer_token),
 ):
     """Delete a signature."""
-    success = delete_user_signature(signature_id, auth_user_id)
+    try:
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_id = auth_user["id"]
+    except Exception as e:
+        logger.error(f"Error extracting user from token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
     
-    if not success:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete signature"
-        )
-    
-    return {"success": True}
+    result = delete_user_signature(signature_id, user_id)
+    return {"success": result}

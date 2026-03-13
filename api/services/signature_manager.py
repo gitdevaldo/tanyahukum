@@ -39,21 +39,7 @@ def save_user_signature(
                 logger.info(f"Saved signature '{display_name}' for user {user_id}")
                 return result
     except Exception as e:
-        error_msg = str(e)
-        # If table doesn't exist, return a mock object so the flow works
-        if "does not exist" in error_msg or "user_signatures" in error_msg:
-            logger.warning(f"user_signatures table not created yet, using mock: {error_msg}")
-            # Return mock object with the signature data
-            return {
-                "id": str(uuid.uuid4()),
-                "user_id": user_id,
-                "type": signature_type,
-                "display_name": display_name,
-                "content": content[:100] + "..." if len(content) > 100 else content,
-                "is_default": is_default,
-                "created_at": None,
-            }
-        logger.error(f"Error saving signature: {error_msg}")
+        logger.error(f"Error saving signature: {str(e)}")
         return None
 
 
