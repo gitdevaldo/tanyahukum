@@ -20,6 +20,14 @@ const PdfViewer = dynamic(() => import("@/components/cek-dokumen/PdfViewer"), {
   ),
 });
 
+const SignaturePad = dynamic(() => import("@/components/cek-dokumen/SignaturePad"), {
+  ssr: false,
+});
+
+const PdfSigningViewer = dynamic(() => import("@/components/cek-dokumen/PdfSigningViewer"), {
+  ssr: false,
+});
+
 type AccountType = "personal" | "business";
 type Plan = "free" | "starter" | "plus" | "business" | "enterprise" | null;
 type DashboardSection = "overview" | "documents" | "analysis" | "sign" | "consultation" | "account";
@@ -346,6 +354,13 @@ export default function DashboardPage() {
   const [signPanelProcessing, setSignPanelProcessing] = useState(false);
   const [signShareForm, setSignShareForm] = useState({ selectedDocId: "", filename: "", signerEmails: "", companyPaysAnalysis: false, expiresAt: "" });
   const [signShareProcessing, setSignShareProcessing] = useState(false);
+
+  // Signature pad and visual signing state
+  const [signatureImage, setSignatureImage] = useState<string | null>(null);
+  const [showPdfSigner, setShowPdfSigner] = useState(false);
+  const [signaturePositions, setSignaturePositions] = useState<
+    Array<{ id: string; x: number; y: number; width: number; height: number }>
+  >([]);
 
   // --- Inline analysis state ---
   const [analysisFile, setAnalysisFile] = useState<File | null>(null);
@@ -1541,19 +1556,48 @@ export default function DashboardPage() {
     const formatFileSize = (b: number) => b < 1024 ? `${b} B` : b < 1024*1024 ? `${(b/1024).toFixed(1)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
 
     const handleQuickSign = async () => {
-      if (!signFile) return;
+      if (!signFile || !signatureImage || signaturePositions.length === 0) return;
       const name = signQuickName.trim() || profile?.name || "";
       if (!name) { setError("Nama penandatangan wajib diisi."); return; }
       setSigningInProgress(true); setError(null); setSignResult(null);
       try {
         const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
-        const fd = new FormData(); fd.append("file", signFile); fd.append("signer_name", name);
-        const res = await fetch("/api/documents/quick-sign/", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
-        if (!res.ok) { const err = await res.json().catch(() => ({ detail: "Gagal menandatangani." })); throw new Error(parseApiError(err, "Gagal menandatangani dokumen.")); }
-        const blob = await res.blob(); const url = URL.createObjectURL(blob);
-        setSignResult({ url, filename: parseFilenameFromDisposition(res.headers.get("content-disposition"), "signed-document.pdf"), documentId: res.headers.get("x-document-id") || "" });
-        setNotice("Dokumen berhasil ditandatangani!"); loadDocuments();
-      } catch (err) { setError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setSigningInProgress(false); }
+        
+        // Create FormData with PDF, signature image, and positions
+        const fd = new FormData();
+        fd.append("pdf_file", signFile);
+        fd.append("signature_image", await fetch(signatureImage).then(r => r.blob()), "signature.png");
+        fd.append("positions_json", JSON.stringify(signaturePositions));
+        fd.append("signer_name", name);
+        
+        const res = await fetch("/api/signatures/apply", { 
+          method: "POST", 
+          headers: { Authorization: `Bearer ${token}` }, 
+          body: fd 
+        });
+        
+        if (!res.ok) { 
+          const err = await res.json().catch(() => ({ detail: "Gagal menandatangani." })); 
+          throw new Error(parseApiError(err, "Gagal menandatangani dokumen."));
+        }
+        
+        const result = await res.json();
+        
+        // Convert base64 to blob and download
+        const binaryString = atob(result.signed_pdf);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
+        const blob = new Blob([bytes], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        
+        setSignResult({ url, filename: result.filename, documentId: "" });
+        setNotice("Dokumen berhasil ditandatangani!"); 
+        loadDocuments();
+      } catch (err) { 
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan."); 
+      } finally { 
+        setSigningInProgress(false); 
+      }
     };
 
     const loadSignPanelDoc = async (docId: string) => {
@@ -1770,20 +1814,38 @@ export default function DashboardPage() {
                   <p className={styles.uploadHint}>Maksimal 20MB - Hanya file PDF</p>
                 </div>
               )}
-              {signFile && !signResult && (
+              {signFile && !showPdfSigner && !signResult && (
                 <div className={styles.signFormWrap}>
                   <div className={styles.filePreview}>
                     <div className={styles.fileIcon}><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                     <div className={styles.fileInfo}><p className={styles.fileName}>{signFile.name}</p><p className={styles.fileMeta}>{formatFileSize(signFile.size)} - PDF</p></div>
-                    <button type="button" className={styles.fileRemove} onClick={() => { setSignFile(null); setError(null); }}>&times;</button>
+                    <button type="button" className={styles.fileRemove} onClick={() => { setSignFile(null); setSignatureImage(null); setSignaturePositions([]); setError(null); }}>&times;</button>
                   </div>
                   <div className={styles.signFields}>
                     <div><label className={styles.signLabel}>Nama Penandatangan</label><input type="text" value={signQuickName} onChange={(e) => setSignQuickName(e.target.value)} placeholder={profile?.name || "Nama lengkap"} className={styles.signInput} /></div>
-                    <div className={styles.consentBox}><svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>Saya menyetujui penandatanganan elektronik dokumen ini.</p></div>
-                    <button type="button" onClick={handleQuickSign} disabled={signingInProgress} className={styles.signBtn}>
-                      {signingInProgress ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani Sekarang</>}
-                    </button>
+                    {!signatureImage && <SignaturePad onSignatureChange={setSignatureImage} />}
+                    {signatureImage && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div style={{ padding: "12px", background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0", fontSize: 13, color: "#166534" }}>✓ Tanda tangan siap</div>
+                        <button type="button" onClick={() => setShowPdfSigner(true)} className={styles.signBtn}>Lanjut ke Pemosisian</button>
+                        <button type="button" onClick={() => { setSignatureImage(null); setSignaturePositions([]); }} className={styles.signBtn} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>Ganti Tanda Tangan</button>
+                      </div>
+                    )}
                   </div>
+                </div>
+              )}
+              {signFile && showPdfSigner && signatureImage && !signResult && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "600px" }}>
+                  <PdfSigningViewer
+                    pdfUrl={URL.createObjectURL(signFile)}
+                    signatureImage={signatureImage}
+                    onPositionsChange={setSignaturePositions}
+                    onClose={() => setShowPdfSigner(false)}
+                  />
+                  <div className={styles.consentBox}><svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>Saya menyetujui penandatanganan elektronik dokumen ini secara sah.</p></div>
+                  <button type="button" onClick={handleQuickSign} disabled={signingInProgress || signaturePositions.length === 0} className={styles.signBtn}>
+                    {signingInProgress ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani Sekarang</>}
+                  </button>
                 </div>
               )}
               {signResult && (
@@ -1793,7 +1855,7 @@ export default function DashboardPage() {
                   <p className={styles.successSub}>Sertifikat digital telah ditambahkan ke dalam PDF Anda.</p>
                   <div className={styles.successActions}>
                     <a href={signResult.url} download={signResult.filename} className={styles.downloadBtn}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Unduh</a>
-                    <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setError(null); setSignQuickName(""); }}>Tanda Tangani Lagi</button>
+                    <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setError(null); setSignQuickName(""); setSignatureImage(null); setSignaturePositions([]); setShowPdfSigner(false); }}>Tanda Tangani Lagi</button>
                   </div>
                 </div>
               )}
