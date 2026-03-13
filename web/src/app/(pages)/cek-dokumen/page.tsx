@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { UploadSection } from "@/components/cek-dokumen/UploadSection";
 import { LoadingProgress } from "@/components/cek-dokumen/LoadingProgress";
 import { storeAnalysis } from "@/components/cek-dokumen/analysisStore";
 import type { AnalysisResponse } from "@/components/cek-dokumen/types";
+import { isAuthenticated } from "@/lib/auth-session";
 
 type PageState = "upload" | "analyzing";
 
@@ -13,7 +14,12 @@ export default function CekDokumenPage() {
   const router = useRouter();
   const [state, setState] = useState<PageState>("upload");
   const [error, setError] = useState<string | null>(null);
+  const [hasSession, setHasSession] = useState(false);
   const fileRef = useRef<File | null>(null);
+
+  useEffect(() => {
+    setHasSession(isAuthenticated());
+  }, []);
 
   const handleAnalyze = useCallback(async (file: File | null, text: string | null) => {
     setState("analyzing");
@@ -67,7 +73,26 @@ export default function CekDokumenPage() {
           <a href="/">
             <img src="/logo.svg" alt="TanyaHukum" className="h-8 sm:h-9" />
           </a>
-          <a href="/cek-dokumen/" className="text-xs sm:text-sm text-gray-400 hover:text-gray-200 transition-colors hidden sm:block">AI Legal Document Analysis</a>
+          <div className="flex items-center gap-3">
+            <a href="/cek-dokumen/" className="text-xs sm:text-sm text-gray-400 hover:text-gray-200 transition-colors hidden sm:block">
+              AI Legal Document Analysis
+            </a>
+            {hasSession ? (
+              <a
+                href="/dashboard/"
+                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+              >
+                Dashboard
+              </a>
+            ) : (
+              <a
+                href="/login/"
+                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+              >
+                Masuk
+              </a>
+            )}
+          </div>
         </div>
       </header>
 

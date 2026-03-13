@@ -1,21 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
 import { NAV_LINKS } from "@/lib/constants";
+import { isAuthenticated } from "@/lib/auth-session";
 
 // Pages that have #fitur and #pricing sections
 const PAGES_WITH_SECTIONS = ["/", "/bisnis"];
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
   const pathname = usePathname();
 
   // Strip trailing slash for comparison
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
   const hasLocalSections = PAGES_WITH_SECTIONS.includes(normalizedPath);
+
+  useEffect(() => {
+    setHasSession(isAuthenticated());
+
+    function onStorageChange() {
+      setHasSession(isAuthenticated());
+    }
+
+    window.addEventListener("storage", onStorageChange);
+    return () => window.removeEventListener("storage", onStorageChange);
+  }, []);
 
   function getHref(link: (typeof NAV_LINKS)[number]) {
     if ("href" in link && link.href) return link.href;
@@ -48,7 +61,30 @@ export default function Header() {
         </ul>
 
         {/* Right CTA */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-3">
+          {hasSession ? (
+            <Link
+              href="/dashboard/"
+              className="text-sm font-semibold text-dark-navy hover:text-primary-orange transition-colors"
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login/"
+                className="text-sm font-semibold text-dark-navy hover:text-primary-orange transition-colors"
+              >
+                Masuk
+              </Link>
+              <Link
+                href="/signup/"
+                className="text-sm font-semibold text-dark-navy hover:text-primary-orange transition-colors"
+              >
+                Daftar
+              </Link>
+            </>
+          )}
           <Button href="/bisnis/" variant="secondary" size="sm">
             Bisnis
           </Button>
@@ -94,6 +130,32 @@ export default function Header() {
             ))}
           </ul>
           <div className="mt-3 pt-3 border-t border-border-light flex flex-col gap-2">
+            {hasSession ? (
+              <Link
+                href="/dashboard/"
+                onClick={() => setMenuOpen(false)}
+                className="block rounded-lg border border-border-light px-4 py-2 text-center text-sm font-semibold text-dark-navy hover:border-primary-orange hover:text-primary-orange transition-colors"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login/"
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-lg border border-border-light px-4 py-2 text-center text-sm font-semibold text-dark-navy hover:border-primary-orange hover:text-primary-orange transition-colors"
+                >
+                  Masuk
+                </Link>
+                <Link
+                  href="/signup/"
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-lg border border-border-light px-4 py-2 text-center text-sm font-semibold text-dark-navy hover:border-primary-orange hover:text-primary-orange transition-colors"
+                >
+                  Daftar
+                </Link>
+              </>
+            )}
             <Button href="/bisnis/" variant="secondary" size="sm" className="w-full text-center">
               Bisnis
             </Button>
