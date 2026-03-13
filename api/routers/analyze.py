@@ -15,7 +15,7 @@ from api.services.analyzer import analyze_contract
 from api.services.storage import save_analysis, get_analysis, get_analysis_pdf
 from api.services.documents import attach_document_analysis, create_analyzed_document, resolve_document_analysis_quota_owner
 from api.services.guardrails import MAX_FILE_SIZE, validate_pdf_upload
-from api.dependencies import verify_api_key, get_optional_bearer_token
+from api.dependencies import verify_api_key, verify_bearer_token, get_optional_bearer_token
 from api.services.supabase_auth import (
     SupabaseServiceError,
     get_auth_user,
@@ -36,9 +36,9 @@ async def analyze_pdf(
     request: Request,
     file: UploadFile = File(...),
     document_id: str | None = Form(default=None),
-    access_token: str | None = Depends(get_optional_bearer_token),
+    access_token: str = Depends(verify_bearer_token),
 ):
-    """Upload a contract PDF for legal risk analysis."""
+    """Upload a contract PDF for legal risk analysis. Requires authentication."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename diperlukan.")
 
@@ -60,85 +60,81 @@ async def analyze_pdf(
     if not is_valid:
         raise HTTPException(status_code=422, detail=error)
 
-    if document_id and not access_token:
-        raise HTTPException(status_code=401, detail="Bearer token diperlukan untuk analisis dokumen sharing.")
-
     auth_user_id: str | None = None
     auth_email: str | None = None
     auth_name: str | None = None
 
-    # If authenticated user is present, consume analysis quota atomically
-    if access_token:
-        try:
-            auth_user = await asyncio.to_thread(get_auth_user, access_token)
-            user_meta = auth_user.get("user_metadata") or {}
-            auth_user_id = auth_user["id"]
-            auth_email = auth_user.get("email", "")
-            auth_name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
-            account_type, plan = resolve_account_plan_from_user_meta(user_meta)
+    # Always authenticated now - consume analysis quota atomically
+    try:
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_meta = auth_user.get("user_metadata") or {}
+        auth_user_id = auth_user["id"]
+        auth_email = auth_user.get("email", "")
+        auth_name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
+        account_type, plan = resolve_account_plan_from_user_meta(user_meta)
 
-            await asyncio.to_thread(
-                upsert_user_profile_and_quota,
+        await asyncio.to_thread(
+            upsert_user_profile_and_quota,
+            auth_user_id,
+            auth_email,
+            auth_name,
+            plan,
+            account_type,
+        )
+
+        quota_user_id = auth_user_id
+        if document_id:
+            billing = await asyncio.to_thread(
+                resolve_document_analysis_quota_owner,
+                document_id,
                 auth_user_id,
                 auth_email,
-                auth_name,
-                plan,
-                account_type,
             )
+            quota_user_id = billing["billed_user_id"]
 
-            quota_user_id = auth_user_id
-            if document_id:
-                billing = await asyncio.to_thread(
-                    resolve_document_analysis_quota_owner,
-                    document_id,
-                    auth_user_id,
-                    auth_email,
-                )
-                quota_user_id = billing["billed_user_id"]
-
-            await asyncio.to_thread(consume_analysis_quota, quota_user_id)
-        except SupabaseServiceError as e:
-            if e.status_code >= 500:
-                raise HTTPException(status_code=500, detail="Gagal memverifikasi kuota pengguna.")
-            raise HTTPException(status_code=e.status_code, detail=e.detail)
+        await asyncio.to_thread(consume_analysis_quota, quota_user_id)
+    except SupabaseServiceError as e:
+        if e.status_code >= 500:
+            raise HTTPException(status_code=500, detail="Gagal memverifikasi kuota pengguna.")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     try:
         result = await analyze_contract(pdf_bytes, file.filename)
-        # Persist result + PDF to MongoDB
+        # Persist result + PDF to Qdrant
         try:
             await asyncio.to_thread(save_analysis, result.model_dump(), pdf_bytes)
         except Exception as e:
             logger.warning(f"Failed to persist analysis (non-fatal): {e}")
 
-        if auth_user_id and auth_email and auth_name:
-            if document_id:
-                try:
-                    await asyncio.to_thread(
-                        attach_document_analysis,
-                        document_id,
-                        auth_user_id,
-                        auth_email,
-                        result.analysis_id,
-                        file.filename,
-                        request_id=getattr(request.state, "request_id", None),
-                    )
-                except SupabaseServiceError as e:
-                    if e.status_code >= 500:
-                        raise HTTPException(status_code=500, detail="Gagal mengaitkan hasil analisis ke dokumen.")
-                    raise HTTPException(status_code=e.status_code, detail=e.detail)
-            else:
-                try:
-                    await asyncio.to_thread(
-                        create_analyzed_document,
-                        auth_user_id,
-                        auth_email,
-                        auth_name,
-                        result.analysis_id,
-                        file.filename,
-                        getattr(request.state, "request_id", None),
-                    )
-                except SupabaseServiceError as e:
-                    logger.warning(f"Failed to create standalone analyzed document: {e}")
+        # Always save document since auth is required now
+        if document_id:
+            try:
+                await asyncio.to_thread(
+                    attach_document_analysis,
+                    document_id,
+                    auth_user_id,
+                    auth_email,
+                    result.analysis_id,
+                    file.filename,
+                    request_id=getattr(request.state, "request_id", None),
+                )
+            except SupabaseServiceError as e:
+                if e.status_code >= 500:
+                    raise HTTPException(status_code=500, detail="Gagal mengaitkan hasil analisis ke dokumen.")
+                raise HTTPException(status_code=e.status_code, detail=e.detail)
+        else:
+            try:
+                await asyncio.to_thread(
+                    create_analyzed_document,
+                    auth_user_id,
+                    auth_email,
+                    auth_name,
+                    result.analysis_id,
+                    file.filename,
+                    getattr(request.state, "request_id", None),
+                )
+            except SupabaseServiceError as e:
+                logger.warning(f"Failed to create standalone analyzed document: {e}")
 
         return result
     except ValueError as e:
