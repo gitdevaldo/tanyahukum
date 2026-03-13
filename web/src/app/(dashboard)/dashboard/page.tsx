@@ -298,7 +298,7 @@ function statusVariant(status: DocumentStatus) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+  const [activeSection, setActiveSectionState] = useState<DashboardSection>("overview");
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [documents, setDocuments] = useState<DashboardDocumentItem[]>([]);
@@ -329,6 +329,19 @@ export default function DashboardPage() {
       const saved = localStorage.getItem("dashboardActiveNav");
       if (saved) {
         setActiveNavState(saved);
+        // Also update activeSection to match the nav
+        const sectionMapping: { [key: string]: DashboardSection } = {
+          "Ringkasan": "overview",
+          "Tanda Tangan": "sign",
+          "Pusat Dokumen": "documents",
+          "Analisis Dokumen": "analysis",
+          "Konsultasi": "consultation",
+          "Pengaturan Akun": "account",
+        };
+        const section = sectionMapping[saved];
+        if (section) {
+          setActiveSectionState(section);
+        }
       }
     }
   }, []);
@@ -340,6 +353,25 @@ export default function DashboardPage() {
       localStorage.setItem("dashboardActiveNav", newNav);
     }
   };
+
+  // Mapping from nav label to section
+  const navToSection: { [key: string]: DashboardSection } = {
+    "Ringkasan": "overview",
+    "Tanda Tangan": "sign",
+    "Pusat Dokumen": "documents",
+    "Analisis Dokumen": "analysis",
+    "Konsultasi": "consultation",
+    "Pengaturan Akun": "account",
+  };
+
+  // Wrapper function to save activeSection to localStorage
+  const setActiveSection = (newSection: DashboardSection) => {
+    setActiveSectionState(newSection);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardActiveSection", newSection);
+    }
+  };
+
   const [shareForm, setShareForm] = useState({
     filename: "",
     analysisId: "",

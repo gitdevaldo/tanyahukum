@@ -24,10 +24,6 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
     return true; // text type only needs name
   }, [displayName, signatureType, drawnSignature, uploadedImage]);
 
-  useEffect(() => {
-    onCanSignChange(isComplete());
-  }, [displayName, signatureType, drawnSignature, uploadedImage, isComplete, onCanSignChange]);
-
   // Canvas drawing handlers
   const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -111,6 +107,9 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
       content,
       displayName,
     });
+
+    // Only call onCanSignChange when button is clicked (not on every keystroke)
+    onCanSignChange(true);
   };
 
   return (
