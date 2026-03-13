@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignTrust — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --sidebar-w: 240px;
+    --sidebar-collapsed: 64px;
+    --bg: #f7f8fa;
+    --white: #ffffff;
+    --primary: #1a56e8;
+    --primary-light: #e8effe;
+    --primary-mid: #3b6ff0;
+    --accent: #0fc56a;
+    --accent-light: #e6faf1;
+    --warn: #f59e0b;
+    --warn-light: #fef3c7;
+    --danger: #ef4444;
+    --danger-light: #fef2f2;
+    --text: #111827;
+    --text-2: #4b5563;
+    --text-3: #9ca3af;
+    --border: #e5e7eb;
+    --border-light: #f3f4f6;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow: 0 4px 16px rgba(0,0,0,.07);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,.10);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --transition: all .22s cubic-bezier(.4,0,.2,1);
+  }
+
+  html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+  /* ── LAYOUT ── */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--white);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: var(--transition);
+    overflow: hidden;
+    position: relative;
+    z-index: 10;
+  }
+  .sidebar.collapsed { width: var(--sidebar-collapsed); min-width: var(--sidebar-collapsed); }
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 16px 20px;
+    border-bottom: 1px solid var(--border-light);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .logo-mark {
+    width: 32px; height: 32px; min-width: 32px;
+    background: linear-gradient(135deg, var(--primary) 0%, #4f8ef7 100%);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 15px; font-weight: 700; letter-spacing: -0.5px;
+  }
+  .logo-text { font-family: 'Instrument Serif', serif; font-size: 18px; font-weight: 400; color: var(--text); white-space: nowrap; opacity: 1; transition: opacity .18s; }
+  .sidebar.collapsed .logo-text { opacity: 0; pointer-events: none; }
+
+  .toggle-btn {
+    position: absolute;
+    right: -12px; top: 22px;
+    width: 24px; height: 24px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    z-index: 20;
+  }
+  .toggle-btn:hover { background: var(--primary-light); border-color: var(--primary); }
+  .toggle-btn svg { transition: transform .22s; }
+  .sidebar.collapsed .toggle-btn svg { transform: rotate(180deg); }
+
+  .nav { flex: 1; padding: 12px 10px; overflow-y: auto; overflow-x: hidden; }
+  .nav-section { margin-bottom: 4px; }
+  .nav-label {
+    font-size: 10px; font-weight: 600; letter-spacing: .08em;
+    color: var(--text-3); text-transform: uppercase;
+    padding: 8px 8px 4px;
+    white-space: nowrap; overflow: hidden;
+    transition: opacity .15s;
+  }
+  .sidebar.collapsed .nav-label { opacity: 0; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+    color: var(--text-2);
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--border-light); color: var(--text); }
+  .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+  .nav-item .icon { min-width: 20px; display: flex; align-items: center; justify-content: center; }
+  .nav-item .label { font-size: 13.5px; transition: opacity .15s; white-space: nowrap; flex: 1; }
+  .sidebar.collapsed .nav-item .label { opacity: 0; pointer-events: none; }
+  .nav-item .badge {
+    background: var(--primary); color: #fff;
+    font-size: 10px; font-weight: 600;
+    padding: 1px 6px; border-radius: 20px;
+    transition: opacity .15s;
+  }
+  .sidebar.collapsed .nav-item .badge { opacity: 0; }
+
+  .sidebar-footer {
+    padding: 12px 10px;
+    border-top: 1px solid var(--border-light);
+    overflow: hidden;
+  }
+  .user-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: var(--radius-xs);
+    cursor: pointer; transition: var(--transition);
+    white-space: nowrap;
+  }
+  .user-card:hover { background: var(--border-light); }
+  .avatar {
+    width: 32px; height: 32px; min-width: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .user-info { transition: opacity .15s; }
+  .sidebar.collapsed .user-info { opacity: 0; }
+  .user-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .user-role { font-size: 11px; color: var(--text-3); }
+
+  /* ── MAIN ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .topbar-left { display: flex; flex-direction: column; }
+  .topbar-title { font-size: 16px; font-weight: 600; color: var(--text); }
+  .topbar-sub { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+
+  .topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+  .search-box {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-xs); padding: 7px 12px;
+    width: 220px; transition: var(--transition);
+  }
+  .search-box:focus-within { border-color: var(--primary); background: var(--white); }
+  .search-box input { border: none; background: transparent; outline: none; font-size: 13px; color: var(--text); width: 100%; font-family: inherit; }
+  .search-box input::placeholder { color: var(--text-3); }
+
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: var(--radius-xs);
+    border: 1px solid var(--border);
+    background: var(--white); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2); transition: var(--transition);
+    position: relative;
+  }
+  .icon-btn:hover { background: var(--bg); color: var(--text); }
+  .notif-dot {
+    position: absolute; top: 7px; right: 7px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--danger); border: 1.5px solid var(--white);
+  }
+
+  .btn-primary {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--primary); color: #fff;
+    border: none; border-radius: var(--radius-xs);
+    padding: 8px 16px; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: var(--transition); font-family: inherit;
+  }
+  .btn-primary:hover { background: var(--primary-mid); }
+
+  /* ── CONTENT ── */
+  .content { flex: 1; overflow-y: auto; padding: 28px; }
+
+  /* ── STAT CARDS ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: var(--transition);
+  }
+  .stat-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+  .stat-card-top { display: flex; align-items: center; justify-content: space-between; }
+  .stat-label { font-size: 12.5px; color: var(--text-2); font-weight: 500; }
+  .stat-icon-wrap {
+    width: 36px; height: 36px; border-radius: var(--radius-xs);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stat-value { font-size: 26px; font-weight: 600; color: var(--text); letter-spacing: -0.5px; }
+  .stat-change { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+  .stat-change.up { color: var(--accent); }
+  .stat-change.down { color: var(--danger); }
+  .stat-change span { color: var(--text-3); }
+
+  /* ── TWO COL GRID ── */
+  .two-col { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-bottom: 24px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 18px 20px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .card-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .card-body { padding: 16px 20px; }
+  .card-link { font-size: 12.5px; color: var(--primary); font-weight: 500; cursor: pointer; text-decoration: none; }
+  .card-link:hover { text-decoration: underline; }
+
+  /* ── ACTIVITY TABLE ── */
+  .doc-table { width: 100%; border-collapse: collapse; }
+  .doc-table th {
+    text-align: left; font-size: 11.5px; font-weight: 600;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: .06em;
+    padding: 0 20px 12px; border-bottom: 1px solid var(--border-light);
+  }
+  .doc-table td { padding: 13px 20px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+  .doc-table tr:last-child td { border-bottom: none; }
+  .doc-table tr:hover td { background: var(--bg); }
+  .doc-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .doc-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+  .doc-signer { display: flex; align-items: center; gap: 8px; }
+  .doc-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff; font-size: 10px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .doc-avatar.green { background: linear-gradient(135deg, #10b981, #06d6a0); }
+  .doc-avatar.amber { background: linear-gradient(135deg, #f59e0b, #f97316); }
+  .doc-avatar.blue  { background: linear-gradient(135deg, var(--primary), #60a5fa); }
+
+  /* ── STATUS BADGES ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; font-weight: 500;
+    padding: 3px 9px; border-radius: 20px;
+  }
+  .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+  .badge.signed { background: var(--accent-light); color: #059652; }
+  .badge.signed::before { background: var(--accent); }
+  .badge.pending { background: var(--warn-light); color: #b45309; }
+  .badge.pending::before { background: var(--warn); }
+  .badge.draft { background: var(--border-light); color: var(--text-2); }
+  .badge.draft::before { background: var(--text-3); }
+  .badge.rejected { background: var(--danger-light); color: #b91c1c; }
+  .badge.rejected::before { background: var(--danger); }
+
+  /* ── SIGNERS PANEL ── */
+  .signer-list { display: flex; flex-direction: column; gap: 2px; }
+  .signer-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border-light);
+  }
+  .signer-row:last-child { border-bottom: none; }
+  .signer-info { flex: 1; min-width: 0; }
+  .signer-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .signer-email { font-size: 11.5px; color: var(--text-3); }
+  .signer-action { cursor: pointer; }
+
+  /* ── QUOTA CARD ── */
+  .quota-wrap { display: flex; flex-direction: column; gap: 14px; }
+  .quota-item { display: flex; flex-direction: column; gap: 6px; }
+  .quota-top { display: flex; justify-content: space-between; align-items: center; }
+  .quota-name { font-size: 13px; color: var(--text-2); font-weight: 500; }
+  .quota-val { font-size: 12px; color: var(--text-3); }
+  .quota-bar { height: 6px; background: var(--border-light); border-radius: 20px; overflow: hidden; }
+  .quota-fill { height: 100%; border-radius: 20px; transition: width .5s ease; }
+  .quota-fill.blue { background: linear-gradient(90deg, var(--primary), #60a5fa); }
+  .quota-fill.green { background: linear-gradient(90deg, #10b981, #34d399); }
+  .quota-fill.amber { background: linear-gradient(90deg, #f59e0b, #fcd34d); }
+
+  /* ── ACTIVITY FEED ── */
+  .activity-list { display: flex; flex-direction: column; }
+  .activity-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-light); }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-dot-wrap { display: flex; flex-direction: column; align-items: center; padding-top: 3px; }
+  .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .activity-dot.blue { background: var(--primary); }
+  .activity-dot.green { background: var(--accent); }
+  .activity-dot.amber { background: var(--warn); }
+  .activity-dot.red { background: var(--danger); }
+  .activity-line { width: 1px; flex: 1; background: var(--border); margin-top: 5px; }
+  .activity-item:last-child .activity-line { display: none; }
+  .activity-content { flex: 1; }
+  .activity-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .activity-text b { font-weight: 600; }
+  .activity-time { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+
+  /* ── QUICK ACTIONS ── */
+  .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .quick-btn {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+    padding: 14px; border-radius: var(--radius-sm);
+    background: var(--bg); border: 1px solid var(--border);
+    cursor: pointer; transition: var(--transition); text-align: left;
+  }
+  .quick-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+  .quick-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .quick-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .quick-desc { font-size: 11px; color: var(--text-3); }
+
+  /* ── MINI CHART ── */
+  .chart-area {
+    position: relative; height: 120px;
+    display: flex; align-items: flex-end; gap: 4px;
+    padding: 0 0 0 0;
+  }
+  .chart-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .chart-bar {
+    width: 100%; border-radius: 4px 4px 0 0;
+    transition: height .4s ease;
+    position: relative;
+  }
+  .chart-bar:hover::after {
+    content: attr(data-val);
+    position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: #fff;
+    font-size: 10px; padding: 2px 5px; border-radius: 4px; white-space: nowrap;
+    pointer-events: none;
+  }
+  .chart-bar.primary { background: var(--primary); }
+  .chart-bar.light { background: var(--primary-light); }
+  .chart-label { font-size: 10px; color: var(--text-3); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+  /* ── TOOLTIP for sidebar collapsed ── */
+  .nav-item { position: relative; }
+
+  /* ── RESPONSIVE ── */
+  @media(max-width: 1100px) {
+    .stat-grid { grid-template-columns: repeat(2,1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .three-col { grid-template-columns: 1fr 1fr; }
+  }
+  @media(max-width: 700px) {
+    .stat-grid { grid-template-columns: 1fr; }
+    .three-col { grid-template-columns: 1fr; }
+  }
+
+  /* ── ANIMATION ── */
+  @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .stat-card, .card { animation: fadeUp .3s ease both; }
+  .stat-card:nth-child(1) { animation-delay: .04s; }
+  .stat-card:nth-child(2) { animation-delay: .08s; }
+  .stat-card:nth-child(3) { animation-delay: .12s; }
+  .stat-card:nth-child(4) { animation-delay: .16s; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-mark">S</div>
+      <span class="logo-text">SignTrust</span>
+    </div>
+
+    <button class="toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <path d="M7.5 9L4.5 6L7.5 3" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
+    <nav class="nav">
+      <div class="nav-section">
+        <div class="nav-label">Main</div>
+        <div class="nav-item active" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>
+          <span class="label">Dashboard</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+          <span class="label">Documents</span>
+          <span class="badge">12</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          <span class="label">Signers</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+          <span class="label">Templates</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">Identity</div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+          <span class="label">e-KYC Verification</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          <span class="label">Digital Identity</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <span class="label">Certificates</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+          <span class="label">Audit Trail</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">System</div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 17.66l1.41-1.41"/></svg></span>
+          <span class="label">API & Integrations</span>
+        </div>
+        <div class="nav-item" onclick="setActive(this)">
+          <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          <span class="label">Settings</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="avatar">AW</div>
+        <div class="user-info">
+          <div class="user-name">Aldo Wijaya</div>
+          <div class="user-role">Enterprise Admin</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">Overview</div>
+        <div class="topbar-sub">Friday, March 13, 2026</div>
+      </div>
+      <div class="topbar-actions">
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" placeholder="Search documents…">
+        </div>
+        <button class="icon-btn" title="Notifications">
+          <div class="notif-dot"></div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </button>
+        <button class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Send for Signature
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- STATS -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-card-top">
+            <div class="stat-label">Total Documents</div>
+            <div class="stat-icon-wrap" style="background:var(--primary-light)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+          </div>
+          <div class="stat-value">1,284</div>
+          <div class="stat-change up">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+            +12.4% <span>vs last month</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top">
+            <div class="stat-label">Signed This Month</div>
+            <div class="stat-icon-wrap" style="background:var(--accent-light)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+          <div class="stat-value">843</div>
+          <div class="stat-change up">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+            +8.7% <span>vs last month</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top">
+            <div class="stat-label">Awaiting Signatures</div>
+            <div class="stat-icon-wrap" style="background:var(--warn-light)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+          </div>
+          <div class="stat-value">127</div>
+          <div class="stat-change down">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            +3.2% <span>vs last month</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top">
+            <div class="stat-label">Verified Users</div>
+            <div class="stat-icon-wrap" style="background:#f0f0ff">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+          </div>
+          <div class="stat-value">4,921</div>
+          <div class="stat-change up">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+            +21.1% <span>vs last month</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAIN 2-COL -->
+      <div class="two-col">
+
+        <!-- LEFT: Documents table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Recent Documents</div>
+              <div class="card-sub">Latest document activity across your organization</div>
+            </div>
+            <a class="card-link">View all →</a>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Signer</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="doc-name">Perjanjian Kerja Sama Q1</div>
+                  <div class="doc-meta">Partnership Agreement · PDF</div>
+                </td>
+                <td>
+                  <div class="doc-signer">
+                    <div class="doc-avatar green">RK</div>
+                    <span style="font-size:13px;color:var(--text-2)">Riko K.</span>
+                  </div>
+                </td>
+                <td><span class="badge signed">Signed</span></td>
+                <td style="font-size:12.5px;color:var(--text-3)">Mar 12</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="doc-name">NDA — Vendor Teknologi</div>
+                  <div class="doc-meta">Non-Disclosure Agreement · PDF</div>
+                </td>
+                <td>
+                  <div class="doc-signer">
+                    <div class="doc-avatar amber">SP</div>
+                    <span style="font-size:13px;color:var(--text-2)">Sinta P.</span>
+                  </div>
+                </td>
+                <td><span class="badge pending">Pending</span></td>
+                <td style="font-size:12.5px;color:var(--text-3)">Mar 11</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="doc-name">Employment Contract — Dev</div>
+                  <div class="doc-meta">HR Document · DOCX</div>
+                </td>
+                <td>
+                  <div class="doc-signer">
+                    <div class="doc-avatar blue">HA</div>
+                    <span style="font-size:13px;color:var(--text-2)">Hadi A.</span>
+                  </div>
+                </td>
+                <td><span class="badge signed">Signed</span></td>
+                <td style="font-size:12.5px;color:var(--text-3)">Mar 10</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="doc-name">Addendum Kontrak #114</div>
+                  <div class="doc-meta">Contract Amendment · PDF</div>
+                </td>
+                <td>
+                  <div class="doc-signer">
+                    <div class="doc-avatar">MW</div>
+                    <span style="font-size:13px;color:var(--text-2)">Mega W.</span>
+                  </div>
+                </td>
+                <td><span class="badge draft">Draft</span></td>
+                <td style="font-size:12.5px;color:var(--text-3)">Mar 10</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="doc-name">Procurement Authorization</div>
+                  <div class="doc-meta">Finance · PDF</div>
+                </td>
+                <td>
+                  <div class="doc-signer">
+                    <div class="doc-avatar green">YL</div>
+                    <span style="font-size:13px;color:var(--text-2)">Yuni L.</span>
+                  </div>
+                </td>
+                <td><span class="badge rejected">Rejected</span></td>
+                <td style="font-size:12.5px;color:var(--text-3)">Mar 9</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="doc-name">SLA Agreement — Cloud</div>
+                  <div class="doc-meta">Service Level · PDF</div>
+                </td>
+                <td>
+                  <div class="doc-signer">
+                    <div class="doc-avatar amber">BN</div>
+                    <span style="font-size:13px;color:var(--text-2)">Budi N.</span>
+                  </div>
+                </td>
+                <td><span class="badge pending">Pending</span></td>
+                <td style="font-size:12.5px;color:var(--text-3)">Mar 8</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- RIGHT: Stacked panels -->
+        <div style="display:flex;flex-direction:column;gap:16px;">
+
+          <!-- Quick Actions -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Quick Actions</div>
+            </div>
+            <div class="card-body">
+              <div class="quick-grid">
+                <div class="quick-btn">
+                  <div class="quick-icon" style="background:var(--primary-light)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  </div>
+                  <div class="quick-name">Upload Doc</div>
+                  <div class="quick-desc">PDF or DOCX</div>
+                </div>
+                <div class="quick-btn">
+                  <div class="quick-icon" style="background:var(--accent-light)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  </div>
+                  <div class="quick-name">Sign Now</div>
+                  <div class="quick-desc">Pending docs</div>
+                </div>
+                <div class="quick-btn">
+                  <div class="quick-icon" style="background:var(--warn-light)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                  <div class="quick-name">Verify KYC</div>
+                  <div class="quick-desc">New request</div>
+                </div>
+                <div class="quick-btn">
+                  <div class="quick-icon" style="background:#f0f0ff">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  </div>
+                  <div class="quick-name">Use Template</div>
+                  <div class="quick-desc">12 available</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quota Usage -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Plan Usage</div>
+              <span style="font-size:11.5px;background:var(--primary-light);color:var(--primary);padding:3px 8px;border-radius:20px;font-weight:600;">Enterprise</span>
+            </div>
+            <div class="card-body">
+              <div class="quota-wrap">
+                <div class="quota-item">
+                  <div class="quota-top">
+                    <span class="quota-name">Signatures</span>
+                    <span class="quota-val">843 / 2,000</span>
+                  </div>
+                  <div class="quota-bar"><div class="quota-fill blue" style="width:42%"></div></div>
+                </div>
+                <div class="quota-item">
+                  <div class="quota-top">
+                    <span class="quota-name">Document Storage</span>
+                    <span class="quota-val">18.4 / 50 GB</span>
+                  </div>
+                  <div class="quota-bar"><div class="quota-fill green" style="width:37%"></div></div>
+                </div>
+                <div class="quota-item">
+                  <div class="quota-top">
+                    <span class="quota-name">KYC Verifications</span>
+                    <span class="quota-val">291 / 500</span>
+                  </div>
+                  <div class="quota-bar"><div class="quota-fill amber" style="width:58%"></div></div>
+                </div>
+                <div class="quota-item">
+                  <div class="quota-top">
+                    <span class="quota-name">e-Meterai Used</span>
+                    <span class="quota-val">76 / 200</span>
+                  </div>
+                  <div class="quota-bar"><div class="quota-fill blue" style="width:38%"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- end two-col -->
+
+      <!-- BOTTOM 3-COL -->
+      <div class="three-col">
+
+        <!-- Signing Volume Chart -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Signing Volume</div>
+              <div class="card-sub">Last 7 days</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-area">
+              <div class="chart-bar-wrap">
+                <div class="chart-bar primary" style="height:55%" data-val="44"></div>
+                <div class="chart-label">Mon</div>
+              </div>
+              <div class="chart-bar-wrap">
+                <div class="chart-bar primary" style="height:70%" data-val="56"></div>
+                <div class="chart-label">Tue</div>
+              </div>
+              <div class="chart-bar-wrap">
+                <div class="chart-bar primary" style="height:45%" data-val="36"></div>
+                <div class="chart-label">Wed</div>
+              </div>
+              <div class="chart-bar-wrap">
+                <div class="chart-bar primary" style="height:90%" data-val="72"></div>
+                <div class="chart-label">Thu</div>
+              </div>
+              <div class="chart-bar-wrap">
+                <div class="chart-bar primary" style="height:65%" data-val="52"></div>
+                <div class="chart-label">Fri</div>
+              </div>
+              <div class="chart-bar-wrap">
+                <div class="chart-bar light" style="height:30%" data-val="24"></div>
+                <div class="chart-label">Sat</div>
+              </div>
+              <div class="chart-bar-wrap">
+                <div class="chart-bar light" style="height:20%" data-val="16"></div>
+                <div class="chart-label">Sun</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Feed -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Activity Feed</div>
+            <a class="card-link">See all</a>
+          </div>
+          <div class="card-body" style="padding-top:8px;padding-bottom:8px;">
+            <div class="activity-list">
+              <div class="activity-item">
+                <div class="activity-dot-wrap">
+                  <div class="activity-dot green"></div>
+                  <div class="activity-line"></div>
+                </div>
+                <div class="activity-content">
+                  <div class="activity-text"><b>Riko Kusuma</b> signed <b>PKS Q1 2026</b></div>
+                  <div class="activity-time">2 minutes ago</div>
+                </div>
+              </div>
+              <div class="activity-item">
+                <div class="activity-dot-wrap">
+                  <div class="activity-dot blue"></div>
+                  <div class="activity-line"></div>
+                </div>
+                <div class="activity-content">
+                  <div class="activity-text"><b>You</b> uploaded <b>NDA Vendor Tek.</b></div>
+                  <div class="activity-time">34 minutes ago</div>
+                </div>
+              </div>
+              <div class="activity-item">
+                <div class="activity-dot-wrap">
+                  <div class="activity-dot amber"></div>
+                  <div class="activity-line"></div>
+                </div>
+                <div class="activity-content">
+                  <div class="activity-text">KYC pending for <b>Sinta Pratiwi</b></div>
+                  <div class="activity-time">1 hour ago</div>
+                </div>
+              </div>
+              <div class="activity-item">
+                <div class="activity-dot-wrap">
+                  <div class="activity-dot red"></div>
+                  <div class="activity-line"></div>
+                </div>
+                <div class="activity-content">
+                  <div class="activity-text"><b>Yuni L.</b> rejected <b>Procurement Auth.</b></div>
+                  <div class="activity-time">3 hours ago</div>
+                </div>
+              </div>
+              <div class="activity-item">
+                <div class="activity-dot-wrap">
+                  <div class="activity-dot green"></div>
+                  <div class="activity-line"></div>
+                </div>
+                <div class="activity-content">
+                  <div class="activity-text"><b>Hadi A.</b> signed <b>Employment Contract</b></div>
+                  <div class="activity-time">Yesterday, 16:42</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Signers -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Awaiting Signers</div>
+              <div class="card-sub">Requires attention</div>
+            </div>
+            <span style="font-size:11.5px;background:var(--warn-light);color:#b45309;padding:3px 8px;border-radius:20px;font-weight:600;">12 pending</span>
+          </div>
+          <div class="card-body" style="padding-top:8px;">
+            <div class="signer-list">
+              <div class="signer-row">
+                <div class="doc-avatar amber">SP</div>
+                <div class="signer-info">
+                  <div class="signer-name">Sinta Pratiwi</div>
+                  <div class="signer-email">NDA — Vendor Teknologi</div>
+                </div>
+                <button class="icon-btn signer-action" title="Send reminder" style="border:none;background:var(--warn-light);">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+              <div class="signer-row">
+                <div class="doc-avatar amber">BN</div>
+                <div class="signer-info">
+                  <div class="signer-name">Budi Nugroho</div>
+                  <div class="signer-email">SLA Agreement — Cloud</div>
+                </div>
+                <button class="icon-btn signer-action" title="Send reminder" style="border:none;background:var(--warn-light);">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+              <div class="signer-row">
+                <div class="doc-avatar blue">DR</div>
+                <div class="signer-info">
+                  <div class="signer-name">Dewi Rahayu</div>
+                  <div class="signer-email">Addendum Kontrak #115</div>
+                </div>
+                <button class="icon-btn signer-action" title="Send reminder" style="border:none;background:var(--warn-light);">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+              <div class="signer-row">
+                <div class="doc-avatar green">FH</div>
+                <div class="signer-info">
+                  <div class="signer-name">Fajar Hidayat</div>
+                  <div class="signer-email">Procurement Form 2026</div>
+                </div>
+                <button class="icon-btn signer-action" title="Send reminder" style="border:none;background:var(--warn-light);">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end three-col -->
+
+    </div><!-- end content -->
+  </div><!-- end main -->
+</div><!-- end app -->
+
+<script>
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('collapsed');
+  }
+
+  function setActive(el) {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+  }
+</script>
+</body>
+</html>

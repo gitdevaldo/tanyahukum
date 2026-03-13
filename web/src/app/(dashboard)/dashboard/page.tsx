@@ -649,10 +649,10 @@ export default function DashboardPage() {
   function sectionButtonClass(section: DashboardSection) {
     const active = activeSection === section;
     return [
-      "w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors lg:text-left text-center",
+      "w-full border-l-2 px-3 py-2 text-sm font-medium transition-colors lg:text-left text-center",
       active
-        ? "border-dark-navy bg-dark-navy text-white"
-        : "border-border-light bg-white text-dark-navy hover:border-dark-navy/40",
+        ? "border-l-dark-navy bg-gray-50 text-dark-navy"
+        : "border-l-transparent text-neutral-gray hover:border-l-dark-navy/40 hover:text-dark-navy",
     ].join(" ");
   }
 
@@ -664,7 +664,7 @@ export default function DashboardPage() {
   function renderOverview() {
     return (
       <section className="space-y-5">
-        <article className="rounded-lg border border-border-light bg-white">
+        <article className="border-b border-border-light bg-white">
           <div className="border-b border-border-light px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Ringkasan Operasional</h2>
           </div>
@@ -700,7 +700,7 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-lg border border-border-light bg-white">
+        <article className="border-b border-border-light bg-white">
           <div className="border-b border-border-light px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Pemakaian Kuota</h2>
           </div>
@@ -734,13 +734,13 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-lg border border-border-light bg-white">
+        <article className="border-b border-border-light bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-light px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Prioritas Hari Ini</h2>
             <button
               type="button"
               onClick={() => setActiveSection("documents")}
-              className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/50"
+              className="border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/50"
             >
               Buka Document Center
             </button>
@@ -794,7 +794,7 @@ export default function DashboardPage() {
   function renderDocumentsPanel() {
     return (
       <section className="space-y-4">
-        <article className="rounded-lg border border-border-light bg-white">
+        <article className="border-b border-border-light bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light px-4 py-3 sm:px-5">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Document Center</h2>
@@ -880,7 +880,7 @@ export default function DashboardPage() {
         </article>
 
         <div className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
-          <article className="rounded-lg border border-border-light bg-white">
+          <article className="bg-white">
             <div className="border-b border-border-light px-4 py-3 sm:px-5">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Daftar Dokumen</h3>
             </div>
@@ -939,7 +939,7 @@ export default function DashboardPage() {
             </div>
           </article>
 
-          <article className="rounded-lg border border-border-light bg-white">
+          <article className="bg-white lg:border-l border-border-light">
             <div className="border-b border-border-light px-4 py-3 sm:px-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Detail & Aksi</h3>
@@ -1062,7 +1062,7 @@ export default function DashboardPage() {
                 </div>
 
                 {detailError ? (
-                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <div className="border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                     {detailError}
                   </div>
                 ) : null}
@@ -1075,7 +1075,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-neutral-gray">Belum ada data signer.</p>
                       ) : (
                         selectedSigners?.signers.map((signer) => (
-                          <div key={`${signer.email}-${signer.role}`} className="rounded-md border border-border-light px-3 py-2">
+                          <div key={`${signer.email}-${signer.role}`} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{signer.email}</p>
                             <p className="text-[11px] text-neutral-gray">
                               {signer.role} • {signer.status}
@@ -1094,7 +1094,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-neutral-gray">Belum ada event.</p>
                       ) : (
                         selectedEvents?.events.map((event) => (
-                          <div key={event.id} className="rounded-md border border-border-light px-3 py-2">
+                          <div key={event.id} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{event.event_type}</p>
                             <p className="text-[11px] text-neutral-gray">
                               {event.actor_email || "system"} • {formatDateTime(event.created_at)}
@@ -1115,7 +1115,7 @@ export default function DashboardPage() {
                         {selectedCertificate.signatures.map((signature) => (
                           <div
                             key={`${signature.signer_email}-${signature.signed_at}`}
-                            className="rounded-md border border-border-light px-3 py-2"
+                            className="border-b border-border-light px-3 py-2 last:border-b-0"
                           >
                             <p className="text-xs font-medium text-dark-navy">{signature.signer_name}</p>
                             <p className="text-[11px] text-neutral-gray">
@@ -1138,7 +1138,7 @@ export default function DashboardPage() {
   function renderAccountPanel() {
     return (
       <section className="space-y-4">
-        <article className="rounded-lg border border-border-light bg-white">
+        <article className="border-b border-border-light bg-white">
           <div className="border-b border-border-light px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Profil Akun</h2>
           </div>
@@ -1172,18 +1172,18 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-lg border border-border-light bg-white p-4 sm:p-5">
+        <article className="border-b border-border-light bg-white p-4 sm:p-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Langkah Lanjutan</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href="/bisnis/"
-              className="rounded-md border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+              className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
             >
               Lihat Paket Bisnis
             </Link>
             <Link
               href="/cek-dokumen/"
-              className="rounded-md border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+              className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
             >
               Analisis Dokumen Baru
             </Link>
@@ -1195,12 +1195,15 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white px-4 py-8 sm:px-6">
-        <div className="mx-auto max-w-[1280px] animate-pulse space-y-4">
-          <div className="h-14 rounded-xl border border-border-light bg-white" />
-          <div className="grid gap-4 lg:grid-cols-[250px_1fr]">
-            <div className="h-[70vh] rounded-xl border border-border-light bg-white" />
-            <div className="h-[70vh] rounded-xl border border-border-light bg-white" />
+      <main className="min-h-screen bg-white">
+        <div className="animate-pulse">
+          <div className="h-16 border-b border-border-light bg-white" />
+          <div className="grid min-h-[calc(100vh-64px)] lg:grid-cols-[250px_1fr]">
+            <div className="hidden border-r border-border-light bg-white lg:block" />
+            <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
+              <div className="h-8 w-40 bg-gray-100" />
+              <div className="h-48 border border-border-light bg-white" />
+            </div>
           </div>
         </div>
       </main>
@@ -1208,70 +1211,51 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white px-4 py-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1400px]">
-        <header className="mb-4 rounded-xl border border-border-light bg-white px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="flex-shrink-0">
-                <img src="/logo.svg" alt="TanyaHukum" className="h-9" />
-              </Link>
-              <div className="text-sm text-neutral-gray">
-                <p className="font-semibold text-dark-navy">Dashboard Workspace</p>
-                <p>{profile ? `${profile.name} • ${formatAccountType(profile.account_type)}` : "Memuat akun..."}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button href="/cek-dokumen/" variant="secondary" size="sm">
-                Cek Dokumen
-              </Button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="rounded-lg border border-border-light px-4 py-2 text-sm font-semibold text-dark-navy hover:border-dark-navy disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loggingOut ? "Memproses..." : "Keluar"}
-              </button>
+    <main className="min-h-screen bg-white">
+      <header className="sticky top-0 z-20 border-b border-border-light bg-white">
+        <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="flex-shrink-0">
+              <img src="/logo.svg" alt="TanyaHukum" className="h-8" />
+            </Link>
+            <div className="text-sm text-neutral-gray">
+              <p className="font-semibold text-dark-navy">Dashboard Workspace</p>
+              <p>{profile ? `${profile.name} • ${formatAccountType(profile.account_type)}` : "Memuat akun..."}</p>
             </div>
           </div>
-        </header>
-
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <p>{error}</p>
+          <div className="flex items-center gap-2">
+            <Button href="/cek-dokumen/" variant="secondary" size="sm">
+              Cek Dokumen
+            </Button>
             <button
               type="button"
-              onClick={loadData}
-              className="mt-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="border border-border-light px-4 py-2 text-sm font-semibold text-dark-navy hover:border-dark-navy disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Coba Lagi
+              {loggingOut ? "Memproses..." : "Keluar"}
             </button>
           </div>
-        )}
+        </div>
+      </header>
 
-        {notice ? (
-          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-            {notice}
-          </div>
-        ) : null}
-
-        <div className="grid gap-4 lg:grid-cols-[250px_1fr]">
-          <aside className="rounded-xl border border-border-light bg-white p-3">
-            <div className="hidden space-y-2 lg:block">
-              <button
-                type="button"
-                className={sectionButtonClass("overview")}
-                onClick={() => setActiveSection("overview")}
-              >
-                Overview
-              </button>
+      <div className="grid min-h-[calc(100vh-64px)] lg:grid-cols-[250px_1fr]">
+        <aside className="border-b border-border-light bg-white lg:border-b-0 lg:border-r">
+          <div className="px-4 py-4 sm:px-6 lg:px-5 lg:py-5">
+            <div className="hidden space-y-1 lg:block">
               <button
                 type="button"
                 className={sectionButtonClass("documents")}
                 onClick={() => setActiveSection("documents")}
               >
                 Document Center
+              </button>
+              <button
+                type="button"
+                className={sectionButtonClass("overview")}
+                onClick={() => setActiveSection("overview")}
+              >
+                Overview
               </button>
               <button
                 type="button"
@@ -1285,17 +1269,17 @@ export default function DashboardPage() {
             <div className="grid grid-cols-3 gap-2 lg:hidden">
               <button
                 type="button"
-                className={sectionButtonClass("overview")}
-                onClick={() => setActiveSection("overview")}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
                 className={sectionButtonClass("documents")}
                 onClick={() => setActiveSection("documents")}
               >
                 Dokumen
+              </button>
+              <button
+                type="button"
+                className={sectionButtonClass("overview")}
+                onClick={() => setActiveSection("overview")}
+              >
+                Overview
               </button>
               <button
                 type="button"
@@ -1306,23 +1290,51 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div className="mt-4 rounded-lg border border-border-light bg-gray-50 p-3 text-xs text-neutral-gray">
-              <p>Plan: <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span></p>
-              <p className="mt-1">
-                Tipe Akun: <span className="font-semibold text-dark-navy">{profile ? formatAccountType(profile.account_type) : "-"}</span>
+            <div className="mt-4 border-t border-border-light pt-3 text-xs text-neutral-gray">
+              <p>
+                Plan:{" "}
+                <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
               </p>
               <p className="mt-1">
-                Chat limit/dokumen: <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
+                Tipe Akun:{" "}
+                <span className="font-semibold text-dark-navy">
+                  {profile ? formatAccountType(profile.account_type) : "-"}
+                </span>
+              </p>
+              <p className="mt-1">
+                Chat limit/dokumen:{" "}
+                <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
               </p>
             </div>
-          </aside>
+          </div>
+        </aside>
 
-          <section className="rounded-xl border border-border-light bg-white p-4 sm:p-5">
+        <section className="bg-white px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          {error && (
+            <div className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={loadData}
+                className="mt-2 border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
+
+          {notice ? (
+            <div className="mb-4 border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {notice}
+            </div>
+          ) : null}
+
+          <div className="w-full">
             {activeSection === "overview" && renderOverview()}
             {activeSection === "documents" && renderDocumentsPanel()}
             {activeSection === "account" && renderAccountPanel()}
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
     </main>
   );
