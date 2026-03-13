@@ -157,10 +157,10 @@ function formatAccountType(value: AccountType) {
 function formatPlan(value: Plan) {
   if (value === null) return "Belum dipilih";
   const map = {
-    free: "Free",
+    free: "Gratis",
     starter: "Starter",
     plus: "Plus",
-    business: "Business",
+    business: "Bisnis",
     enterprise: "Enterprise",
   };
   return map[value];
@@ -271,7 +271,7 @@ function toInitials(value: string) {
     .trim()
     .split(/\s+/)
     .filter(Boolean);
-  if (parts.length === 0) return "NA";
+  if (parts.length === 0) return "TDK";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
@@ -526,7 +526,7 @@ export default function DashboardPage() {
             setSelectedCertificate(certificate);
           } catch (certificateError) {
             setSelectedCertificate(null);
-            setDetailError(certificateError instanceof Error ? certificateError.message : "Gagal memuat sertifikat.");
+            setError(certificateError instanceof Error ? certificateError.message : "Gagal memuat sertifikat.");
           }
         } else {
           setSelectedCertificate(null);
@@ -898,7 +898,7 @@ export default function DashboardPage() {
 
     const maxCount = Math.max(...chartCounts, 1);
     const chartRows = chartCounts.map((count) => (count / maxCount) * 100);
-    const planPill = profile ? formatPlan(profile.plan) : "Free";
+    const planPill = profile ? formatPlan(profile.plan) : "Gratis";
 
     const docLimit =
       profile?.plan === "enterprise" || profile?.plan === "business"
@@ -1060,7 +1060,7 @@ export default function DashboardPage() {
                           : variant === "rejected"
                             ? "Ditolak"
                             : "Draf";
-                    const ext = doc.filename.includes(".") ? doc.filename.split(".").pop()?.toUpperCase() : "FILE";
+                    const ext = doc.filename.includes(".") ? doc.filename.split(".").pop()?.toUpperCase() : "BERKAS";
                     const avatarClass =
                       index % 3 === 0
                         ? styles.docAvatarGreen
@@ -1249,7 +1249,7 @@ export default function DashboardPage() {
                   <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada aktivitas.</div>
                 ) : (
                   feedItems.map((event, index) => {
-                    const actor = toDisplayName(event.actor_email, "System");
+                    const actor = toDisplayName(event.actor_email, "Sistem");
                     const eventText = event.event_type.replace(/_/g, " ").toLowerCase();
                     const dotClass =
                       index % 4 === 0
@@ -1396,7 +1396,7 @@ export default function DashboardPage() {
 
     // If viewing a specific analysis result or just completed an analysis
     if (viewingAnalysisId || analysisResult) {
-      const activeResult = viewingAnalysis || (analysisResult as AnalysisResponse);
+      const activeResult = viewingAnalysis || (analysisResult as unknown as AnalysisResponse);
       const isLoading = viewingAnalysisId && viewingAnalysisLoading;
 
       if (isLoading || !activeResult) {
@@ -2351,7 +2351,7 @@ export default function DashboardPage() {
           type="button"
           className={styles.sidebarToggle}
           onClick={() => setSidebarCollapsed((prev) => !prev)}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={sidebarCollapsed ? "Perluas bilah sisi" : "Tutup bilah sisi"}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
             <path d="M7.5 9L4.5 6L7.5 3" />
