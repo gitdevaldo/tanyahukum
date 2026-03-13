@@ -11,3 +11,4 @@ pydantic[email]==2.12.5
 pydantic-settings==2.13.1
 slowapi==0.1.9
 resend==2.7.0
+psycopg[binary]==3.2.12

@@ -78,3 +78,66 @@ class HealthResponse(BaseModel):
     llm: str = "unknown"
     embeddings: str = "unknown"
     chunks_count: int = 0
+
+
+class RegisterRequest(BaseModel):
+    """Register a new end user account."""
+    email: str = Field(min_length=5, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    name: str = Field(min_length=2, max_length=100)
+    plan: str = Field(default="free", pattern="^(free|starter|plus|b2b_starter|b2b_business|b2b_enterprise)$")
+
+
+class RegisterResponse(BaseModel):
+    success: bool
+    message: str
+    user_id: str
+    email: str
+    email_confirmed: bool
+
+
+class LoginRequest(BaseModel):
+    """Email/password login request."""
+    email: str = Field(min_length=5, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginUser(BaseModel):
+    user_id: str
+    email: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    user: LoginUser
+
+
+class QuotaInfo(BaseModel):
+    analysis_used: int
+    analysis_limit: int | None
+    analysis_remaining: int | None
+    esign_used: int
+    esign_limit: int | None
+    esign_remaining: int | None
+    chat_per_doc_limit: int
+    reset_at: str | None
+
+
+class AuthMeResponse(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    phone: str | None = None
+    plan: str
+    company_name: str | None = None
+    created_at: str | None = None
+    quota: QuotaInfo
+
+
+class QuotaResponse(BaseModel):
+    user_id: str
+    plan: str
+    quota: QuotaInfo

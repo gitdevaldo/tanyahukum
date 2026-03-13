@@ -12,7 +12,8 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.config import settings
-from api.routers import analyze, chat, health, booking
+from api.routers import analyze, chat, health, booking, auth, quota
+from api.services.supabase_auth import ensure_supabase_schema
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +29,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("TanyaHukum API starting up")
+    ensure_supabase_schema()
     yield
     # Shutdown: close Qdrant connection
     try:
@@ -91,6 +93,8 @@ app.add_middleware(
 app.include_router(analyze.router, prefix="/api", tags=["Analysis"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(booking.router, prefix="/api", tags=["Booking"])
+app.include_router(auth.router, prefix="/api", tags=["Auth"])
+app.include_router(quota.router, prefix="/api", tags=["Quota"])
 app.include_router(health.router, prefix="/api", tags=["Health"])
 
 

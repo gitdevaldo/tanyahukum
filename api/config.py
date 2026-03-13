@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     # Qdrant (vector database)
     qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
 
+    # Supabase (auth + relational data)
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
+    supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    supabase_db_url: str = os.getenv("SUPABASE_DB_URL", "")
+
     # Mistral (embeddings)
     mistral_api_key: str = os.getenv("MISTRAL_API_KEY", "")
     mistral_embed_model: str = "mistral-embed"
