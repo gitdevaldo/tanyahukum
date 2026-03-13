@@ -40,9 +40,9 @@
   border-radius: 8px;
   background: linear-gradient(135deg, #1a56e8 0%, #4f8ef7 100%);
   color: #ffffff;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: 0.03em;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -1554,7 +1554,7 @@ export default function DashboardPage() {
     <main className={styles.app}>
       <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         <div className={styles.sidebarHeader}>
-          <div className={styles.logoMark}>T</div>
+          <div className={styles.logoMark}>TH</div>
           <span className={styles.logoText}>TanyaHukum</span>
         </div>
 
