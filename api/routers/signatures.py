@@ -4,7 +4,7 @@ import logging
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
