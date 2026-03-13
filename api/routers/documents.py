@@ -352,6 +352,11 @@ async def get_document_pdf(
         )
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal memuat PDF dokumen.")
+    except Exception as e:
+        _raise_document_error(
+            SupabaseServiceError(status_code=500, detail=str(e)),
+            "Gagal memuat PDF dokumen."
+        )
 
 
 @router.post("/documents/{document_id}/sign-visual")

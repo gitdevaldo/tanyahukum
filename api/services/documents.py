@@ -1012,24 +1012,20 @@ def get_document_pdf_for_signing(
                     status_code=404,
                     detail="Dokumen belum memiliki PDF analisis.",
                 )
-            _append_event(
-                cur,
-                document_id=document_id,
-                event_type="pdf_viewed",
-                actor_user_id=user_id,
-                actor_email=email,
-                request_id=request_id,
-                metadata={"action": "pdf_for_signing"},
-            )
-            conn.commit()
     except SupabaseServiceError:
         raise
     except Exception as e:
+        logger.error(f"Error loading document for PDF signing: {e}", exc_info=True)
         raise SupabaseServiceError(status_code=500, detail=f"Gagal memuat dokumen: {e}")
 
-    original_pdf = get_analysis_pdf(analysis_id)
+    try:
+        original_pdf = get_analysis_pdf(analysis_id)
+    except Exception as e:
+        logger.error(f"Error retrieving PDF from analysis: {e}", exc_info=True)
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal mengambil PDF: {e}")
+    
     if not original_pdf:
-        raise SupabaseServiceError(status_code=404, detail="PDF tidak ditemukan.")
+        raise SupabaseServiceError(status_code=404, detail="PDF tidak ditemukan di storage.")
 
     return {
         "document_id": document_id,
