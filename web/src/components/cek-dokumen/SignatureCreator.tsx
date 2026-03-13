@@ -113,7 +113,7 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
       }
 
       // Save signature to backend
-      const res = await fetch("/api/user/signatures", {
+      const res = await fetch("/api/signatures/user", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
