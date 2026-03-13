@@ -7,6 +7,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui";
 import { clearSession, getAccessToken } from "@/lib/auth-session";
 
+type AccountType = "personal" | "business";
+type Plan = "free" | "starter" | "plus" | "business" | "enterprise" | null;
+
 type QuotaInfo = {
   analysis_used: number;
   analysis_limit: number | null;
@@ -22,26 +25,39 @@ type MeResponse = {
   user_id: string;
   email: string;
   name: string;
-  account_type: "personal" | "business";
-  plan: "free" | "starter" | "plus" | "business" | "enterprise" | null;
+  account_type: AccountType;
+  plan: Plan;
   quota: QuotaInfo;
 };
 
 type QuotaResponse = {
   user_id: string;
-  account_type: "personal" | "business";
-  plan: "free" | "starter" | "plus" | "business" | "enterprise" | null;
+  account_type: AccountType;
+  plan: Plan;
   quota: QuotaInfo;
 };
 
-function formatAccountType(value: "personal" | "business") {
+type StatCardProps = {
+  title: string;
+  value: string;
+  detail: string;
+};
+
+type UsageRowProps = {
+  title: string;
+  used: number;
+  limit: number | null;
+  progress: number | null;
+  progressClass: string;
+  note: string;
+};
+
+function formatAccountType(value: AccountType) {
   return value === "business" ? "Bisnis" : "Personal";
 }
 
-function formatPlan(value: "free" | "starter" | "plus" | "business" | "enterprise" | null) {
-  if (value === null) {
-    return "Belum dipilih";
-  }
+function formatPlan(value: Plan) {
+  if (value === null) return "Belum dipilih";
   const map = {
     free: "Free",
     starter: "Starter",
@@ -53,7 +69,7 @@ function formatPlan(value: "free" | "starter" | "plus" | "business" | "enterpris
 }
 
 function formatResetDate(resetAt: string | null) {
-  if (!resetAt) return "Tidak ada reset";
+  if (!resetAt) return "Belum tersedia";
   const date = new Date(resetAt);
   if (Number.isNaN(date.getTime())) return resetAt;
   return new Intl.DateTimeFormat("id-ID", {
@@ -62,9 +78,53 @@ function formatResetDate(resetAt: string | null) {
   }).format(date);
 }
 
+function formatLimit(value: number | null) {
+  if (value === null) return "Unlimited";
+  return new Intl.NumberFormat("id-ID").format(value);
+}
+
 function calcProgress(used: number, limit: number | null) {
   if (limit === null || limit <= 0) return null;
   return Math.min(100, Math.round((used / limit) * 100));
+}
+
+function StatCard({ title, value, detail }: StatCardProps) {
+  return (
+    <article className="rounded-xl border border-border-light bg-white p-4 shadow-sm sm:p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">
+        {title}
+      </p>
+      <p className="mt-2 text-2xl font-bold leading-none text-dark-navy">{value}</p>
+      <p className="mt-2 text-xs text-neutral-gray">{detail}</p>
+    </article>
+  );
+}
+
+function UsageRow({ title, used, limit, progress, progressClass, note }: UsageRowProps) {
+  return (
+    <div className="rounded-xl border border-border-light bg-light-cream/60 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-dark-navy">{title}</p>
+        <p className="text-sm text-neutral-gray">
+          {used} / {formatLimit(limit)}
+        </p>
+      </div>
+
+      {progress === null ? (
+        <p className="mt-2 text-xs text-neutral-gray">{note}</p>
+      ) : (
+        <>
+          <div className="mt-3 h-2 rounded-full bg-white">
+            <div
+              className={`h-2 rounded-full ${progressClass}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-neutral-gray">{progress}% terpakai</p>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function DashboardPage() {
@@ -145,20 +205,28 @@ export default function DashboardPage() {
     }
   }
 
+  const quotaInfo = quota?.quota ?? null;
   const analysisProgress = useMemo(
-    () => calcProgress(quota?.quota.analysis_used ?? 0, quota?.quota.analysis_limit ?? null),
-    [quota],
+    () => calcProgress(quotaInfo?.analysis_used ?? 0, quotaInfo?.analysis_limit ?? null),
+    [quotaInfo],
   );
   const esignProgress = useMemo(
-    () => calcProgress(quota?.quota.esign_used ?? 0, quota?.quota.esign_limit ?? null),
-    [quota],
+    () => calcProgress(quotaInfo?.esign_used ?? 0, quotaInfo?.esign_limit ?? null),
+    [quotaInfo],
   );
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-light-cream px-4 py-10 sm:px-6">
-        <div className="mx-auto max-w-[1200px] rounded-2xl border border-border-light bg-white p-8 text-center">
-          <p className="text-sm text-neutral-gray">Memuat dashboard...</p>
+      <main className="min-h-screen bg-light-cream px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-[1240px] animate-pulse space-y-4">
+          <div className="h-14 rounded-xl bg-white" />
+          <div className="h-40 rounded-2xl bg-dark-navy/20" />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="h-24 rounded-xl bg-white" />
+            <div className="h-24 rounded-xl bg-white" />
+            <div className="h-24 rounded-xl bg-white" />
+            <div className="h-24 rounded-xl bg-white" />
+          </div>
         </div>
       </main>
     );
@@ -166,8 +234,8 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-light-cream">
-      <header className="border-b border-border-light bg-white px-4 py-3 sm:px-6">
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3">
+      <header className="border-b border-border-light bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
           <Link href="/" className="flex-shrink-0">
             <img src="/logo.svg" alt="TanyaHukum" className="h-9 sm:h-10" />
           </Link>
@@ -188,134 +256,109 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8">
-        <section className="rounded-2xl border border-border-light bg-white p-5 sm:p-7">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-dark-navy sm:text-3xl">
-                {profile?.name || "Dashboard"}
+      <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8">
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={loadData}
+              className="mt-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        )}
+
+        <section className="rounded-2xl bg-gradient-to-br from-dark-navy to-[#243246] p-5 text-white shadow-lg sm:p-7">
+          <div className="grid gap-4 lg:grid-cols-3 lg:items-end">
+            <div className="lg:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-text">
+                Dashboard
+              </p>
+              <h1 className="mt-2 text-2xl font-bold leading-tight sm:text-3xl">
+                Selamat datang, {profile?.name || "Pengguna"}
               </h1>
-              <p className="mt-1 text-sm text-neutral-gray">
-                Kelola akun, kuota, dan aktivitas dokumen Anda dari satu tempat.
+              <p className="mt-2 max-w-2xl text-sm text-muted-text sm:text-base">
+                Ringkasan akun, kuota, dan aktivitas utama Anda dalam satu tampilan
+                yang ringkas.
               </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold">
+                  Akun {profile ? formatAccountType(profile.account_type) : "-"}
+                </span>
+                <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold">
+                  Paket {profile ? formatPlan(profile.plan) : "-"}
+                </span>
+              </div>
             </div>
 
-            <div className="rounded-lg border border-border-light bg-light-cream px-4 py-3 text-sm text-dark-navy">
-              <p>
-                <span className="font-semibold">Akun:</span>{" "}
-                {profile ? formatAccountType(profile.account_type) : "-"}
+            <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-text">
+                Reset Kuota
               </p>
-              <p className="mt-1">
-                <span className="font-semibold">Paket:</span>{" "}
-                {profile ? formatPlan(profile.plan) : "-"}
+              <p className="mt-2 text-sm font-semibold text-white">
+                {formatResetDate(quotaInfo?.reset_at ?? null)}
+              </p>
+              <p className="mt-1 text-xs text-muted-text">
+                Pastikan penggunaan kuota tetap sesuai kebutuhan tim Anda.
               </p>
             </div>
-          </div>
-
-          {error && (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              <p>{error}</p>
-              <button
-                type="button"
-                onClick={loadData}
-                className="mt-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700"
-              >
-                Coba Lagi
-              </button>
-            </div>
-          )}
-        </section>
-
-        <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-border-light bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">
-              Analisis Tersisa
-            </p>
-            <p className="mt-2 text-2xl font-bold text-dark-navy">
-              {quota?.quota.analysis_remaining ?? "Unlimited"}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border-light bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">
-              e-Sign Tersisa
-            </p>
-            <p className="mt-2 text-2xl font-bold text-dark-navy">
-              {quota?.quota.esign_remaining ?? "Unlimited"}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border-light bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">
-              Batas Chat per Dokumen
-            </p>
-            <p className="mt-2 text-2xl font-bold text-dark-navy">
-              {quota?.quota.chat_per_doc_limit ?? "-"}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border-light bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">
-              Reset Kuota
-            </p>
-            <p className="mt-2 text-sm font-semibold text-dark-navy">
-              {formatResetDate(quota?.quota.reset_at ?? null)}
-            </p>
           </div>
         </section>
 
-        <section className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="rounded-xl border border-border-light bg-white p-5 lg:col-span-2">
-            <h2 className="text-lg font-bold text-dark-navy">Penggunaan Kuota</h2>
+        <section className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Analisis Tersisa"
+            value={String(quotaInfo?.analysis_remaining ?? "Unlimited")}
+            detail={`Terpakai ${quotaInfo?.analysis_used ?? 0}`}
+          />
+          <StatCard
+            title="e-Sign Tersisa"
+            value={String(quotaInfo?.esign_remaining ?? "Unlimited")}
+            detail={`Terpakai ${quotaInfo?.esign_used ?? 0}`}
+          />
+          <StatCard
+            title="Chat per Dokumen"
+            value={String(quotaInfo?.chat_per_doc_limit ?? "-")}
+            detail="Batas pesan AI untuk satu dokumen"
+          />
+          <StatCard
+            title="Status Paket"
+            value={profile ? formatPlan(profile.plan) : "-"}
+            detail={profile ? formatAccountType(profile.account_type) : "-"}
+          />
+        </section>
 
-            <div className="mt-4 space-y-5">
-              <div>
-                <div className="flex items-center justify-between text-sm">
-                  <p className="font-medium text-dark-navy">Analisis AI</p>
-                  <p className="text-neutral-gray">
-                    {quota?.quota.analysis_used ?? 0} /{" "}
-                    {quota?.quota.analysis_limit ?? "Unlimited"}
-                  </p>
-                </div>
-                {analysisProgress === null ? (
-                  <p className="mt-2 text-xs text-neutral-gray">
-                    Paket Anda memiliki kuota analisis unlimited.
-                  </p>
-                ) : (
-                  <div className="mt-2 h-2 rounded-full bg-light-cream">
-                    <div
-                      className="h-2 rounded-full bg-primary-orange"
-                      style={{ width: `${analysisProgress}%` }}
-                    />
-                  </div>
-                )}
-              </div>
+        <section className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <article className="rounded-2xl border border-border-light bg-white p-5 shadow-sm lg:col-span-2">
+            <h2 className="text-lg font-bold text-dark-navy">Pemakaian Kuota</h2>
+            <p className="mt-1 text-sm text-neutral-gray">
+              Pantau penggunaan dan sisa kuota untuk periode berjalan.
+            </p>
 
-              <div>
-                <div className="flex items-center justify-between text-sm">
-                  <p className="font-medium text-dark-navy">e-Sign</p>
-                  <p className="text-neutral-gray">
-                    {quota?.quota.esign_used ?? 0} /{" "}
-                    {quota?.quota.esign_limit ?? "Unlimited"}
-                  </p>
-                </div>
-                {esignProgress === null ? (
-                  <p className="mt-2 text-xs text-neutral-gray">
-                    Paket Anda memiliki kuota e-sign unlimited.
-                  </p>
-                ) : (
-                  <div className="mt-2 h-2 rounded-full bg-light-cream">
-                    <div
-                      className="h-2 rounded-full bg-dark-navy"
-                      style={{ width: `${esignProgress}%` }}
-                    />
-                  </div>
-                )}
-              </div>
+            <div className="mt-4 space-y-3">
+              <UsageRow
+                title="Analisis AI"
+                used={quotaInfo?.analysis_used ?? 0}
+                limit={quotaInfo?.analysis_limit ?? null}
+                progress={analysisProgress}
+                progressClass="bg-primary-orange"
+                note="Paket ini memiliki analisis unlimited."
+              />
+              <UsageRow
+                title="e-Sign"
+                used={quotaInfo?.esign_used ?? 0}
+                limit={quotaInfo?.esign_limit ?? null}
+                progress={esignProgress}
+                progressClass="bg-dark-navy"
+                note="Paket ini memiliki e-sign unlimited."
+              />
             </div>
-          </div>
+          </article>
 
-          <div className="rounded-xl border border-border-light bg-white p-5">
+          <article className="rounded-2xl border border-border-light bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-dark-navy">Aksi Cepat</h2>
             <div className="mt-4 space-y-2">
               <Link
@@ -331,21 +374,31 @@ export default function DashboardPage() {
                 Lihat Paket Bisnis
               </Link>
               <Link
-                href="/signup/"
+                href="/cek-dokumen/"
                 className="block rounded-lg border border-border-light px-4 py-3 text-sm font-medium text-dark-navy transition-colors hover:border-primary-orange hover:text-primary-orange"
               >
-                Buat Akun Tambahan
+                Buka Dokumen Terbaru
               </Link>
             </div>
-          </div>
+          </article>
         </section>
 
-        <section className="mt-5 rounded-xl border border-border-light bg-white p-5">
+        <section className="mt-4 rounded-2xl border border-border-light bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-dark-navy">Ringkasan Akun</h2>
-          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg bg-light-cream px-4 py-3">
+              <p className="text-neutral-gray">Nama</p>
+              <p className="mt-1 font-medium text-dark-navy">{profile?.name || "-"}</p>
+            </div>
             <div className="rounded-lg bg-light-cream px-4 py-3">
               <p className="text-neutral-gray">Email</p>
-              <p className="mt-1 font-medium text-dark-navy">{profile?.email || "-"}</p>
+              <p className="mt-1 break-all font-medium text-dark-navy">{profile?.email || "-"}</p>
+            </div>
+            <div className="rounded-lg bg-light-cream px-4 py-3">
+              <p className="text-neutral-gray">Tipe Akun</p>
+              <p className="mt-1 font-medium text-dark-navy">
+                {profile ? formatAccountType(profile.account_type) : "-"}
+              </p>
             </div>
             <div className="rounded-lg bg-light-cream px-4 py-3">
               <p className="text-neutral-gray">User ID</p>
