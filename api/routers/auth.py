@@ -46,7 +46,14 @@ def _raise_auth_error(e: SupabaseServiceError, fallback: str) -> None:
 async def register(request: Request, req: RegisterRequest):
     """Create user account in Supabase Auth and bootstrap app profile/quota."""
     try:
-        result = await asyncio.to_thread(register_user, req.email, req.password, req.name, req.plan)
+        result = await asyncio.to_thread(
+            register_user,
+            req.email,
+            req.password,
+            req.name,
+            req.plan,
+            req.account_type,
+        )
         return RegisterResponse(
             success=True,
             message="Registrasi berhasil.",
@@ -115,9 +122,17 @@ async def me(request: Request, access_token: str = Depends(verify_bearer_token))
         user_id = auth_user["id"]
         email = auth_user.get("email", "")
         name = user_meta.get("name") or auth_user.get("email", "").split("@")[0] or "Pengguna"
+        account_type = user_meta.get("account_type")
         plan = user_meta.get("plan") or "free"
 
-        await asyncio.to_thread(upsert_user_profile_and_quota, user_id, email, name, plan)
+        await asyncio.to_thread(
+            upsert_user_profile_and_quota,
+            user_id,
+            email,
+            name,
+            plan,
+            account_type,
+        )
         profile = await asyncio.to_thread(get_user_profile_and_quota, user_id)
         return AuthMeResponse(**profile)
     except SupabaseServiceError as e:

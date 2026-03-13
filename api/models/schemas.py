@@ -85,7 +85,8 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=8, max_length=128)
     name: str = Field(min_length=2, max_length=100)
-    plan: str = Field(default="free", pattern="^(free|starter|plus|b2b_starter|b2b_business|b2b_enterprise)$")
+    account_type: str = Field(default="personal", pattern="^(personal|business)$")
+    plan: str = Field(default="free", pattern="^(free|starter|plus|business|enterprise)$")
 
 
 class RegisterResponse(BaseModel):
@@ -148,6 +149,7 @@ class AuthMeResponse(BaseModel):
     email: str
     name: str
     phone: str | None = None
+    account_type: str
     plan: str
     company_name: str | None = None
     created_at: str | None = None
@@ -156,6 +158,7 @@ class AuthMeResponse(BaseModel):
 
 class QuotaResponse(BaseModel):
     user_id: str
+    account_type: str
     plan: str
     quota: QuotaInfo
 

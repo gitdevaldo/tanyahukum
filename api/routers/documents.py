@@ -50,8 +50,16 @@ async def _resolve_user(access_token: str) -> tuple[str, str, str, str]:
     user_id = auth_user["id"]
     email = auth_user.get("email", "")
     name = user_meta.get("name") or email.split("@")[0] or "Pengguna"
+    account_type = user_meta.get("account_type")
     plan = user_meta.get("plan") or "free"
-    await asyncio.to_thread(upsert_user_profile_and_quota, user_id, email, name, plan)
+    await asyncio.to_thread(
+        upsert_user_profile_and_quota,
+        user_id,
+        email,
+        name,
+        plan,
+        account_type,
+    )
     return user_id, email, name, plan
 
 

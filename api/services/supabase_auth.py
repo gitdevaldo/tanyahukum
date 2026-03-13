@@ -22,13 +22,22 @@ class SupabaseServiceError(Exception):
         self.detail = detail
 
 
-PLAN_QUOTAS: dict[str, dict[str, int | None]] = {
-    "free": {"analysis_limit": 3, "esign_limit": 50, "chat_per_doc_limit": 10},
-    "starter": {"analysis_limit": 10, "esign_limit": None, "chat_per_doc_limit": 20},
-    "plus": {"analysis_limit": 30, "esign_limit": None, "chat_per_doc_limit": 50},
-    "b2b_starter": {"analysis_limit": 250, "esign_limit": None, "chat_per_doc_limit": 50},
-    "b2b_business": {"analysis_limit": 1000, "esign_limit": None, "chat_per_doc_limit": 50},
-    "b2b_enterprise": {"analysis_limit": None, "esign_limit": None, "chat_per_doc_limit": 50},
+ACCOUNT_PLAN_QUOTAS: dict[str, dict[str, dict[str, int | None]]] = {
+    "personal": {
+        "free": {"analysis_limit": 3, "esign_limit": 50, "chat_per_doc_limit": 10},
+        "starter": {"analysis_limit": 10, "esign_limit": None, "chat_per_doc_limit": 20},
+    },
+    "business": {
+        "plus": {"analysis_limit": 250, "esign_limit": None, "chat_per_doc_limit": 50},
+        "business": {"analysis_limit": 1000, "esign_limit": None, "chat_per_doc_limit": 50},
+        "enterprise": {"analysis_limit": None, "esign_limit": None, "chat_per_doc_limit": 50},
+    },
+}
+
+LEGACY_PLAN_ALIASES: dict[str, tuple[str, str]] = {
+    "b2b_starter": ("business", "plus"),
+    "b2b_business": ("business", "business"),
+    "b2b_enterprise": ("business", "enterprise"),
 }
 
 
@@ -112,11 +121,99 @@ def ensure_supabase_schema() -> bool:
                 email TEXT NOT NULL UNIQUE,
                 name TEXT NOT NULL,
                 phone TEXT NULL,
+                account_type TEXT NOT NULL DEFAULT 'personal',
                 plan TEXT NOT NULL DEFAULT 'free',
                 company_name TEXT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
+            """
+        )
+        cur.execute("ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS account_type TEXT;")
+        cur.execute(
+            """
+            UPDATE public.user_profiles
+            SET plan = CASE
+                WHEN lower(COALESCE(plan, '')) = 'b2b_starter' THEN 'plus'
+                WHEN lower(COALESCE(plan, '')) = 'b2b_business' THEN 'business'
+                WHEN lower(COALESCE(plan, '')) = 'b2b_enterprise' THEN 'enterprise'
+                WHEN lower(COALESCE(plan, '')) IN ('free', 'starter', 'plus', 'business', 'enterprise') THEN lower(plan)
+                ELSE 'free'
+            END;
+            """
+        )
+        cur.execute(
+            """
+            UPDATE public.user_profiles
+            SET account_type = CASE
+                WHEN lower(COALESCE(account_type, '')) IN ('personal', 'business') THEN lower(account_type)
+                WHEN plan IN ('plus', 'business', 'enterprise') THEN 'business'
+                ELSE 'personal'
+            END;
+            """
+        )
+        cur.execute("ALTER TABLE public.user_profiles ALTER COLUMN account_type SET DEFAULT 'personal';")
+        cur.execute("UPDATE public.user_profiles SET account_type = 'personal' WHERE account_type IS NULL;")
+        cur.execute("ALTER TABLE public.user_profiles ALTER COLUMN account_type SET NOT NULL;")
+        cur.execute(
+            """
+            UPDATE public.user_profiles
+            SET account_type = CASE
+                WHEN plan IN ('plus', 'business', 'enterprise') THEN 'business'
+                ELSE 'personal'
+            END
+            WHERE
+                (account_type = 'personal' AND plan IN ('plus', 'business', 'enterprise'))
+                OR (account_type = 'business' AND plan IN ('free', 'starter'));
+            """
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'user_profiles_account_type_check'
+                ) THEN
+                    ALTER TABLE public.user_profiles
+                    ADD CONSTRAINT user_profiles_account_type_check
+                    CHECK (account_type IN ('personal', 'business'));
+                END IF;
+            END
+            $$;
+            """
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'user_profiles_plan_check'
+                ) THEN
+                    ALTER TABLE public.user_profiles
+                    ADD CONSTRAINT user_profiles_plan_check
+                    CHECK (plan IN ('free', 'starter', 'plus', 'business', 'enterprise'));
+                END IF;
+            END
+            $$;
+            """
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'user_profiles_account_plan_check'
+                ) THEN
+                    ALTER TABLE public.user_profiles
+                    ADD CONSTRAINT user_profiles_account_plan_check
+                    CHECK (
+                        (account_type = 'personal' AND plan IN ('free', 'starter'))
+                        OR
+                        (account_type = 'business' AND plan IN ('plus', 'business', 'enterprise'))
+                    );
+                END IF;
+            END
+            $$;
             """
         )
         cur.execute(
@@ -211,11 +308,43 @@ def ensure_supabase_schema() -> bool:
     return True
 
 
-def _normalize_plan(plan: str | None) -> str:
-    normalized = (plan or "free").strip().lower()
-    if normalized not in PLAN_QUOTAS:
-        return "free"
-    return normalized
+def _normalize_account_and_plan(
+    account_type: str | None,
+    plan: str | None,
+    strict: bool = False,
+) -> tuple[str, str]:
+    raw_account_type = (account_type or "").strip().lower()
+    raw_plan = (plan or "").strip().lower()
+
+    if raw_plan in LEGACY_PLAN_ALIASES:
+        return LEGACY_PLAN_ALIASES[raw_plan]
+
+    if raw_account_type == "business":
+        if raw_plan in ACCOUNT_PLAN_QUOTAS["business"]:
+            return "business", raw_plan
+        if strict and raw_plan:
+            raise SupabaseServiceError(
+                status_code=422,
+                detail="Plan untuk account_type business harus plus, business, atau enterprise.",
+            )
+        return "business", "plus"
+
+    if raw_account_type == "personal":
+        if raw_plan in ACCOUNT_PLAN_QUOTAS["personal"]:
+            return "personal", raw_plan
+        if strict and raw_plan:
+            raise SupabaseServiceError(
+                status_code=422,
+                detail="Plan untuk account_type personal harus free atau starter.",
+            )
+        return "personal", "free"
+
+    if raw_plan in ACCOUNT_PLAN_QUOTAS["business"]:
+        return "business", raw_plan
+    if raw_plan in ACCOUNT_PLAN_QUOTAS["personal"]:
+        return "personal", raw_plan
+
+    return "personal", "free"
 
 
 def _quota_remaining(limit: int | None, used: int) -> int | None:
@@ -224,25 +353,32 @@ def _quota_remaining(limit: int | None, used: int) -> int | None:
     return max(0, limit - used)
 
 
-def upsert_user_profile_and_quota(user_id: str, email: str, name: str, plan: str = "free") -> None:
+def upsert_user_profile_and_quota(
+    user_id: str,
+    email: str,
+    name: str,
+    plan: str = "free",
+    account_type: str | None = None,
+) -> None:
     """Upsert app profile + default quotas for a Supabase Auth user."""
-    normalized_plan = _normalize_plan(plan)
-    defaults = PLAN_QUOTAS[normalized_plan]
+    normalized_account_type, normalized_plan = _normalize_account_and_plan(account_type, plan)
+    defaults = ACCOUNT_PLAN_QUOTAS[normalized_account_type][normalized_plan]
 
     try:
         with _db_connect() as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO public.user_profiles (user_id, email, name, plan)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO public.user_profiles (user_id, email, name, account_type, plan)
+                VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (user_id) DO UPDATE
                 SET
                     email = EXCLUDED.email,
                     name = EXCLUDED.name,
+                    account_type = EXCLUDED.account_type,
                     plan = EXCLUDED.plan,
                     updated_at = NOW();
                 """,
-                (user_id, email, name.strip(), normalized_plan),
+                (user_id, email, name.strip(), normalized_account_type, normalized_plan),
             )
             cur.execute(
                 """
@@ -250,7 +386,12 @@ def upsert_user_profile_and_quota(user_id: str, email: str, name: str, plan: str
                     user_id, analysis_used, analysis_limit, esign_used, esign_limit, chat_per_doc_limit, reset_at
                 )
                 VALUES (%s, 0, %s, 0, %s, %s, %s)
-                ON CONFLICT (user_id) DO NOTHING;
+                ON CONFLICT (user_id) DO UPDATE
+                SET
+                    analysis_limit = EXCLUDED.analysis_limit,
+                    esign_limit = EXCLUDED.esign_limit,
+                    chat_per_doc_limit = EXCLUDED.chat_per_doc_limit,
+                    updated_at = NOW();
                 """,
                 (
                     user_id,
@@ -276,6 +417,7 @@ def get_user_profile_and_quota(user_id: str) -> dict:
                     p.email,
                     p.name,
                     p.phone,
+                    p.account_type,
                     p.plan,
                     p.company_name,
                     p.created_at,
@@ -305,6 +447,7 @@ def get_user_profile_and_quota(user_id: str) -> dict:
         "email": row["email"],
         "name": row["name"],
         "phone": row["phone"],
+        "account_type": row["account_type"],
         "plan": row["plan"],
         "company_name": row["company_name"],
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
@@ -421,13 +564,19 @@ def consume_esign_quota(user_id: str) -> dict[str, int | None]:
     }
 
 
-def register_user(email: str, password: str, name: str, plan: str = "free") -> dict:
+def register_user(
+    email: str,
+    password: str,
+    name: str,
+    plan: str = "free",
+    account_type: str | None = None,
+) -> dict:
     """Create user in Supabase Auth, then upsert profile/quota in Postgres.
 
     Uses admin create-user when service key is available so prototype can
     authenticate immediately without email confirmation flow.
     """
-    normalized_plan = _normalize_plan(plan)
+    normalized_account_type, normalized_plan = _normalize_account_and_plan(account_type, plan, strict=True)
     payload: dict
 
     with httpx.Client(timeout=20.0) as client:
@@ -439,7 +588,11 @@ def register_user(email: str, password: str, name: str, plan: str = "free") -> d
                     "email": email,
                     "password": password,
                     "email_confirm": True,
-                    "user_metadata": {"name": name, "plan": normalized_plan},
+                    "user_metadata": {
+                        "name": name,
+                        "account_type": normalized_account_type,
+                        "plan": normalized_plan,
+                    },
                 },
             )
             if response.status_code >= 400:
@@ -449,7 +602,15 @@ def register_user(email: str, password: str, name: str, plan: str = "free") -> d
             response = client.post(
                 f"{settings.supabase_url}/auth/v1/signup",
                 headers=_auth_headers(),
-                json={"email": email, "password": password, "data": {"name": name, "plan": normalized_plan}},
+                json={
+                    "email": email,
+                    "password": password,
+                    "data": {
+                        "name": name,
+                        "account_type": normalized_account_type,
+                        "plan": normalized_plan,
+                    },
+                },
             )
             if response.status_code >= 400:
                 raise SupabaseServiceError(response.status_code, _extract_supabase_error(response))
@@ -466,12 +627,15 @@ def register_user(email: str, password: str, name: str, plan: str = "free") -> d
         email=user.get("email", email),
         name=name,
         plan=normalized_plan,
+        account_type=normalized_account_type,
     )
 
     return {
         "user_id": user["id"],
         "email": user.get("email", email),
         "email_confirmed": bool(user.get("email_confirmed_at")),
+        "account_type": normalized_account_type,
+        "plan": normalized_plan,
     }
 
 

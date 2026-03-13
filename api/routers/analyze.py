@@ -72,9 +72,17 @@ async def analyze_pdf(
             auth_user_id = auth_user["id"]
             auth_email = auth_user.get("email", "")
             name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
+            account_type = user_meta.get("account_type")
             plan = user_meta.get("plan") or "free"
 
-            await asyncio.to_thread(upsert_user_profile_and_quota, auth_user_id, auth_email, name, plan)
+            await asyncio.to_thread(
+                upsert_user_profile_and_quota,
+                auth_user_id,
+                auth_email,
+                name,
+                plan,
+                account_type,
+            )
 
             quota_user_id = auth_user_id
             if document_id:

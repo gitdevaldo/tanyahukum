@@ -243,21 +243,21 @@ Ditampilkan di halaman `/pricing/` atau section pricing di landing page.
 
 Prinsip: **Generous di e-sign, terbatas di analisis AI** — analisis AI adalah premium value.
 
-| Fitur | Gratis | Starter (Rp 29K/bln) | Plus (Rp 79K/bln) |
-|-------|--------|----------------------|---------------------|
-| **e-Sign** | 50/bulan | Unlimited | Unlimited |
-| **AI Analysis** | 3/bulan | 10/bulan | 30/bulan |
-| AI Chatbot per dokumen | 10 pesan | 20 pesan | 50 pesan |
-| Consultation booking | Tersedia | Tersedia | Tersedia |
-| Riwayat analisis | 30 hari | 90 hari | 1 tahun |
-| Export ringkasan PDF | — | Tersedia | Tersedia |
+| Fitur | Gratis | Starter (Rp 29K/bln) |
+|-------|--------|----------------------|
+| **e-Sign** | 50/bulan | Unlimited |
+| **AI Analysis** | 3/bulan | 10/bulan |
+| AI Chatbot per dokumen | 10 pesan | 20 pesan |
+| Consultation booking | Tersedia | Tersedia |
+| Riwayat analisis | 30 hari | 90 hari |
+| Export ringkasan PDF | — | Tersedia |
 
 ## 4.3 B2B Plans (Perusahaan)
 
 Ditampilkan di halaman `/bisnis/`.
 
-| Fitur | Starter (Rp 499K/bln) | Business (Rp 1.5M/bln) | Enterprise (Custom) |
-|-------|------------------------|-------------------------|---------------------|
+| Fitur | Plus (Rp 499K/bln) | Business (Rp 1.5M/bln) | Enterprise (Custom) |
+|-------|---------------------|-------------------------|---------------------|
 | **e-Sign** | Unlimited | Unlimited | Unlimited |
 | **AI Analysis** | 250/bulan | 1.000/bulan | Unlimited |
 | Team members | 5 | 20 | Unlimited |
@@ -425,7 +425,8 @@ User uploads PDF / receives signing link
   email: text,
   name: text,
   phone: text | null,
-  plan: "free" | "starter" | "plus" | "b2b_starter" | "b2b_business" | "b2b_enterprise",
+  account_type: "personal" | "business",
+  plan: "free" | "starter" | "plus" | "business" | "enterprise",
   company_name: text | null,
   created_at: timestamptz,
   updated_at: timestamptz

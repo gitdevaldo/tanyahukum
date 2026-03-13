@@ -28,12 +28,21 @@ async def get_quota(request: Request, access_token: str = Depends(verify_bearer_
         user_id = auth_user["id"]
         email = auth_user.get("email", "")
         name = user_meta.get("name") or auth_user.get("email", "").split("@")[0] or "Pengguna"
+        account_type = user_meta.get("account_type")
         plan = user_meta.get("plan") or "free"
 
-        await asyncio.to_thread(upsert_user_profile_and_quota, user_id, email, name, plan)
+        await asyncio.to_thread(
+            upsert_user_profile_and_quota,
+            user_id,
+            email,
+            name,
+            plan,
+            account_type,
+        )
         profile = await asyncio.to_thread(get_user_profile_and_quota, user_id)
         return QuotaResponse(
             user_id=profile["user_id"],
+            account_type=profile["account_type"],
             plan=profile["plan"],
             quota=profile["quota"],
         )
