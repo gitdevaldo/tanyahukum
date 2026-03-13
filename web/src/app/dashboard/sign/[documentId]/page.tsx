@@ -66,7 +66,7 @@ export default function SigningEditorPage() {
         setDocInfo(doc);
 
         // Fetch PDF file from backend
-        const pdfRes = await fetch(`/api/documents/${documentId}/download`, {
+        const pdfRes = await fetch(`/api/documents/${documentId}/pdf`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (pdfRes.ok) {
@@ -223,7 +223,13 @@ export default function SigningEditorPage() {
           {/* Signature Preview */}
           <div className={styles.section}>
             <h4 className={styles.sectionTitle}>Tanda Tangan Anda</h4>
-            <div className={styles.signaturePreview}>
+            <div
+              className={styles.signaturePreview}
+              draggable
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              style={{ cursor: "grab" }}
+            >
               {signatureData?.type === "text" && (
                 <p style={{ fontSize: 20, fontFamily: "Segoe Print, serif", color: "#333" }}>
                   {signatureData.name}
