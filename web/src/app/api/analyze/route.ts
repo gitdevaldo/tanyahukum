@@ -7,10 +7,14 @@ export const maxDuration = 300; // 5 minutes
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
+    const authorization = req.headers.get("authorization");
 
     const res = await fetch("http://localhost:8000/api/analyze", {
       method: "POST",
-      headers: { "X-API-Key": API_KEY },
+      headers: {
+        "X-API-Key": API_KEY,
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
       body: formData,
       signal: AbortSignal.timeout(300000),
     });

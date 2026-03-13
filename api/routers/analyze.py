@@ -13,8 +13,14 @@ from slowapi.util import get_remote_address
 from api.models.schemas import AnalysisResponse
 from api.services.analyzer import analyze_contract
 from api.services.storage import save_analysis, get_analysis, get_analysis_pdf
-from api.services.guardrails import MAX_FILE_SIZE
-from api.dependencies import verify_api_key
+from api.services.guardrails import MAX_FILE_SIZE, validate_pdf_upload
+from api.dependencies import verify_api_key, get_optional_bearer_token
+from api.services.supabase_auth import (
+    SupabaseServiceError,
+    get_auth_user,
+    upsert_user_profile_and_quota,
+    consume_analysis_quota,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -23,7 +29,11 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/analyze", response_model=AnalysisResponse, dependencies=[Depends(verify_api_key)])
 @limiter.limit("5/minute")
-async def analyze_pdf(request: Request, file: UploadFile = File(...)):
+async def analyze_pdf(
+    request: Request,
+    file: UploadFile = File(...),
+    access_token: str | None = Depends(get_optional_bearer_token),
+):
     """Upload a contract PDF for legal risk analysis."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename diperlukan.")
@@ -40,6 +50,28 @@ async def analyze_pdf(request: Request, file: UploadFile = File(...)):
     # Double-check actual size after read
     if len(pdf_bytes) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File terlalu besar.")
+
+    # Validate file type and structure before quota consumption
+    is_valid, error = validate_pdf_upload(pdf_bytes, file.filename)
+    if not is_valid:
+        raise HTTPException(status_code=422, detail=error)
+
+    # If authenticated user is present, consume analysis quota atomically
+    if access_token:
+        try:
+            auth_user = await asyncio.to_thread(get_auth_user, access_token)
+            user_meta = auth_user.get("user_metadata") or {}
+            user_id = auth_user["id"]
+            email = auth_user.get("email", "")
+            name = user_meta.get("name") or email.split("@")[0] or "Pengguna"
+            plan = user_meta.get("plan") or "free"
+
+            await asyncio.to_thread(upsert_user_profile_and_quota, user_id, email, name, plan)
+            await asyncio.to_thread(consume_analysis_quota, user_id)
+        except SupabaseServiceError as e:
+            if e.status_code >= 500:
+                raise HTTPException(status_code=500, detail="Gagal memverifikasi kuota pengguna.")
+            raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     try:
         result = await analyze_contract(pdf_bytes, file.filename)

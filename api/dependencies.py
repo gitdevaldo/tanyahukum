@@ -25,3 +25,14 @@ async def verify_bearer_token(
     if not credentials or credentials.scheme.lower() != "bearer" or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Bearer token diperlukan.")
     return credentials.credentials
+
+
+async def get_optional_bearer_token(
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
+) -> str | None:
+    """Extract Bearer token when present; return None if absent."""
+    if not credentials:
+        return None
+    if credentials.scheme.lower() != "bearer" or not credentials.credentials:
+        raise HTTPException(status_code=401, detail="Format Bearer token tidak valid.")
+    return credentials.credentials

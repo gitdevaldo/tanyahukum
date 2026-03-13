@@ -247,6 +247,64 @@ def get_user_profile_and_quota(user_id: str) -> dict:
     }
 
 
+def _reset_quotas_if_due(cur, user_id: str) -> None:
+    cur.execute(
+        """
+        UPDATE public.user_quotas
+        SET
+            analysis_used = 0,
+            esign_used = 0,
+            reset_at = date_trunc('month', NOW()) + interval '1 month',
+            updated_at = NOW()
+        WHERE user_id = %s
+          AND reset_at <= NOW();
+        """,
+        (user_id,),
+    )
+
+
+def consume_analysis_quota(user_id: str) -> dict[str, int | None]:
+    """Atomically consume 1 analysis quota for a user."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            _reset_quotas_if_due(cur, user_id)
+            cur.execute(
+                """
+                UPDATE public.user_quotas
+                SET
+                    analysis_used = analysis_used + 1,
+                    updated_at = NOW()
+                WHERE user_id = %s
+                  AND (analysis_limit IS NULL OR analysis_used < analysis_limit)
+                RETURNING analysis_used, analysis_limit;
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute(
+                    "SELECT analysis_used, analysis_limit FROM public.user_quotas WHERE user_id = %s LIMIT 1;",
+                    (user_id,),
+                )
+                current = cur.fetchone()
+                if not current:
+                    raise SupabaseServiceError(status_code=404, detail="Data quota pengguna tidak ditemukan.")
+                raise SupabaseServiceError(status_code=403, detail="Kuota analisis Anda sudah habis.")
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal mengurangi quota analisis: {e}")
+
+    used = row["analysis_used"]
+    limit = row["analysis_limit"]
+    return {
+        "analysis_used": used,
+        "analysis_limit": limit,
+        "analysis_remaining": _quota_remaining(limit, used),
+    }
+
+
 def register_user(email: str, password: str, name: str, plan: str = "free") -> dict:
     """Create user in Supabase Auth, then upsert profile/quota in Postgres.
 
