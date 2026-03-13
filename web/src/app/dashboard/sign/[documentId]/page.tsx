@@ -25,6 +25,13 @@ interface SignatureLocation {
   page: number;
 }
 
+interface RenderedPage {
+  pageNumber: number;
+  width: number;
+  height: number;
+  dataUrl: string;
+}
+
 export default function SigningEditorPage() {
   const router = useRouter();
   const params = useParams();
@@ -44,12 +51,8 @@ export default function SigningEditorPage() {
   } | null>(null);
 
   const [signatureLocation, setSignatureLocation] = useState<SignatureLocation | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [placedOnce, setPlacedOnce] = useState(false);
-  const draggableRef = useRef<HTMLDivElement>(null);
+  const [renderedPages, setRenderedPages] = useState<RenderedPage[]>([]);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [currentPage, setCurrentPage] = useState(1);
 
   // Load document info and signature data
   useEffect(() => {
@@ -113,71 +116,57 @@ export default function SigningEditorPage() {
     load();
   }, [documentId, router]);
 
-  // Render PDF on canvas when data changes
+  // Render all PDF pages to images for a full-document view
   useEffect(() => {
-    if (!pdfData || !canvasRef.current) return;
-
-    const renderPdf = async () => {
+    if (!pdfData) return;
+    const renderPdfPages = async () => {
       try {
         const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
-        
-        // Render first page
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 1.5 });
-        
-        const canvas = canvasRef.current;
-        if (canvas) {
+        const pages: RenderedPage[] = [];
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1.4 });
+          const canvas = document.createElement("canvas");
           canvas.width = viewport.width;
           canvas.height = viewport.height;
-          
           const context = canvas.getContext("2d");
-          if (context) {
-            const renderContext: any = {
-              canvasContext: context,
-              viewport: viewport,
-            };
-            await page.render(renderContext).promise;
-          }
+          if (!context) continue;
+          await page.render({ canvasContext: context as any, viewport } as any).promise;
+          pages.push({
+            pageNumber,
+            width: viewport.width,
+            height: viewport.height,
+            dataUrl: canvas.toDataURL("image/png"),
+          });
         }
+
+        setRenderedPages(pages);
       } catch (err) {
         console.error("Error rendering PDF:", err);
+        setError("Gagal menampilkan PDF.");
       }
     };
 
-    renderPdf();
+    renderPdfPages();
   }, [pdfData]);
 
-  // Handle signature drop on canvas
-  const handleSignatureDrop = (e: React.DragEvent) => {
+  // Handle signature drop on a specific page
+  const handlePageDrop = (e: React.DragEvent<HTMLDivElement>, pageNumber: number) => {
     e.preventDefault();
-    
-    if (!canvasRef.current) return;
-    
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     setSignatureLocation({
       x: Math.max(0, Math.min(x, rect.width - 100)),
       y: Math.max(0, Math.min(y, rect.height - 50)),
-      page: currentPage,
+      page: pageNumber,
     });
-    setPlacedOnce(true);
-    setIsDragging(false);
   };
 
-  // Handle drag start for signature
   const handleDragStart = (e: React.DragEvent) => {
-    setIsDragging(true);
     e.dataTransfer!.effectAllowed = "move";
-  };
-
-  // Handle drag end
-  const handleDragEnd = (e: React.DragEvent) => {
-    if (!isDragging) {
-      setIsDragging(false);
-      return;
-    }
   };
 
   // Handle signing
@@ -275,7 +264,6 @@ export default function SigningEditorPage() {
               className={styles.signaturePreview}
               draggable
               onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
               style={{ cursor: "grab" }}
             >
               {signatureData?.type === "text" && (
@@ -319,66 +307,59 @@ export default function SigningEditorPage() {
         </div>
       </div>
 
-      {/* Right PDF Viewer (70%) - Canvas-based */}
+      {/* Right PDF Viewer (70%) */}
       <div className={styles.pdfViewer} ref={pdfContainerRef}>
-        {/* Draggable Signature - only visible after placed once */}
-        {signatureData && placedOnce && signatureLocation && (
-          <div
-            ref={draggableRef}
-            draggable
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            className={styles.draggableSignature}
-            style={{
-              left: signatureLocation.x,
-              top: signatureLocation.y,
-              cursor: "grab",
-            }}
-          >
-            {signatureData.type === "text" && (
-              <p style={{ fontSize: 18, fontFamily: "Segoe Print, serif", color: "#333", margin: 0 }}>
-                {signatureData.name}
-              </p>
-            )}
-            {signatureData.type === "drawn" && signatureData.content && (
-              <img
-                src={signatureData.content}
-                alt="Signature"
-                style={{ maxWidth: "150px", height: "auto" }}
-              />
-            )}
-            {signatureData.type === "image" && signatureData.content && (
-              <img
-                src={signatureData.content}
-                alt="Signature"
-                style={{ maxWidth: "150px", height: "auto" }}
-              />
-            )}
+        {renderedPages.length > 0 ? (
+          <div className={styles.pagesStack}>
+            {renderedPages.map((page) => (
+              <div
+                key={page.pageNumber}
+                className={styles.pageContainer}
+                style={{ width: page.width, height: page.height }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handlePageDrop(e, page.pageNumber)}
+              >
+                <img
+                  src={page.dataUrl}
+                  alt={`Halaman ${page.pageNumber}`}
+                  className={styles.pageImage}
+                />
+                <div className={styles.pageLabel}>Halaman {page.pageNumber}</div>
+
+                {signatureData && signatureLocation && signatureLocation.page === page.pageNumber && (
+                  <div className={styles.draggableSignature} style={{ left: signatureLocation.x, top: signatureLocation.y }}>
+                    {signatureData.type === "text" && (
+                      <p style={{ fontSize: 18, fontFamily: "Segoe Print, serif", color: "#333", margin: 0 }}>
+                        {signatureData.name}
+                      </p>
+                    )}
+                    {signatureData.type === "drawn" && signatureData.content && (
+                      <img
+                        src={signatureData.content}
+                        alt="Signature"
+                        style={{ maxWidth: "150px", height: "auto" }}
+                      />
+                    )}
+                    {signatureData.type === "image" && signatureData.content && (
+                      <img
+                        src={signatureData.content}
+                        alt="Signature"
+                        style={{ maxWidth: "150px", height: "auto" }}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: 20, textAlign: "center", color: "#999" }}>
+            <p style={{ fontSize: 14, marginTop: 50 }}>PDF Viewer Area</p>
+            <p style={{ fontSize: 12, color: "#bbb" }}>
+              Drag your signature from the left to place it on the document
+            </p>
           </div>
         )}
-
-        {/* PDF Viewer with Canvas */}
-        <div style={{ position: "relative", width: "100%", height: "100%", overflow: "auto", backgroundColor: "#f5f5f5" }}>
-          <canvas
-            ref={canvasRef}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleSignatureDrop}
-            style={{
-              display: "block",
-              margin: "0 auto",
-              backgroundColor: "white",
-              cursor: "crosshair",
-            }}
-          />
-          {!pdfData && (
-            <div style={{ padding: 20, textAlign: "center", color: "#999" }}>
-              <p style={{ fontSize: 14, marginTop: 50 }}>PDF Viewer Area</p>
-              <p style={{ fontSize: 12, color: "#bbb" }}>
-                Drag your signature from the left to place it on the document
-              </p>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
