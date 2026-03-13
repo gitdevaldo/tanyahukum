@@ -33,28 +33,11 @@
   white-space: nowrap;
 }
 
-.logoMark {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+.logoWordmark {
+  height: 24px;
+  width: auto;
+  max-width: 165px;
   display: block;
-  object-fit: contain;
-}
-
-.sidebarBrand {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-
-.logoText {
-  font-family: "Instrument Serif", "Times New Roman", serif;
-  font-size: 18px;
-  font-weight: 400;
-  color: #111827;
-  white-space: nowrap;
   opacity: 1;
   transition: opacity 0.16s ease;
 }
@@ -1146,7 +1129,7 @@
   color: #9ca3af;
 }
 
-.sidebarCollapsed .logoText {
+.sidebarCollapsed .logoWordmark {
   opacity: 0;
   pointer-events: none;
 }

@@ -9,7 +9,7 @@ import styles from "./dashboard.module.css";
 
 type AccountType = "personal" | "business";
 type Plan = "free" | "starter" | "plus" | "business" | "enterprise" | null;
-type DashboardSection = "overview" | "documents" | "account";
+type DashboardSection = "overview" | "documents" | "analysis" | "consultation" | "account";
 type DocumentStatus =
   | "draft"
   | "analyzed"
@@ -295,7 +295,7 @@ export default function DashboardPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeNav, setActiveNav] = useState("Dashboard");
+  const [activeNav, setActiveNav] = useState("Overview");
   const [shareForm, setShareForm] = useState({
     filename: "",
     analysisId: "",
@@ -309,6 +309,13 @@ export default function DashboardPage() {
     documentHash: "",
   });
   const [rejectReason, setRejectReason] = useState("");
+  const [consultForm, setConsultForm] = useState({
+    name: "",
+    email: "",
+    whatsapp: "",
+    analysisId: "",
+  });
+  const [consultSubmitting, setConsultSubmitting] = useState(false);
 
   const selectedDocument = useMemo(
     () => documents.find((doc) => doc.document_id === selectedDocumentId) ?? null,
@@ -485,6 +492,11 @@ export default function DashboardPage() {
       setSignForm((prev) => ({
         ...prev,
         signerName: meData.name || prev.signerName,
+      }));
+      setConsultForm((prev) => ({
+        ...prev,
+        name: prev.name || meData.name || "",
+        email: prev.email || meData.email || "",
       }));
 
       const pendingMine = docsData.documents.find((doc) => doc.my_signer_status === "pending");
@@ -689,6 +701,47 @@ export default function DashboardPage() {
     }
   }
 
+  async function submitConsultation(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (consultSubmitting) return;
+
+    if (!consultForm.name.trim() || !consultForm.email.trim() || !consultForm.whatsapp.trim()) {
+      setError("Nama, email, dan WhatsApp wajib diisi untuk konsultasi.");
+      setNotice(null);
+      return;
+    }
+
+    setConsultSubmitting(true);
+    setError(null);
+    try {
+      const payload = {
+        name: consultForm.name.trim(),
+        email: consultForm.email.trim(),
+        whatsapp: consultForm.whatsapp.trim(),
+        analysis_id: consultForm.analysisId.trim() || null,
+      };
+
+      const res = await fetch("/api/consultation/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(25000),
+      });
+      const data = await res.json().catch(() => ({ detail: "Permintaan konsultasi gagal." }));
+      if (!res.ok) {
+        throw new Error(parseApiError(data, "Permintaan konsultasi gagal."));
+      }
+
+      setNotice("Permintaan konsultasi berhasil dikirim. Tim kami akan menghubungi Anda.");
+      setConsultForm((prev) => ({ ...prev, whatsapp: "", analysisId: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Permintaan konsultasi gagal.");
+      setNotice(null);
+    } finally {
+      setConsultSubmitting(false);
+    }
+  }
+
   function navItemClass(label: string) {
     return `${styles.navItem} ${activeNav === label ? styles.navItemActive : ""}`;
   }
@@ -699,7 +752,16 @@ export default function DashboardPage() {
   );
   const userInitial = toInitials(profile?.name || "Akun");
   const topbarDate = useMemo(() => formatTopbarDate(), []);
-  const topbarTitle = activeSection === "documents" ? "Documents" : activeSection === "account" ? "Account" : "Overview";
+  const topbarTitle =
+    activeSection === "documents"
+      ? "Documents"
+      : activeSection === "analysis"
+        ? "Analysis"
+        : activeSection === "consultation"
+          ? "Consultation"
+          : activeSection === "account"
+            ? "Account"
+            : "Overview";
 
   function renderOverview() {
     const recentDocuments = documents.slice(0, 6);
@@ -838,7 +900,7 @@ export default function DashboardPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   setActiveSection("documents");
-                  setActiveNav("Documents");
+                  setActiveNav("Document Center");
                 }}
               >
                 View all →
@@ -937,7 +999,7 @@ export default function DashboardPage() {
                     onClick={(e) => {
                       e.preventDefault();
                       setActiveSection("documents");
-                      setActiveNav("Documents");
+                      setActiveNav("Document Center");
                     }}
                   >
                     <span className={`${styles.quickIcon} ${styles.quickIconGreen}`}>
@@ -1041,7 +1103,7 @@ export default function DashboardPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   setActiveSection("documents");
-                  setActiveNav("Audit Trail");
+                  setActiveNav("Document Center");
                 }}
               >
                 See all
@@ -1127,6 +1189,175 @@ export default function DashboardPage() {
             </div>
           </article>
         </div>
+      </section>
+    );
+  }
+
+  function renderAnalysisPanel() {
+    const analysisDocuments = documents.filter((doc) => Boolean(doc.analysis_id));
+
+    return (
+      <section className="space-y-4">
+        <article className={styles.card}>
+          <div className={styles.cardHeader}>
+            <div>
+              <p className={styles.cardTitle}>Analysis Workspace</p>
+              <p className={styles.cardSub}>Akses hasil analisis kontrak yang sudah diproses.</p>
+            </div>
+            <Link href="/cek-dokumen/" className={styles.cardLink}>
+              Analyze New Document
+            </Link>
+          </div>
+          <div className={styles.cardBody}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Link
+                href="/cek-dokumen/"
+                className="rounded-lg border border-border-light bg-white px-4 py-3 text-sm font-semibold text-dark-navy hover:border-dark-navy/40"
+              >
+                Upload and Analyze Contract
+              </Link>
+              <Link
+                href="/bisnis/"
+                className="rounded-lg border border-border-light bg-white px-4 py-3 text-sm font-semibold text-dark-navy hover:border-dark-navy/40"
+              >
+                View Business Plans
+              </Link>
+            </div>
+          </div>
+        </article>
+
+        <article className={styles.card}>
+          <div className={styles.cardHeader}>
+            <div>
+              <p className={styles.cardTitle}>Analysis Results</p>
+              <p className={styles.cardSub}>Daftar hasil analisis yang terkait dokumen kolaborasi.</p>
+            </div>
+          </div>
+          <div className={styles.cardBody}>
+            {analysisDocuments.length === 0 ? (
+              <p className="text-sm text-neutral-gray">Belum ada hasil analisis yang tersimpan.</p>
+            ) : (
+              <div className="space-y-2">
+                {analysisDocuments.slice(0, 20).map((doc) => (
+                  <div
+                    key={doc.document_id}
+                    className="flex flex-col gap-3 rounded-lg border border-border-light p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-dark-navy">{doc.filename}</p>
+                      <p className="text-xs text-neutral-gray">
+                        Analysis ID: {doc.analysis_id} · Updated {formatDateTime(doc.updated_at)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {doc.analysis_id ? (
+                        <Link
+                          href={`/cek-dokumen/${doc.analysis_id}/`}
+                          className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
+                        >
+                          Open Result
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDocumentId(doc.document_id);
+                          setActiveSection("documents");
+                          setActiveNav("Document Center");
+                        }}
+                        className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
+                      >
+                        Open in Document Center
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </article>
+      </section>
+    );
+  }
+
+  function renderConsultationPanel() {
+    const analysisOptions = documents.filter((doc) => Boolean(doc.analysis_id));
+
+    return (
+      <section className="space-y-4">
+        <article className={styles.card}>
+          <div className={styles.cardHeader}>
+            <div>
+              <p className={styles.cardTitle}>Book Legal Consultation</p>
+              <p className={styles.cardSub}>Kirim permintaan konsultasi ke tim ahli hukum TanyaHukum.</p>
+            </div>
+          </div>
+          <div className={styles.cardBody}>
+            <form onSubmit={submitConsultation} className="grid gap-3 lg:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Nama Lengkap</label>
+                <input
+                  type="text"
+                  value={consultForm.name}
+                  onChange={(e) => setConsultForm((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                  placeholder="Nama lengkap"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Email</label>
+                <input
+                  type="email"
+                  value={consultForm.email}
+                  onChange={(e) => setConsultForm((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                  placeholder="nama@email.com"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-neutral-gray">WhatsApp</label>
+                <input
+                  type="text"
+                  value={consultForm.whatsapp}
+                  onChange={(e) => setConsultForm((prev) => ({ ...prev, whatsapp: e.target.value }))}
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                  placeholder="+62 8xx xxxx xxxx"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Terkait Analysis ID (Opsional)</label>
+                <select
+                  value={consultForm.analysisId}
+                  onChange={(e) => setConsultForm((prev) => ({ ...prev, analysisId: e.target.value }))}
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                >
+                  <option value="">Tanpa analysis ID</option>
+                  {analysisOptions.map((doc) => (
+                    <option key={doc.document_id} value={doc.analysis_id || ""}>
+                      {doc.filename} ({doc.analysis_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <button
+                  type="submit"
+                  disabled={consultSubmitting}
+                  className="rounded-md bg-dark-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {consultSubmitting ? "Mengirim..." : "Kirim Permintaan Konsultasi"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </article>
       </section>
     );
   }
@@ -1554,8 +1785,7 @@ export default function DashboardPage() {
     <main className={styles.app}>
       <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         <div className={styles.sidebarHeader}>
-          <img src="/favicon.svg" alt="TanyaHukum logo" className={styles.logoMark} />
-          <span className={styles.logoText}>TanyaHukum</span>
+          <img src="/logo.svg" alt="TanyaHukum" className={styles.logoWordmark} />
         </div>
 
         <button
@@ -1574,10 +1804,10 @@ export default function DashboardPage() {
             <p className={styles.navLabel}>Main</p>
             <a
               href="#"
-              className={navItemClass("Dashboard")}
+              className={navItemClass("Overview")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Dashboard");
+                setActiveNav("Overview");
                 setActiveSection("overview");
               }}
             >
@@ -1589,14 +1819,14 @@ export default function DashboardPage() {
                   <rect x="3" y="14" width="7" height="7" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Dashboard</span>
+              <span className={styles.navItemLabel}>Overview</span>
             </a>
             <a
               href="#"
-              className={navItemClass("Documents")}
+              className={navItemClass("Document Center")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Documents");
+                setActiveNav("Document Center");
                 setActiveSection("documents");
               }}
             >
@@ -1606,21 +1836,64 @@ export default function DashboardPage() {
                   <polyline points="14 2 14 8 20 8" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Documents</span>
-              <span className={styles.navBadge}>{documentsMeta.pending_my_action || 12}</span>
+              <span className={styles.navItemLabel}>Document Center</span>
+              <span className={styles.navBadge}>{documentsMeta.pending_my_action}</span>
             </a>
-            <a href="#" className={navItemClass("Signers")} onClick={(e) => { e.preventDefault(); setActiveNav("Signers"); }}>
+            <a
+              href="#"
+              className={navItemClass("Analysis Results")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Analysis Results");
+                setActiveSection("analysis");
+              }}
+            >
               <span className={styles.navIcon}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Signers</span>
+              <span className={styles.navItemLabel}>Analysis Results</span>
             </a>
-            <a href="#" className={navItemClass("Templates")} onClick={(e) => { e.preventDefault(); setActiveNav("Templates"); }}>
+            <a
+              href="#"
+              className={navItemClass("Consultation")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Consultation");
+                setActiveSection("consultation");
+              }}
+            >
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Consultation</span>
+            </a>
+          </div>
+
+          <div className={styles.navSection}>
+            <p className={styles.navLabel}>Workspace</p>
+            <Link
+              href="/cek-dokumen/"
+              className={navItemClass("Analyze Contract")}
+              onClick={() => setActiveNav("Analyze Contract")}
+            >
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Analyze Contract</span>
+            </Link>
+            <Link
+              href="/bisnis/"
+              className={navItemClass("Business Plans")}
+              onClick={() => setActiveNav("Business Plans")}
+            >
               <span className={styles.navIcon}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -1628,66 +1901,18 @@ export default function DashboardPage() {
                   <line x1="12" y1="17" x2="12" y2="21" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Templates</span>
-            </a>
+              <span className={styles.navItemLabel}>Business Plans</span>
+            </Link>
           </div>
 
           <div className={styles.navSection}>
-            <p className={styles.navLabel}>Identity</p>
-            <a href="#" className={navItemClass("e-KYC Verification")} onClick={(e) => { e.preventDefault(); setActiveNav("e-KYC Verification"); }}>
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>e-KYC Verification</span>
-            </a>
-            <a href="#" className={navItemClass("Digital Identity")} onClick={(e) => { e.preventDefault(); setActiveNav("Digital Identity"); }}>
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>Digital Identity</span>
-            </a>
-            <a href="#" className={navItemClass("Certificates")} onClick={(e) => { e.preventDefault(); setActiveNav("Certificates"); }}>
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>Certificates</span>
-            </a>
-            <a href="#" className={navItemClass("Audit Trail")} onClick={(e) => { e.preventDefault(); setActiveNav("Audit Trail"); }}>
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>Audit Trail</span>
-            </a>
-          </div>
-
-          <div className={styles.navSection}>
-            <p className={styles.navLabel}>System</p>
-            <a href="#" className={navItemClass("API & Integrations")} onClick={(e) => { e.preventDefault(); setActiveNav("API & Integrations"); }}>
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 17.66l1.41-1.41" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>API & Integrations</span>
-            </a>
+            <p className={styles.navLabel}>Account</p>
             <a
               href="#"
-              className={navItemClass("Settings")}
+              className={navItemClass("Account Settings")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Settings");
+                setActiveNav("Account Settings");
                 setActiveSection("account");
               }}
             >
@@ -1697,7 +1922,7 @@ export default function DashboardPage() {
                   <circle cx="12" cy="12" r="3" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Settings</span>
+              <span className={styles.navItemLabel}>Account Settings</span>
             </a>
           </div>
         </nav>
@@ -1765,6 +1990,8 @@ export default function DashboardPage() {
 
           {activeSection === "overview" && renderOverview()}
           {activeSection === "documents" && renderDocumentsPanel()}
+          {activeSection === "analysis" && renderAnalysisPanel()}
+          {activeSection === "consultation" && renderConsultationPanel()}
           {activeSection === "account" && renderAccountPanel()}
         </div>
       </section>
