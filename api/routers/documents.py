@@ -335,24 +335,9 @@ async def get_document_pdf(
     try:
         user_id, email, _, _ = await _resolve_user(access_token)
         
-        # Get document from Supabase
-        from api.services.supabase_auth import get_supabase_client
-        sb = get_supabase_client()
-        doc = sb.table("documents").select("*").eq("document_id", document_id).single().execute().data
-        
-        if not doc:
-            raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
-        
-        # Check access (user must be sender or recipient)
-        if doc["owner_id"] != user_id:
-            signers = sb.table("document_signers").select("*").eq("document_id", document_id).eq("signer_email", email).execute().data
-            if not signers:
-                raise HTTPException(status_code=403, detail="Akses ditolak.")
-        
         # Get signed PDF from storage or original
-        from api.services.documents import get_signed_document_pdf as fetch_pdf_service
         result = await asyncio.to_thread(
-            fetch_pdf_service,
+            get_signed_document_pdf,
             document_id,
             user_id,
             email,
