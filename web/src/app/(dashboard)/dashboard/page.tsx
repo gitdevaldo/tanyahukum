@@ -224,7 +224,7 @@ function parseFilenameFromDisposition(contentDisposition: string | null, fallbac
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<DashboardSection>("documents");
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [documents, setDocuments] = useState<DashboardDocumentItem[]>([]);
@@ -675,6 +675,7 @@ export default function DashboardPage() {
     const recentDocuments = documents.slice(0, 6);
     const feedItems = (selectedEvents?.events || []).slice(0, 5);
     const pendingRows = pendingDocuments.slice(0, 5);
+    const chartPalette = ["#1a56e8", "#3b82f6", "#0fc56a", "#f59e0b", "#8b5cf6", "#ff6b35", "#06b6d4"];
 
     return (
       <section>
@@ -853,7 +854,13 @@ export default function DashboardPage() {
               <div className="grid grid-cols-7 gap-2">
                 {[55, 70, 45, 90, 65, 30, 20].map((height, index) => (
                   <div key={index} className="flex flex-col items-center justify-end gap-1">
-                    <div className="w-full bg-dark-navy/90" style={{ height: `${height}px` }} />
+                    <div
+                      className="w-full rounded-t-sm"
+                      style={{
+                        height: `${height}px`,
+                        backgroundColor: chartPalette[index],
+                      }}
+                    />
                     <span className="text-[10px] text-neutral-gray">
                       {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index]}
                     </span>
@@ -1400,7 +1407,7 @@ export default function DashboardPage() {
             >
               {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             </button>
-            <Link href="/cek-dokumen/" className={styles.actionBtn}>
+            <Link href="/cek-dokumen/" className={styles.primaryBtn}>
               Cek Dokumen
             </Link>
             <button
