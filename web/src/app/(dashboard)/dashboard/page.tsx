@@ -316,7 +316,26 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeNav, setActiveNav] = useState("Ringkasan");
+    // Initialize activeNav from localStorage or default to "Ringkasan"
+  const [activeNav, setActiveNavState] = useState("Ringkasan");
+  
+  // Load from localStorage on mount and save when it changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("dashboardActiveNav");
+      if (saved) {
+        setActiveNavState(saved);
+      }
+    }
+  }, []);
+
+  // Wrapper function to save to localStorage when changing nav
+  const setActiveNav = (newNav: string) => {
+    setActiveNavState(newNav);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardActiveNav", newNav);
+    }
+  };
   const [shareForm, setShareForm] = useState({
     filename: "",
     analysisId: "",
