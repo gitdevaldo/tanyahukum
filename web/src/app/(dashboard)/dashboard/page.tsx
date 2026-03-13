@@ -177,7 +177,7 @@ function formatDateTime(value: string | null) {
 }
 
 function formatLimit(value: number | null) {
-  if (value === null) return "Unlimited";
+  if (value === null) return "Tanpa Batas";
   return new Intl.NumberFormat("id-ID").format(value);
 }
 
@@ -258,7 +258,7 @@ function formatTopbarDate() {
   }).format(new Date());
 }
 
-function toDisplayName(email: string | null, fallback = "System") {
+function toDisplayName(email: string | null, fallback = "Sistem") {
   if (!email) return fallback;
   const local = email.split("@")[0] || fallback;
   return local
@@ -1164,7 +1164,7 @@ export default function DashboardPage() {
                       </svg>
                     </span>
                     <p className={styles.quickName}>Pengaturan</p>
-                    <p className={styles.quickDesc}>Akun & plan</p>
+                    <p className={styles.quickDesc}>Akun & paket</p>
                   </a>
                 </div>
               </div>
@@ -1369,7 +1369,7 @@ export default function DashboardPage() {
         setHighlightText(text);
         setActiveClauseIndex(clauseIndex);
         const result = viewingAnalysis || analysisResult;
-        const clause = result?.clauses?.find((c: any) => c.clause_index === clauseIndex);
+        const clause = (result?.clauses as any[])?.find((c: any) => c.clause_index === clauseIndex);
         if (clause) {
           const colorMap: Record<string, string> = {
             high: "rgba(239, 68, 68, 0.3)",
@@ -1475,7 +1475,7 @@ export default function DashboardPage() {
         {/* Upload + Analyze */}
         <article className={styles.card}>
           <div className={styles.cardHeader}>
-            <div><p className={styles.cardTitle}>Analisis Dokumen</p><p className={styles.cardSub}>Upload kontrak PDF untuk dianalisis oleh AI.</p></div>
+            <div><p className={styles.cardTitle}>Analisis Dokumen</p><p className={styles.cardSub}>Unggah kontrak PDF untuk dianalisis oleh AI.</p></div>
           </div>
           <div className={styles.cardBody}>
             {!analysisFile && !analysisRunning && (
@@ -1514,7 +1514,7 @@ export default function DashboardPage() {
           </div>
           <div className={styles.cardBody}>
             {analysisDocuments.length === 0 ? (
-              <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada hasil analisis. Upload dokumen di atas untuk memulai.</div>
+              <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada hasil analisis. Unggah dokumen di atas untuk memulai.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {analysisDocuments.slice(0, 20).map((doc) => (
@@ -1759,7 +1759,7 @@ export default function DashboardPage() {
         {signActiveTab === "quick" && (
           <article className={styles.card}>
             <div className={styles.cardHeader}>
-              <div><p className={styles.cardTitle}>Tanda Tangan Cepat</p><p className={styles.cardSub}>Upload PDF dan tanda tangani langsung dengan sertifikat digital.</p></div>
+              <div><p className={styles.cardTitle}>Tanda Tangan Cepat</p><p className={styles.cardSub}>Unggah PDF dan tanda tangani langsung dengan sertifikat digital.</p></div>
             </div>
             <div className={styles.cardBody}>
               {!signFile && !signResult && (
@@ -2064,7 +2064,7 @@ export default function DashboardPage() {
                             {doc.signers_signed}/{doc.signers_total} selesai
                           </td>
                           <td className="px-4 py-3 sm:px-5 text-dark-navy">
-                            {doc.my_signer_role || "-"} / {doc.my_signer_status || "-"}
+                            {doc.my_signer_role === "sender" ? "Pengirim" : doc.my_signer_role === "recipient" ? "Penerima" : "-"} / {doc.my_signer_status === "signed" ? "Telah TTD" : doc.my_signer_status === "rejected" ? "Ditolak" : doc.my_signer_status === "pending" ? "Tertunda" : "-"}
                           </td>
                           <td className="px-4 py-3 sm:px-5 text-neutral-gray">{formatDateTime(doc.updated_at)}</td>
                         </tr>
@@ -2147,13 +2147,13 @@ export default function DashboardPage() {
 
                 <div className="grid gap-3 border-b border-border-light pb-4">
                   <form onSubmit={submitSign} className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Sign</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Tanda Tangan</p>
                     <input
                       type="text"
                       value={signForm.signerName}
                       onChange={(e) => setSignForm((prev) => ({ ...prev, signerName: e.target.value }))}
                       className="w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                      placeholder="Nama signer"
+                      placeholder="Nama penandatangan"
                       required
                     />
                     <textarea
@@ -2167,7 +2167,7 @@ export default function DashboardPage() {
                       value={signForm.documentHash}
                       onChange={(e) => setSignForm((prev) => ({ ...prev, documentHash: e.target.value }))}
                       className="w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                      placeholder="Document hash"
+                      placeholder="Hash dokumen"
                       required
                     />
                     <button
@@ -2180,7 +2180,7 @@ export default function DashboardPage() {
                   </form>
 
                   <form onSubmit={submitReject} className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Reject</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Tolak</p>
                     <textarea
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
@@ -2210,7 +2210,7 @@ export default function DashboardPage() {
                           <div key={`${signer.email}-${signer.role}`} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{signer.email}</p>
                             <p className="text-[11px] text-neutral-gray">
-                              {signer.role} &bull; {signer.status}
+                              {signer.role === "sender" ? "Pengirim" : "Penerima"} &bull; {signer.status === "signed" ? "Telah TTD" : signer.status === "rejected" ? "Ditolak" : "Tertunda"}
                               {signer.signed_at ? ` \u2022 ${formatDateTime(signer.signed_at)}` : ""}
                             </p>
                           </div>
@@ -2229,7 +2229,7 @@ export default function DashboardPage() {
                           <div key={event.id} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{event.event_type}</p>
                             <p className="text-[11px] text-neutral-gray">
-                              {event.actor_email || "system"} &bull; {formatDateTime(event.created_at)}
+                              {event.actor_email || "sistem"} &bull; {formatDateTime(event.created_at)}
                             </p>
                           </div>
                         ))
@@ -2292,11 +2292,11 @@ export default function DashboardPage() {
                   </td>
                 </tr>
                 <tr className="border-b border-border-light">
-                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Plan</td>
+                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Paket</td>
                   <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile ? formatPlan(profile.plan) : "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-4 py-3 text-neutral-gray sm:px-5">User ID</td>
+                  <td className="px-4 py-3 text-neutral-gray sm:px-5">ID Pengguna</td>
                   <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.user_id || "-"}</td>
                 </tr>
               </tbody>
