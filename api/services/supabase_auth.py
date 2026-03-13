@@ -40,6 +40,12 @@ LEGACY_PLAN_ALIASES: dict[str, tuple[str, str]] = {
     "b2b_enterprise": ("business", "enterprise"),
 }
 
+BUSINESS_UNASSIGNED_QUOTAS: dict[str, int | None] = {
+    "analysis_limit": ACCOUNT_PLAN_QUOTAS["personal"]["free"]["analysis_limit"],
+    "esign_limit": ACCOUNT_PLAN_QUOTAS["personal"]["free"]["esign_limit"],
+    "chat_per_doc_limit": ACCOUNT_PLAN_QUOTAS["personal"]["free"]["chat_per_doc_limit"],
+}
+
 
 def _next_month_reset_at_iso() -> str:
     now = datetime.now(timezone.utc)
@@ -122,7 +128,7 @@ def ensure_supabase_schema() -> bool:
                 name TEXT NOT NULL,
                 phone TEXT NULL,
                 account_type TEXT NOT NULL DEFAULT 'personal',
-                plan TEXT NOT NULL DEFAULT 'free',
+                plan TEXT NULL,
                 company_name TEXT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -130,6 +136,8 @@ def ensure_supabase_schema() -> bool:
             """
         )
         cur.execute("ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS account_type TEXT;")
+        cur.execute("ALTER TABLE public.user_profiles ALTER COLUMN plan DROP NOT NULL;")
+        cur.execute("ALTER TABLE public.user_profiles ALTER COLUMN plan DROP DEFAULT;")
         cur.execute(
             """
             UPDATE public.user_profiles
@@ -138,6 +146,7 @@ def ensure_supabase_schema() -> bool:
                 WHEN lower(COALESCE(plan, '')) = 'b2b_business' THEN 'business'
                 WHEN lower(COALESCE(plan, '')) = 'b2b_enterprise' THEN 'enterprise'
                 WHEN lower(COALESCE(plan, '')) IN ('free', 'starter', 'plus', 'business', 'enterprise') THEN lower(plan)
+                WHEN trim(COALESCE(plan, '')) = '' THEN NULL
                 ELSE 'free'
             END;
             """
@@ -158,62 +167,44 @@ def ensure_supabase_schema() -> bool:
         cur.execute(
             """
             UPDATE public.user_profiles
-            SET account_type = CASE
-                WHEN plan IN ('plus', 'business', 'enterprise') THEN 'business'
-                ELSE 'personal'
-            END
-            WHERE
-                (account_type = 'personal' AND plan IN ('plus', 'business', 'enterprise'))
-                OR (account_type = 'business' AND plan IN ('free', 'starter'));
+            SET
+                account_type = CASE
+                    WHEN plan IN ('plus', 'business', 'enterprise') THEN 'business'
+                    ELSE account_type
+                END,
+                plan = CASE
+                    WHEN account_type = 'personal' AND plan IS NULL THEN 'free'
+                    WHEN account_type = 'business' AND plan IN ('free', 'starter') THEN NULL
+                    ELSE plan
+                END;
+            """
+        )
+        cur.execute("ALTER TABLE public.user_profiles DROP CONSTRAINT IF EXISTS user_profiles_account_type_check;")
+        cur.execute("ALTER TABLE public.user_profiles DROP CONSTRAINT IF EXISTS user_profiles_plan_check;")
+        cur.execute("ALTER TABLE public.user_profiles DROP CONSTRAINT IF EXISTS user_profiles_account_plan_check;")
+        cur.execute(
+            """
+            ALTER TABLE public.user_profiles
+            ADD CONSTRAINT user_profiles_account_type_check
+            CHECK (account_type IN ('personal', 'business'));
             """
         )
         cur.execute(
             """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'user_profiles_account_type_check'
-                ) THEN
-                    ALTER TABLE public.user_profiles
-                    ADD CONSTRAINT user_profiles_account_type_check
-                    CHECK (account_type IN ('personal', 'business'));
-                END IF;
-            END
-            $$;
+            ALTER TABLE public.user_profiles
+            ADD CONSTRAINT user_profiles_plan_check
+            CHECK (plan IS NULL OR plan IN ('free', 'starter', 'plus', 'business', 'enterprise'));
             """
         )
         cur.execute(
             """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'user_profiles_plan_check'
-                ) THEN
-                    ALTER TABLE public.user_profiles
-                    ADD CONSTRAINT user_profiles_plan_check
-                    CHECK (plan IN ('free', 'starter', 'plus', 'business', 'enterprise'));
-                END IF;
-            END
-            $$;
-            """
-        )
-        cur.execute(
-            """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'user_profiles_account_plan_check'
-                ) THEN
-                    ALTER TABLE public.user_profiles
-                    ADD CONSTRAINT user_profiles_account_plan_check
-                    CHECK (
-                        (account_type = 'personal' AND plan IN ('free', 'starter'))
-                        OR
-                        (account_type = 'business' AND plan IN ('plus', 'business', 'enterprise'))
-                    );
-                END IF;
-            END
-            $$;
+            ALTER TABLE public.user_profiles
+            ADD CONSTRAINT user_profiles_account_plan_check
+            CHECK (
+                (account_type = 'personal' AND plan IN ('free', 'starter'))
+                OR
+                (account_type = 'business' AND (plan IS NULL OR plan IN ('plus', 'business', 'enterprise')))
+            );
             """
         )
         cur.execute(
@@ -312,25 +303,25 @@ def _normalize_account_and_plan(
     account_type: str | None,
     plan: str | None,
     strict: bool = False,
-) -> tuple[str, str]:
+) -> tuple[str, str | None]:
     raw_account_type = (account_type or "").strip().lower()
-    raw_plan = (plan or "").strip().lower()
+    raw_plan = (plan or "").strip().lower() or None
 
     if raw_plan in LEGACY_PLAN_ALIASES:
         return LEGACY_PLAN_ALIASES[raw_plan]
 
     if raw_account_type == "business":
-        if raw_plan in ACCOUNT_PLAN_QUOTAS["business"]:
+        if raw_plan and raw_plan in ACCOUNT_PLAN_QUOTAS["business"]:
             return "business", raw_plan
         if strict and raw_plan:
             raise SupabaseServiceError(
                 status_code=422,
                 detail="Plan untuk account_type business harus plus, business, atau enterprise.",
             )
-        return "business", "plus"
+        return "business", None
 
     if raw_account_type == "personal":
-        if raw_plan in ACCOUNT_PLAN_QUOTAS["personal"]:
+        if raw_plan and raw_plan in ACCOUNT_PLAN_QUOTAS["personal"]:
             return "personal", raw_plan
         if strict and raw_plan:
             raise SupabaseServiceError(
@@ -339,12 +330,26 @@ def _normalize_account_and_plan(
             )
         return "personal", "free"
 
-    if raw_plan in ACCOUNT_PLAN_QUOTAS["business"]:
+    if raw_plan and raw_plan in ACCOUNT_PLAN_QUOTAS["business"]:
         return "business", raw_plan
-    if raw_plan in ACCOUNT_PLAN_QUOTAS["personal"]:
+    if raw_plan and raw_plan in ACCOUNT_PLAN_QUOTAS["personal"]:
         return "personal", raw_plan
 
     return "personal", "free"
+
+
+def _resolve_quota_defaults(account_type: str, plan: str | None) -> dict[str, int | None]:
+    if account_type == "business" and plan is None:
+        return BUSINESS_UNASSIGNED_QUOTAS
+    return ACCOUNT_PLAN_QUOTAS[account_type][plan]
+
+
+def resolve_account_plan_from_user_meta(user_meta: dict | None) -> tuple[str, str | None]:
+    meta = user_meta or {}
+    account_type = meta.get("account_type")
+    raw_plan = meta.get("plan")
+    plan = raw_plan if isinstance(raw_plan, str) else None
+    return _normalize_account_and_plan(account_type, plan)
 
 
 def _quota_remaining(limit: int | None, used: int) -> int | None:
@@ -357,12 +362,12 @@ def upsert_user_profile_and_quota(
     user_id: str,
     email: str,
     name: str,
-    plan: str = "free",
+    plan: str | None = None,
     account_type: str | None = None,
 ) -> None:
     """Upsert app profile + default quotas for a Supabase Auth user."""
     normalized_account_type, normalized_plan = _normalize_account_and_plan(account_type, plan)
-    defaults = ACCOUNT_PLAN_QUOTAS[normalized_account_type][normalized_plan]
+    defaults = _resolve_quota_defaults(normalized_account_type, normalized_plan)
 
     try:
         with _db_connect() as conn, conn.cursor() as cur:
@@ -568,7 +573,7 @@ def register_user(
     email: str,
     password: str,
     name: str,
-    plan: str = "free",
+    plan: str | None = None,
     account_type: str | None = None,
 ) -> dict:
     """Create user in Supabase Auth, then upsert profile/quota in Postgres.

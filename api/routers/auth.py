@@ -25,6 +25,7 @@ from api.services.supabase_auth import (
     refresh_session,
     logout_session,
     get_auth_user,
+    resolve_account_plan_from_user_meta,
     upsert_user_profile_and_quota,
     get_user_profile_and_quota,
 )
@@ -122,8 +123,7 @@ async def me(request: Request, access_token: str = Depends(verify_bearer_token))
         user_id = auth_user["id"]
         email = auth_user.get("email", "")
         name = user_meta.get("name") or auth_user.get("email", "").split("@")[0] or "Pengguna"
-        account_type = user_meta.get("account_type")
-        plan = user_meta.get("plan") or "free"
+        account_type, plan = resolve_account_plan_from_user_meta(user_meta)
 
         await asyncio.to_thread(
             upsert_user_profile_and_quota,

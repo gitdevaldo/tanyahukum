@@ -54,7 +54,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-light-cream px-4 py-8 sm:px-6 sm:py-12">
+    <main className="min-h-screen bg-light-cream px-4 py-6 sm:px-6 sm:py-10 lg:flex lg:items-center">
       <div className="mx-auto max-w-6xl overflow-hidden rounded-2xl border border-border-light bg-white shadow-lg">
         <div className="grid lg:grid-cols-2">
           <section className="hidden bg-dark-navy p-10 text-white lg:block">
@@ -85,7 +85,7 @@ export default function LoginPage() {
             </div>
           </section>
 
-          <section className="p-6 sm:p-10">
+          <section className="p-6 sm:p-10 lg:flex lg:flex-col lg:justify-center">
             <Link href="/" className="inline-block lg:hidden">
               <img src="/logo.svg" alt="TanyaHukum" className="h-10" />
             </Link>

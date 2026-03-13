@@ -2,24 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { isAuthenticated, setSession } from "@/lib/auth-session";
 
 type AccountType = "personal" | "business";
-type Plan = "free" | "starter" | "plus" | "business" | "enterprise";
-
-const PLAN_OPTIONS: Record<AccountType, Array<{ value: Plan; label: string }>> = {
-  personal: [
-    { value: "free", label: "Free (Personal)" },
-    { value: "starter", label: "Starter (Personal)" },
-  ],
-  business: [
-    { value: "plus", label: "Plus (Bisnis)" },
-    { value: "business", label: "Business (Bisnis)" },
-    { value: "enterprise", label: "Enterprise (Bisnis)" },
-  ],
-};
 
 type LoginResponse = {
   access_token: string;
@@ -32,23 +19,14 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("personal");
-  const [plan, setPlan] = useState<Plan>("free");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const currentPlans = useMemo(() => PLAN_OPTIONS[accountType], [accountType]);
 
   useEffect(() => {
     if (isAuthenticated()) {
       router.replace("/dashboard/");
-      return;
     }
-
-    const defaultPlan = PLAN_OPTIONS[accountType][0]?.value;
-    if (defaultPlan && !PLAN_OPTIONS[accountType].some((item) => item.value === plan)) {
-      setPlan(defaultPlan);
-    }
-  }, [accountType, plan, router]);
+  }, [router]);
 
   async function autoLogin(nextEmail: string, nextPassword: string) {
     const loginRes = await fetch("/api/auth/login/", {
@@ -83,7 +61,6 @@ export default function SignupPage() {
           email,
           password,
           account_type: accountType,
-          plan,
         }),
         signal: AbortSignal.timeout(20000),
       });
@@ -102,7 +79,7 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-light-cream px-4 py-8 sm:px-6 sm:py-12">
+    <main className="min-h-screen bg-light-cream px-4 py-6 sm:px-6 sm:py-10 lg:flex lg:items-center">
       <div className="mx-auto max-w-6xl overflow-hidden rounded-2xl border border-border-light bg-white shadow-lg">
         <div className="grid lg:grid-cols-2">
           <section className="hidden bg-dark-navy p-10 text-white lg:block">
@@ -113,16 +90,16 @@ export default function SignupPage() {
               Buat akun TanyaHukum
             </h1>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-text">
-              Pilih tipe akun sesuai kebutuhan Anda lalu mulai kelola analisis
-              kontrak dan tanda tangan digital dari dashboard.
+              Pilih tipe akun sesuai kebutuhan Anda. Paket akan ditentukan
+              otomatis saat daftar, dan bisa di-upgrade nanti dari dashboard.
             </p>
 
             <div className="mt-10 rounded-xl border border-white/15 bg-white/5 p-5">
-              <h2 className="text-sm font-semibold">Ringkasan paket</h2>
+              <h2 className="text-sm font-semibold">Default saat registrasi</h2>
               <ul className="mt-3 space-y-2 text-xs text-muted-text">
-                <li>Personal: free dan starter</li>
-                <li>Bisnis: plus, business, enterprise</li>
-                <li>Semua akun bisa langsung dipakai setelah daftar</li>
+                <li>Personal: otomatis paket free</li>
+                <li>Bisnis: plan kosong (belum dipilih)</li>
+                <li>Upgrade paket dilakukan nanti</li>
               </ul>
             </div>
           </section>
@@ -197,45 +174,22 @@ export default function SignupPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="accountType"
-                    className="mb-1 block text-sm font-medium text-dark-navy"
-                  >
-                    Tipe Akun
-                  </label>
-                  <select
-                    id="accountType"
-                    value={accountType}
-                    onChange={(e) => setAccountType(e.target.value as AccountType)}
-                    className="w-full rounded-lg border border-border-light px-4 py-3 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
-                  >
-                    <option value="personal">Personal</option>
-                    <option value="business">Bisnis</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="plan"
-                    className="mb-1 block text-sm font-medium text-dark-navy"
-                  >
-                    Paket
-                  </label>
-                  <select
-                    id="plan"
-                    value={plan}
-                    onChange={(e) => setPlan(e.target.value as Plan)}
-                    className="w-full rounded-lg border border-border-light px-4 py-3 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
-                  >
-                    {currentPlans.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label
+                  htmlFor="accountType"
+                  className="mb-1 block text-sm font-medium text-dark-navy"
+                >
+                  Tipe Akun
+                </label>
+                <select
+                  id="accountType"
+                  value={accountType}
+                  onChange={(e) => setAccountType(e.target.value as AccountType)}
+                  className="w-full rounded-lg border border-border-light px-4 py-3 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
+                >
+                  <option value="personal">Personal</option>
+                  <option value="business">Bisnis</option>
+                </select>
               </div>
 
               {error && (

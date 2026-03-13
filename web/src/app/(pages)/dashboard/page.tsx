@@ -23,14 +23,14 @@ type MeResponse = {
   email: string;
   name: string;
   account_type: "personal" | "business";
-  plan: "free" | "starter" | "plus" | "business" | "enterprise";
+  plan: "free" | "starter" | "plus" | "business" | "enterprise" | null;
   quota: QuotaInfo;
 };
 
 type QuotaResponse = {
   user_id: string;
   account_type: "personal" | "business";
-  plan: "free" | "starter" | "plus" | "business" | "enterprise";
+  plan: "free" | "starter" | "plus" | "business" | "enterprise" | null;
   quota: QuotaInfo;
 };
 
@@ -38,7 +38,10 @@ function formatAccountType(value: "personal" | "business") {
   return value === "business" ? "Bisnis" : "Personal";
 }
 
-function formatPlan(value: "free" | "starter" | "plus" | "business" | "enterprise") {
+function formatPlan(value: "free" | "starter" | "plus" | "business" | "enterprise" | null) {
+  if (value === null) {
+    return "Belum dipilih";
+  }
   const map = {
     free: "Free",
     starter: "Starter",

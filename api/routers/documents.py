@@ -20,6 +20,7 @@ from api.models.schemas import (
 from api.services.supabase_auth import (
     SupabaseServiceError,
     get_auth_user,
+    resolve_account_plan_from_user_meta,
     upsert_user_profile_and_quota,
 )
 from api.services.documents import (
@@ -44,14 +45,13 @@ def _raise_document_error(e: SupabaseServiceError, fallback: str) -> None:
     raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
-async def _resolve_user(access_token: str) -> tuple[str, str, str, str]:
+async def _resolve_user(access_token: str) -> tuple[str, str, str, str | None]:
     auth_user = await asyncio.to_thread(get_auth_user, access_token)
     user_meta = auth_user.get("user_metadata") or {}
     user_id = auth_user["id"]
     email = auth_user.get("email", "")
     name = user_meta.get("name") or email.split("@")[0] or "Pengguna"
-    account_type = user_meta.get("account_type")
-    plan = user_meta.get("plan") or "free"
+    account_type, plan = resolve_account_plan_from_user_meta(user_meta)
     await asyncio.to_thread(
         upsert_user_profile_and_quota,
         user_id,

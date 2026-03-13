@@ -19,6 +19,7 @@ from api.services.documents import resolve_document_analysis_quota_owner, attach
 from api.services.supabase_auth import (
     SupabaseServiceError,
     get_auth_user,
+    resolve_account_plan_from_user_meta,
     upsert_user_profile_and_quota,
     consume_analysis_quota,
 )
@@ -72,8 +73,7 @@ async def analyze_pdf(
             auth_user_id = auth_user["id"]
             auth_email = auth_user.get("email", "")
             name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
-            account_type = user_meta.get("account_type")
-            plan = user_meta.get("plan") or "free"
+            account_type, plan = resolve_account_plan_from_user_meta(user_meta)
 
             await asyncio.to_thread(
                 upsert_user_profile_and_quota,
