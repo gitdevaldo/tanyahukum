@@ -1793,7 +1793,7 @@ export default function DashboardPage() {
                         <tr key={doc.document_id} onClick={() => loadSignPanelDoc(doc.document_id)} style={{ cursor: "pointer", background: signPanelDocId === doc.document_id ? "#f8fafc" : undefined }}>
                           <td><span className={styles.docName}>{doc.filename}</span></td>
                           <td><span className={`${styles.badge} ${styles[`badge${statusVariant(doc.status).charAt(0).toUpperCase() + statusVariant(doc.status).slice(1)}` as keyof typeof styles] || ""}`}>{formatStatus(doc.status)}</span></td>
-                          <td style={{ fontSize: 12, color: "#64748b" }}>{doc.my_signer_role === "sender" ? "Pengirim" : "Penerima"}</td>
+                          <td style={{ fontSize: 12, color: "#64748b" }}>{doc.my_signer_role === "sender" ? "Pemilik" : "Penandatangan"}</td>
                           <td style={{ fontSize: 12, color: "#64748b" }}>{doc.signers_signed}/{doc.signers_total} ditandatangani</td>
                           <td style={{ fontSize: 12, color: "#94a3b8" }}>{formatShortDate(doc.updated_at)}</td>
                         </tr>
@@ -1828,7 +1828,7 @@ export default function DashboardPage() {
                           {signPanelSigners.signers.map((s) => (
                             <div key={s.email} className={styles.signerRow}>
                               <span className={`${styles.docAvatar} ${s.status === "signed" ? styles.docAvatarGreen : s.status === "rejected" ? styles.docAvatarAmber : styles.docAvatarBlue}`}>{toInitials(s.name || s.email)}</span>
-                              <div className={styles.signerInfo}><p className={styles.signerName}>{s.name || s.email}</p><p className={styles.signerEmail}>{s.email} - {s.role === "sender" ? "Pengirim" : "Penerima"}</p></div>
+                              <div className={styles.signerInfo}><p className={styles.signerName}>{s.name || s.email}</p><p className={styles.signerEmail}>{s.email} - {s.role === "sender" ? "Pemilik" : "Penandatangan"}</p></div>
                               <span className={`${styles.badge} ${s.status === "signed" ? styles.badgeSigned : s.status === "rejected" ? styles.badgeRejected : styles.badgePending}`}>{s.status === "signed" ? "Telah TTD" : s.status === "rejected" ? "Ditolak" : "Tertunda"}</span>
                             </div>
                           ))}
@@ -2238,7 +2238,7 @@ export default function DashboardPage() {
                             {doc.signers_signed}/{doc.signers_total} selesai
                           </td>
                           <td className="px-4 py-3 sm:px-5 text-dark-navy">
-                            {doc.my_signer_role === "sender" ? "Pengirim" : doc.my_signer_role === "recipient" ? "Penerima" : "-"} / {doc.my_signer_status === "signed" ? "Telah TTD" : doc.my_signer_status === "rejected" ? "Ditolak" : doc.my_signer_status === "pending" ? "Tertunda" : "-"}
+                            {doc.my_signer_role === "sender" ? "Pemilik" : doc.my_signer_role === "recipient" ? "Penandatangan" : "-"} / {doc.my_signer_status === "signed" ? "Telah TTD" : doc.my_signer_status === "rejected" ? "Ditolak" : doc.my_signer_status === "pending" ? "Tertunda" : "-"}
                           </td>
                           <td className="px-4 py-3 sm:px-5 text-neutral-gray">{formatDateTime(doc.updated_at)}</td>
                         </tr>
@@ -2384,7 +2384,7 @@ export default function DashboardPage() {
                           <div key={`${signer.email}-${signer.role}`} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{signer.email}</p>
                             <p className="text-[11px] text-neutral-gray">
-                              {signer.role === "sender" ? "Pengirim" : "Penerima"} &bull; {signer.status === "signed" ? "Telah TTD" : signer.status === "rejected" ? "Ditolak" : "Tertunda"}
+                              {signer.role === "sender" ? "Pemilik" : "Penandatangan"} &bull; {signer.status === "signed" ? "Telah TTD" : signer.status === "rejected" ? "Ditolak" : "Tertunda"}
                               {signer.signed_at ? ` \u2022 ${formatDateTime(signer.signed_at)}` : ""}
                             </p>
                           </div>
