@@ -168,6 +168,10 @@ function formatLimit(value: number | null) {
   return new Intl.NumberFormat("id-ID").format(value);
 }
 
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
 function calcProgress(used: number, limit: number | null) {
   if (limit === null || limit <= 0) return null;
   return Math.min(100, Math.round((used / limit) * 100));
@@ -693,8 +697,9 @@ export default function DashboardPage() {
     () => documents.filter((doc) => doc.my_signer_status === "pending").slice(0, 8),
     [documents],
   );
-  const userInitial = profile?.name?.trim()?.charAt(0)?.toUpperCase() || "A";
+  const userInitial = toInitials(profile?.name || "Akun");
   const topbarDate = useMemo(() => formatTopbarDate(), []);
+  const topbarTitle = activeSection === "documents" ? "Documents" : activeSection === "account" ? "Account" : "Overview";
 
   function renderOverview() {
     const recentDocuments = documents.slice(0, 6);
@@ -752,8 +757,11 @@ export default function DashboardPage() {
                 </svg>
               </span>
             </div>
-            <p className={styles.statValue}>{documentsMeta.total}</p>
+            <p className={styles.statValue}>{formatNumber(documentsMeta.total)}</p>
             <p className={`${styles.statChange} ${styles.changeUp}`}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
               +12.4% <span>vs last month</span>
             </p>
           </article>
@@ -767,8 +775,11 @@ export default function DashboardPage() {
                 </svg>
               </span>
             </div>
-            <p className={styles.statValue}>{signedThisMonth}</p>
+            <p className={styles.statValue}>{formatNumber(signedThisMonth)}</p>
             <p className={`${styles.statChange} ${styles.changeUp}`}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
               +8.7% <span>vs last month</span>
             </p>
           </article>
@@ -783,8 +794,11 @@ export default function DashboardPage() {
                 </svg>
               </span>
             </div>
-            <p className={styles.statValue}>{awaitingSignatures}</p>
+            <p className={styles.statValue}>{formatNumber(awaitingSignatures)}</p>
             <p className={`${styles.statChange} ${styles.changeDown}`}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
               +3.2% <span>vs last month</span>
             </p>
           </article>
@@ -801,8 +815,11 @@ export default function DashboardPage() {
                 </svg>
               </span>
             </div>
-            <p className={styles.statValue}>{verifiedUsers}</p>
+            <p className={styles.statValue}>{formatNumber(verifiedUsers)}</p>
             <p className={`${styles.statChange} ${styles.changeUp}`}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
               +21.1% <span>vs last month</span>
             </p>
           </article>
@@ -815,7 +832,15 @@ export default function DashboardPage() {
                 <p className={styles.cardTitle}>Recent Documents</p>
                 <p className={styles.cardSub}>Latest document activity across your organization</p>
               </div>
-              <a href="#" className={styles.cardLink}>
+              <a
+                href="#"
+                className={styles.cardLink}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveSection("documents");
+                  setActiveNav("Documents");
+                }}
+              >
                 View all →
               </a>
             </div>
@@ -906,7 +931,15 @@ export default function DashboardPage() {
                     <p className={styles.quickDesc}>PDF or DOCX</p>
                   </Link>
 
-                  <a href="#" className={styles.quickBtn}>
+                  <a
+                    href="#"
+                    className={styles.quickBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveSection("documents");
+                      setActiveNav("Documents");
+                    }}
+                  >
                     <span className={`${styles.quickIcon} ${styles.quickIconGreen}`}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 20h9" />
@@ -1002,7 +1035,15 @@ export default function DashboardPage() {
           <article className={styles.card}>
             <div className={styles.cardHeader}>
               <div className={styles.cardTitle}>Activity Feed</div>
-              <a href="#" className={styles.cardLink}>
+              <a
+                href="#"
+                className={styles.cardLink}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveSection("documents");
+                  setActiveNav("Audit Trail");
+                }}
+              >
                 See all
               </a>
             </div>
@@ -1531,7 +1572,15 @@ export default function DashboardPage() {
         <nav className={styles.nav}>
           <div className={styles.navSection}>
             <p className={styles.navLabel}>Main</p>
-            <a href="#" className={navItemClass("Dashboard")} onClick={(e) => { e.preventDefault(); setActiveNav("Dashboard"); }}>
+            <a
+              href="#"
+              className={navItemClass("Dashboard")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Dashboard");
+                setActiveSection("overview");
+              }}
+            >
               <span className={styles.navIcon}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7" />
@@ -1542,7 +1591,15 @@ export default function DashboardPage() {
               </span>
               <span className={styles.navItemLabel}>Dashboard</span>
             </a>
-            <a href="#" className={navItemClass("Documents")} onClick={(e) => { e.preventDefault(); setActiveNav("Documents"); }}>
+            <a
+              href="#"
+              className={navItemClass("Documents")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Documents");
+                setActiveSection("documents");
+              }}
+            >
               <span className={styles.navIcon}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1625,7 +1682,15 @@ export default function DashboardPage() {
               </span>
               <span className={styles.navItemLabel}>API & Integrations</span>
             </a>
-            <a href="#" className={navItemClass("Settings")} onClick={(e) => { e.preventDefault(); setActiveNav("Settings"); }}>
+            <a
+              href="#"
+              className={navItemClass("Settings")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Settings");
+                setActiveSection("account");
+              }}
+            >
               <span className={styles.navIcon}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
@@ -1651,7 +1716,7 @@ export default function DashboardPage() {
       <section className={styles.main}>
         <header className={styles.topbar}>
           <div className={styles.topbarLeft}>
-            <p className={styles.topbarTitle}>Overview</p>
+            <p className={styles.topbarTitle}>{topbarTitle}</p>
             <p className={styles.topbarSub}>{topbarDate}</p>
           </div>
 
