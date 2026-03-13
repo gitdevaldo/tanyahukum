@@ -1931,9 +1931,14 @@ export default function DashboardPage() {
                             <button type="button" onClick={handleOpenSigningPage} className={styles.signBtn}>
                               Buka Editor Penandatanganan
                             </button>
-                            <button type="button" onClick={() => { setPanelCanSign(false); setPanelSignatureName(""); setPanelSignatureType(null); setPanelSignatureImage(null); }} className={styles.signBtn} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>
-                              Buat Tanda Tangan Baru
-                            </button>
+                            <div style={{ display: "flex", gap: 12 }}>
+                              <button type="button" onClick={() => { setPanelCanSign(false); setPanelSignatureName(""); setPanelSignatureType(null); setPanelSignatureImage(null); }} className={styles.signBtn} style={{ flex: 1, background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>
+                                Ulangi
+                              </button>
+                              <button type="button" onClick={handleOpenSigningPage} className={styles.signBtn} style={{ flex: 1 }}>
+                                Tanda Tangani
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
