@@ -837,6 +837,15 @@
   background: #94a3b8;
 }
 
+.badgeAnalyzed {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.badgeAnalyzed::before {
+  background: #3b82f6;
+}
+
 .badgeRejected {
   background: #fef2f2;
   color: #dc2626;

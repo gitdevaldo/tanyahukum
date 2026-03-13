@@ -280,6 +280,7 @@ function statusVariant(status: DocumentStatus) {
   if (status === "completed") return "signed";
   if (status === "pending_signatures" || status === "partially_signed") return "pending";
   if (status === "rejected") return "rejected";
+  if (status === "analyzed") return "analyzed";
   return "draft";
 }
 

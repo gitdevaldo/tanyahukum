@@ -527,6 +527,25 @@ def consume_analysis_quota(user_id: str) -> dict[str, int | None]:
     }
 
 
+def refund_analysis_quota(user_id: str) -> None:
+    """Atomically refund 1 analysis quota for a user (on failure)."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE public.user_quotas
+                SET
+                    analysis_used = GREATEST(0, analysis_used - 1),
+                    updated_at = NOW()
+                WHERE user_id = %s;
+                """,
+                (user_id,),
+            )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to refund analysis quota: {e}")
+
+
 def consume_esign_quota(user_id: str) -> dict[str, int | None]:
     """Atomically consume 1 e-sign quota for a user."""
     try:

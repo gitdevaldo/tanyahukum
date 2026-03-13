@@ -22,6 +22,7 @@ from api.services.supabase_auth import (
     resolve_account_plan_from_user_meta,
     upsert_user_profile_and_quota,
     consume_analysis_quota,
+    refund_analysis_quota,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,9 +142,26 @@ async def analyze_pdf(
 
         return result
     except ValueError as e:
+        if auth_user_id:
+            try:
+                await asyncio.to_thread(refund_analysis_quota, quota_user_id)
+            except Exception as refund_err:
+                logger.error(f"Failed to refund quota during ValueError: {refund_err}")
         raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException as e:
+        if auth_user_id:
+            try:
+                await asyncio.to_thread(refund_analysis_quota, quota_user_id)
+            except Exception as refund_err:
+                logger.error(f"Failed to refund quota during HTTPException: {refund_err}")
+        raise e
     except Exception as e:
         logger.error(f"Analysis failed: {e}", exc_info=True)
+        if auth_user_id:
+            try:
+                await asyncio.to_thread(refund_analysis_quota, quota_user_id)
+            except Exception as refund_err:
+                logger.error(f"Failed to refund quota during general Exception: {refund_err}")
         raise HTTPException(status_code=500, detail="Analisis gagal. Silakan coba lagi.")
 
 
