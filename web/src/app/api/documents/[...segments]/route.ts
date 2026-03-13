@@ -13,13 +13,14 @@ function getAuthorization(req: NextRequest) {
 function isPdfRoute(segments: string[]) {
   return (
     (segments.length === 3 && segments[1] === "certificate" && segments[2] === "pdf") ||
-    (segments.length === 2 && segments[1] === "signed-pdf")
+    (segments.length === 2 && segments[1] === "signed-pdf") ||
+    (segments.length === 2 && segments[1] === "pdf")
   );
 }
 
 function isAllowedGetRoute(segments: string[]) {
   if (segments.length === 2 && DOCUMENT_ID_RE.test(segments[0])) {
-    return ["signers", "events", "analysis", "certificate", "signed-pdf"].includes(segments[1]);
+    return ["signers", "events", "analysis", "certificate", "signed-pdf", "pdf"].includes(segments[1]);
   }
   return segments.length === 3
     && DOCUMENT_ID_RE.test(segments[0])

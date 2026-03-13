@@ -11,14 +11,6 @@ async function proxyRequest(
   segments: string[],
   method: string,
 ) {
-  // Skip if this is the documents endpoint (handled by documents/[...segments])
-  if (segments[0] === "documents") {
-    return NextResponse.json(
-      { detail: "Use /api/documents/ path" },
-      { status: 400 }
-    );
-  }
-
   const authorization = getAuthorization(req);
   const encodedSegments = segments.map((segment) => encodeURIComponent(segment));
   const backendUrl = `http://localhost:8000/api/${encodedSegments.join("/")}`;
