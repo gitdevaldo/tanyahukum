@@ -58,6 +58,19 @@ def _auth_headers(token: str | None = None) -> dict[str, str]:
     return headers
 
 
+def _service_headers() -> dict[str, str]:
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        raise SupabaseServiceError(
+            status_code=503,
+            detail="Supabase service key belum dikonfigurasi.",
+        )
+    return {
+        "apikey": settings.supabase_service_role_key,
+        "Authorization": f"Bearer {settings.supabase_service_role_key}",
+        "Content-Type": "application/json",
+    }
+
+
 def _require_db_url() -> str:
     if not settings.supabase_db_url:
         raise SupabaseServiceError(
@@ -142,68 +155,76 @@ def upsert_user_profile_and_quota(user_id: str, email: str, name: str, plan: str
     normalized_plan = _normalize_plan(plan)
     defaults = PLAN_QUOTAS[normalized_plan]
 
-    with _db_connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO public.user_profiles (user_id, email, name, plan)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE
-            SET
-                email = EXCLUDED.email,
-                name = EXCLUDED.name,
-                plan = EXCLUDED.plan,
-                updated_at = NOW();
-            """,
-            (user_id, email, name.strip(), normalized_plan),
-        )
-        cur.execute(
-            """
-            INSERT INTO public.user_quotas (
-                user_id, analysis_used, analysis_limit, esign_used, esign_limit, chat_per_doc_limit, reset_at
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO public.user_profiles (user_id, email, name, plan)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET
+                    email = EXCLUDED.email,
+                    name = EXCLUDED.name,
+                    plan = EXCLUDED.plan,
+                    updated_at = NOW();
+                """,
+                (user_id, email, name.strip(), normalized_plan),
             )
-            VALUES (%s, 0, %s, 0, %s, %s, %s)
-            ON CONFLICT (user_id) DO NOTHING;
-            """,
-            (
-                user_id,
-                defaults["analysis_limit"],
-                defaults["esign_limit"],
-                defaults["chat_per_doc_limit"],
-                _next_month_reset_at_iso(),
-            ),
-        )
-        conn.commit()
+            cur.execute(
+                """
+                INSERT INTO public.user_quotas (
+                    user_id, analysis_used, analysis_limit, esign_used, esign_limit, chat_per_doc_limit, reset_at
+                )
+                VALUES (%s, 0, %s, 0, %s, %s, %s)
+                ON CONFLICT (user_id) DO NOTHING;
+                """,
+                (
+                    user_id,
+                    defaults["analysis_limit"],
+                    defaults["esign_limit"],
+                    defaults["chat_per_doc_limit"],
+                    _next_month_reset_at_iso(),
+                ),
+            )
+            conn.commit()
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyimpan profil pengguna: {e}")
 
 
 def get_user_profile_and_quota(user_id: str) -> dict:
     """Read user profile + quota from Supabase Postgres."""
-    with _db_connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT
-                p.user_id,
-                p.email,
-                p.name,
-                p.phone,
-                p.plan,
-                p.company_name,
-                p.created_at,
-                q.analysis_used,
-                q.analysis_limit,
-                q.esign_used,
-                q.esign_limit,
-                q.chat_per_doc_limit,
-                q.reset_at
-            FROM public.user_profiles p
-            JOIN public.user_quotas q ON q.user_id = p.user_id
-            WHERE p.user_id = %s
-            LIMIT 1;
-            """,
-            (user_id,),
-        )
-        row = cur.fetchone()
-        if not row:
-            raise SupabaseServiceError(status_code=404, detail="Profil pengguna tidak ditemukan.")
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    p.user_id,
+                    p.email,
+                    p.name,
+                    p.phone,
+                    p.plan,
+                    p.company_name,
+                    p.created_at,
+                    q.analysis_used,
+                    q.analysis_limit,
+                    q.esign_used,
+                    q.esign_limit,
+                    q.chat_per_doc_limit,
+                    q.reset_at
+                FROM public.user_profiles p
+                JOIN public.user_quotas q ON q.user_id = p.user_id
+                WHERE p.user_id = %s
+                LIMIT 1;
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise SupabaseServiceError(status_code=404, detail="Profil pengguna tidak ditemukan.")
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal membaca profil pengguna: {e}")
 
     return {
         "user_id": str(row["user_id"]),
@@ -227,22 +248,42 @@ def get_user_profile_and_quota(user_id: str) -> dict:
 
 
 def register_user(email: str, password: str, name: str, plan: str = "free") -> dict:
-    """Create user in Supabase Auth, then upsert profile/quota in Postgres."""
-    headers = _auth_headers()
-    url = f"{settings.supabase_url}/auth/v1/signup"
+    """Create user in Supabase Auth, then upsert profile/quota in Postgres.
+
+    Uses admin create-user when service key is available so prototype can
+    authenticate immediately without email confirmation flow.
+    """
+    normalized_plan = _normalize_plan(plan)
+    payload: dict
 
     with httpx.Client(timeout=20.0) as client:
-        response = client.post(
-            url,
-            headers=headers,
-            json={"email": email, "password": password, "data": {"name": name, "plan": _normalize_plan(plan)}},
-        )
+        if settings.supabase_service_role_key:
+            response = client.post(
+                f"{settings.supabase_url}/auth/v1/admin/users",
+                headers=_service_headers(),
+                json={
+                    "email": email,
+                    "password": password,
+                    "email_confirm": True,
+                    "user_metadata": {"name": name, "plan": normalized_plan},
+                },
+            )
+            if response.status_code >= 400:
+                raise SupabaseServiceError(response.status_code, _extract_supabase_error(response))
+            payload = response.json()
+        else:
+            response = client.post(
+                f"{settings.supabase_url}/auth/v1/signup",
+                headers=_auth_headers(),
+                json={"email": email, "password": password, "data": {"name": name, "plan": normalized_plan}},
+            )
+            if response.status_code >= 400:
+                raise SupabaseServiceError(response.status_code, _extract_supabase_error(response))
+            payload = response.json()
 
-    if response.status_code >= 400:
-        raise SupabaseServiceError(response.status_code, _extract_supabase_error(response))
-
-    payload = response.json()
-    user = payload.get("user")
+    user = payload.get("user") if isinstance(payload, dict) else None
+    if not user and isinstance(payload, dict) and payload.get("id"):
+        user = payload
     if not user or not user.get("id"):
         raise SupabaseServiceError(status_code=502, detail="Respons registrasi Supabase tidak valid.")
 
@@ -250,7 +291,7 @@ def register_user(email: str, password: str, name: str, plan: str = "free") -> d
         user_id=user["id"],
         email=user.get("email", email),
         name=name,
-        plan=_normalize_plan(plan),
+        plan=normalized_plan,
     )
 
     return {

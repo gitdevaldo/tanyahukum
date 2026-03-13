@@ -29,7 +29,10 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("TanyaHukum API starting up")
-    ensure_supabase_schema()
+    try:
+        ensure_supabase_schema()
+    except Exception as e:
+        logger.error(f"Supabase schema bootstrap failed: {e}", exc_info=True)
     yield
     # Shutdown: close Qdrant connection
     try:

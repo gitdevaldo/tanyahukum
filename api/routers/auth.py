@@ -2,7 +2,9 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.dependencies import verify_bearer_token
 from api.models.schemas import (
@@ -24,10 +26,19 @@ from api.services.supabase_auth import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
+
+
+def _raise_auth_error(e: SupabaseServiceError, fallback: str) -> None:
+    """Sanitize upstream errors to avoid leaking internal service details."""
+    if e.status_code >= 500:
+        raise HTTPException(status_code=500, detail=fallback)
+    raise HTTPException(status_code=e.status_code, detail=e.detail)
 
 
 @router.post("/auth/register", response_model=RegisterResponse)
-async def register(req: RegisterRequest):
+@limiter.limit("10/hour")
+async def register(request: Request, req: RegisterRequest):
     """Create user account in Supabase Auth and bootstrap app profile/quota."""
     try:
         result = await asyncio.to_thread(register_user, req.email, req.password, req.name, req.plan)
@@ -39,11 +50,12 @@ async def register(req: RegisterRequest):
             email_confirmed=result["email_confirmed"],
         )
     except SupabaseServiceError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+        _raise_auth_error(e, "Registrasi gagal. Silakan coba lagi.")
 
 
 @router.post("/auth/login", response_model=LoginResponse)
-async def login(req: LoginRequest):
+@limiter.limit("20/hour")
+async def login(request: Request, req: LoginRequest):
     """Authenticate with Supabase Auth password grant and return tokens."""
     try:
         result = await asyncio.to_thread(login_user, req.email, req.password)
@@ -56,11 +68,12 @@ async def login(req: LoginRequest):
             user=LoginUser(user_id=user.get("id", ""), email=user.get("email", req.email)),
         )
     except SupabaseServiceError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+        _raise_auth_error(e, "Login gagal. Silakan coba lagi.")
 
 
 @router.get("/auth/me", response_model=AuthMeResponse)
-async def me(access_token: str = Depends(verify_bearer_token)):
+@limiter.limit("120/minute")
+async def me(request: Request, access_token: str = Depends(verify_bearer_token)):
     """Return authenticated user profile + quota from Supabase."""
     try:
         auth_user = await asyncio.to_thread(get_auth_user, access_token)
@@ -74,4 +87,4 @@ async def me(access_token: str = Depends(verify_bearer_token)):
         profile = await asyncio.to_thread(get_user_profile_and_quota, user_id)
         return AuthMeResponse(**profile)
     except SupabaseServiceError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+        _raise_auth_error(e, "Gagal mengambil profil pengguna.")

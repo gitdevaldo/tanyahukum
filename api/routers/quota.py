@@ -1,7 +1,9 @@
 """Quota endpoints (v2.0-A)."""
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.dependencies import verify_bearer_token
 from api.models.schemas import QuotaResponse
@@ -13,10 +15,12 @@ from api.services.supabase_auth import (
 )
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("/quota", response_model=QuotaResponse)
-async def get_quota(access_token: str = Depends(verify_bearer_token)):
+@limiter.limit("120/minute")
+async def get_quota(request: Request, access_token: str = Depends(verify_bearer_token)):
     """Return current authenticated user's quota usage and limits."""
     try:
         auth_user = await asyncio.to_thread(get_auth_user, access_token)
@@ -34,4 +38,6 @@ async def get_quota(access_token: str = Depends(verify_bearer_token)):
             quota=profile["quota"],
         )
     except SupabaseServiceError as e:
+        if e.status_code >= 500:
+            raise HTTPException(status_code=500, detail="Gagal mengambil data quota.")
         raise HTTPException(status_code=e.status_code, detail=e.detail)
