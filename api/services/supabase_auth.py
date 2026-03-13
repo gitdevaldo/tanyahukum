@@ -99,7 +99,7 @@ def _db_connect():
 
 
 def ensure_supabase_schema() -> bool:
-    """Ensure required v2.0-A tables exist in Supabase Postgres."""
+    """Ensure required v2.0-A and v2.0-B/C tables exist in Supabase Postgres."""
     if not settings.supabase_db_url:
         logger.warning("SUPABASE_DB_URL not set — skipping schema bootstrap for v2.0-A")
         return False
@@ -133,6 +133,62 @@ def ensure_supabase_schema() -> bool:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.documents (
+                id TEXT PRIMARY KEY,
+                owner_id UUID NOT NULL REFERENCES public.user_profiles(user_id) ON DELETE CASCADE,
+                analysis_id TEXT NULL,
+                filename TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending_signatures',
+                company_pays_analysis BOOLEAN NOT NULL DEFAULT FALSE,
+                expires_at TIMESTAMPTZ NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT documents_status_check CHECK (
+                    status IN ('draft', 'analyzed', 'pending_signatures', 'partially_signed', 'completed', 'expired', 'rejected')
+                )
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.document_signers (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                name TEXT NULL,
+                role TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                signed_at TIMESTAMPTZ NULL,
+                signature_id TEXT NULL,
+                rejection_reason TEXT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT document_signers_role_check CHECK (role IN ('sender', 'recipient')),
+                CONSTRAINT document_signers_status_check CHECK (status IN ('pending', 'signed', 'rejected')),
+                CONSTRAINT document_signers_unique_email_per_doc UNIQUE (document_id, email)
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.signatures (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+                signer_email TEXT NOT NULL,
+                signer_name TEXT NOT NULL,
+                ip_address TEXT NULL,
+                user_agent TEXT NULL,
+                consent_text TEXT NOT NULL,
+                document_hash TEXT NOT NULL,
+                signed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT signatures_unique_per_doc_signer UNIQUE (document_id, signer_email)
+            );
+            """
+        )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner_id ON public.documents(owner_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_document_signers_document_id ON public.document_signers(document_id);")
         conn.commit()
     return True
 
@@ -302,6 +358,48 @@ def consume_analysis_quota(user_id: str) -> dict[str, int | None]:
         "analysis_used": used,
         "analysis_limit": limit,
         "analysis_remaining": _quota_remaining(limit, used),
+    }
+
+
+def consume_esign_quota(user_id: str) -> dict[str, int | None]:
+    """Atomically consume 1 e-sign quota for a user."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            _reset_quotas_if_due(cur, user_id)
+            cur.execute(
+                """
+                UPDATE public.user_quotas
+                SET
+                    esign_used = esign_used + 1,
+                    updated_at = NOW()
+                WHERE user_id = %s
+                  AND (esign_limit IS NULL OR esign_used < esign_limit)
+                RETURNING esign_used, esign_limit;
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute(
+                    "SELECT esign_used, esign_limit FROM public.user_quotas WHERE user_id = %s LIMIT 1;",
+                    (user_id,),
+                )
+                current = cur.fetchone()
+                if not current:
+                    raise SupabaseServiceError(status_code=404, detail="Data quota e-sign pengguna tidak ditemukan.")
+                raise SupabaseServiceError(status_code=403, detail="Kuota e-sign Anda sudah habis.")
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal mengurangi quota e-sign: {e}")
+
+    used = row["esign_used"]
+    limit = row["esign_limit"]
+    return {
+        "esign_used": used,
+        "esign_limit": limit,
+        "esign_remaining": _quota_remaining(limit, used),
     }
 
 

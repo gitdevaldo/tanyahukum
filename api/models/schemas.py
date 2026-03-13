@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timezone
 
 
@@ -141,3 +141,67 @@ class QuotaResponse(BaseModel):
     user_id: str
     plan: str
     quota: QuotaInfo
+
+
+class ShareDocumentRequest(BaseModel):
+    analysis_id: str | None = None
+    filename: str = Field(min_length=1, max_length=255)
+    signer_emails: list[EmailStr] = Field(min_length=1, max_length=25)
+    company_pays_analysis: bool = False
+    expires_at: str | None = None
+
+
+class ShareDocumentResponse(BaseModel):
+    document_id: str
+    status: str
+    signers_count: int
+    message: str
+
+
+class DocumentSignerInfo(BaseModel):
+    email: str
+    name: str | None = None
+    role: str
+    status: str
+    signed_at: str | None = None
+    rejection_reason: str | None = None
+
+
+class DocumentSignersResponse(BaseModel):
+    document_id: str
+    status: str
+    company_pays_analysis: bool
+    expires_at: str | None = None
+    signers: list[DocumentSignerInfo]
+
+
+class SignDocumentRequest(BaseModel):
+    signer_name: str = Field(min_length=2, max_length=120)
+    consent_text: str = Field(min_length=5, max_length=3000)
+    document_hash: str = Field(min_length=16, max_length=256)
+
+
+class RejectDocumentRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class DocumentActionResponse(BaseModel):
+    success: bool
+    document_id: str
+    status: str
+    message: str
+
+
+class SignatureRecord(BaseModel):
+    signer_email: str
+    signer_name: str
+    document_hash: str
+    signed_at: str
+
+
+class CertificateResponse(BaseModel):
+    document_id: str
+    filename: str
+    status: str
+    completed_at: str | None = None
+    signatures: list[SignatureRecord]
