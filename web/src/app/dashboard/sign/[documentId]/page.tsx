@@ -3,11 +3,14 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { getValidAccessToken, clearSession } from "@/lib/auth-session";
-import * as pdfjsLib from "pdfjs-dist";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import styles from "./sign.module.css";
 
-// Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use bundled local worker (no CDN dependency)
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
 
 interface DocumentInfo {
   document_id: string;
@@ -31,7 +34,7 @@ export default function SigningEditorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   
   // Get signature data from URL or sessionStorage
   const [signatureData, setSignatureData] = useState<{
@@ -46,7 +49,6 @@ export default function SigningEditorPage() {
   const draggableRef = useRef<HTMLDivElement>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Load document info and signature data
@@ -78,9 +80,8 @@ export default function SigningEditorPage() {
           redirect: 'manual',
         });
         if (pdfRes.ok) {
-          const blob = await pdfRes.blob();
-          const url = URL.createObjectURL(blob);
-          setPdfUrl(url);
+          const buffer = await pdfRes.arrayBuffer();
+          setPdfData(buffer);
         } else if (pdfRes.status === 307 || pdfRes.status === 308) {
           // Handle redirect by following it with auth headers
           const redirectUrl = pdfRes.headers.get('location');
@@ -89,9 +90,8 @@ export default function SigningEditorPage() {
               headers: { Authorization: `Bearer ${token}` },
             });
             if (retryRes.ok) {
-              const blob = await retryRes.blob();
-              const url = URL.createObjectURL(blob);
-              setPdfUrl(url);
+              const buffer = await retryRes.arrayBuffer();
+              setPdfData(buffer);
             }
           }
         }
@@ -113,14 +113,13 @@ export default function SigningEditorPage() {
     load();
   }, [documentId, router]);
 
-  // Render PDF on canvas when URL changes
+  // Render PDF on canvas when data changes
   useEffect(() => {
-    if (!pdfUrl || !canvasRef.current) return;
+    if (!pdfData || !canvasRef.current) return;
 
     const renderPdf = async () => {
       try {
-        const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-        setPdfDoc(pdf);
+        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
         
         // Render first page
         const page = await pdf.getPage(1);
@@ -146,7 +145,7 @@ export default function SigningEditorPage() {
     };
 
     renderPdf();
-  }, [pdfUrl]);
+  }, [pdfData]);
 
   // Handle signature drop on canvas
   const handleSignatureDrop = (e: React.DragEvent) => {
@@ -371,7 +370,7 @@ export default function SigningEditorPage() {
               cursor: "crosshair",
             }}
           />
-          {!pdfUrl && (
+          {!pdfData && (
             <div style={{ padding: 20, textAlign: "center", color: "#999" }}>
               <p style={{ fontSize: 14, marginTop: 50 }}>PDF Viewer Area</p>
               <p style={{ fontSize: 12, color: "#bbb" }}>
