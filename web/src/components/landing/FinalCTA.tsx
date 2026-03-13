@@ -5,8 +5,7 @@ export default function FinalCTA() {
     <section className="bg-light-cream px-[5%] py-14 sm:py-24 text-dark-navy">
       <div className="mx-auto max-w-[1400px] text-center">
         <h2 className="mb-6 sm:mb-8 text-3xl sm:text-4xl font-bold text-dark-navy">
-          Sudah 5 Affiliates Aktif yang Membantu Orang Indonesia Memahami Hukum
-          dengan Lebih Baik
+          Jangan Tanda Tangani Kontrak Sebelum Anda Benar-Benar Paham
         </h2>
         <p className="mx-auto mb-8 max-w-[900px] text-neutral-gray">
           Kami membantu lebih dari 10,000 pengguna setiap bulannya untuk membaca

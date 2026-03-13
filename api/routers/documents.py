@@ -1,7 +1,7 @@
 """Document sharing and signing endpoints (v2.0-B/C)."""
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -35,6 +35,7 @@ from api.services.documents import (
     get_document_certificate,
     get_document_certificate_pdf,
     get_signed_document_pdf,
+    quick_sign_document,
 )
 
 router = APIRouter()
@@ -280,3 +281,44 @@ async def download_signed_pdf(
         )
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal mengunduh dokumen final bertanda tangan.")
+
+
+@router.post("/documents/quick-sign")
+@limiter.limit("30/minute")
+async def quick_sign(
+    request: Request,
+    file: UploadFile = File(...),
+    signer_name: str = Form(...),
+    access_token: str = Depends(verify_bearer_token),
+):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=422, detail="Hanya file PDF yang didukung.")
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Ukuran file maksimal 20MB.")
+    if len(pdf_bytes) < 100:
+        raise HTTPException(status_code=422, detail="File PDF tidak valid.")
+    try:
+        user_id, email, name, _ = await _resolve_user(access_token)
+        result = await asyncio.to_thread(
+            quick_sign_document,
+            user_id,
+            email,
+            name,
+            signer_name.strip() or name,
+            file.filename,
+            pdf_bytes,
+            request.client.host if request.client else None,
+            request.headers.get("User-Agent"),
+            getattr(request.state, "request_id", None),
+        )
+        return Response(
+            content=result["pdf_bytes"],
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={result['filename']}",
+                "X-Document-Id": result["document_id"],
+            },
+        )
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal menandatangani dokumen.")

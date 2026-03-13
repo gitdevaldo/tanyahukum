@@ -442,6 +442,54 @@ def attach_document_analysis(
     return {"document_id": document_id, "analysis_id": analysis_id}
 
 
+def create_analyzed_document(
+    owner_id: str,
+    owner_email: str,
+    owner_name: str,
+    analysis_id: str,
+    filename: str,
+    request_id: str | None = None,
+) -> dict:
+    """Create a standalone document record specifically for a new analysis upload."""
+    owner_email = owner_email.strip().lower()
+    document_id = str(uuid.uuid4())
+
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            # 1. Insert the document as 'analyzed'
+            cur.execute(
+                """
+                INSERT INTO public.documents (
+                    id, owner_id, analysis_id, filename, status
+                ) VALUES (%s, %s, %s, %s, 'analyzed');
+                """,
+                (document_id, owner_id, analysis_id, filename),
+            )
+
+            # 3. Add an event log
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="analyzed",
+                actor_user_id=owner_id,
+                actor_email=owner_email,
+                request_id=request_id,
+                metadata={
+                    "analysis_id": analysis_id,
+                    "standalone_analysis": True,
+                },
+            )
+
+            conn.commit()
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyimpan riwayat analisis mandiri: {e}")
+
+    return {
+        "document_id": document_id,
+        "status": "analyzed",
+    }
+
+
 def get_document_analysis(document_id: str, user_id: str, email: str) -> dict:
     """Fetch linked analysis result for a shared document (owner or signer only)."""
     try:
@@ -991,5 +1039,125 @@ def get_signed_document_pdf(
     return {
         "document_id": document_id,
         "filename": _safe_download_filename(doc["filename"], "signed"),
+        "pdf_bytes": signed_pdf,
+    }
+
+
+def quick_sign_document(
+    owner_id: str,
+    owner_email: str,
+    owner_name: str,
+    signer_name: str,
+    filename: str,
+    pdf_bytes: bytes,
+    ip_address: str | None,
+    user_agent: str | None,
+    request_id: str | None = None,
+) -> dict:
+    """Privy-like quick sign: upload PDF + sign in one step.
+
+    Creates a document record with the user as the sole signer,
+    auto-signs it, stamps the certificate onto the PDF, and returns
+    the final signed PDF bytes.
+    """
+    import hashlib
+
+    owner_email = owner_email.strip().lower()
+    now = _now_utc()
+    document_id = str(uuid.uuid4())
+    signer_id = str(uuid.uuid4())
+    signature_id = str(uuid.uuid4())
+    document_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    consent_text = "Saya menyetujui penandatanganan elektronik dokumen ini."
+
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            # Create document record
+            cur.execute(
+                """
+                INSERT INTO public.documents (
+                    id, owner_id, analysis_id, filename, status, company_pays_analysis, expires_at
+                ) VALUES (%s, %s, NULL, %s, 'completed', false, NULL);
+                """,
+                (document_id, owner_id, filename),
+            )
+
+            # Create signer record (self, already signed)
+            cur.execute(
+                """
+                INSERT INTO public.document_signers (id, document_id, email, name, role, status, signed_at, signature_id)
+                VALUES (%s, %s, %s, %s, 'sender', 'signed', %s, %s);
+                """,
+                (signer_id, document_id, owner_email, signer_name.strip(), now, signature_id),
+            )
+
+            # Create signature record
+            cur.execute(
+                """
+                INSERT INTO public.signatures (
+                    id, document_id, signer_email, signer_name, ip_address, user_agent, consent_text, document_hash, signed_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """,
+                (
+                    signature_id,
+                    document_id,
+                    owner_email,
+                    signer_name.strip(),
+                    ip_address,
+                    user_agent,
+                    consent_text,
+                    document_hash,
+                    now,
+                ),
+            )
+
+            # Consume e-sign quota
+            _consume_owner_esign(cur, owner_id)
+
+            # Audit events
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="quick_signed",
+                actor_user_id=owner_id,
+                actor_email=owner_email,
+                request_id=request_id,
+                metadata={
+                    "signature_id": signature_id,
+                    "filename": filename,
+                    "document_hash": document_hash,
+                },
+            )
+
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menandatangani dokumen: {e}")
+
+    # Build signed PDF with certificate appended
+    certificate_payload = {
+        "document_id": document_id,
+        "filename": filename,
+        "status": "completed",
+        "completed_at": now.isoformat(),
+        "signatures": [
+            {
+                "signer_email": owner_email,
+                "signer_name": signer_name.strip(),
+                "document_hash": document_hash,
+                "signed_at": now.isoformat(),
+            }
+        ],
+    }
+
+    try:
+        signed_pdf = build_signed_document_pdf(pdf_bytes, certificate_payload)
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal membuat PDF bertanda tangan: {e}")
+
+    return {
+        "document_id": document_id,
+        "filename": _safe_download_filename(filename, "signed"),
         "pdf_bytes": signed_pdf,
     }

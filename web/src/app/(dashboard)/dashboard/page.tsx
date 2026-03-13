@@ -2,14 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { clearSession, getAccessToken } from "@/lib/auth-session";
+import { clearSession, getAccessToken, getValidAccessToken, refreshAccessToken, setSession } from "@/lib/auth-session";
+import { AnalysisResults } from "@/components/cek-dokumen/AnalysisResults";
+import { ChatPanel } from "@/components/cek-dokumen/ChatPanel";
+import type { AnalysisResponse } from "@/components/cek-dokumen/types";
 import styles from "./dashboard.module.css";
+
+const PdfViewer = dynamic(() => import("@/components/cek-dokumen/PdfViewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="animate-spin w-8 h-8 border-2 border-primary-orange border-t-transparent rounded-full" />
+    </div>
+  ),
+});
 
 type AccountType = "personal" | "business";
 type Plan = "free" | "starter" | "plus" | "business" | "enterprise" | null;
-type DashboardSection = "overview" | "documents" | "analysis" | "consultation" | "account";
+type DashboardSection = "overview" | "documents" | "analysis" | "sign" | "consultation" | "account";
 type DocumentStatus =
   | "draft"
   | "analyzed"
@@ -169,7 +182,7 @@ function formatLimit(value: number | null) {
 }
 
 function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
+  return new Intl.NumberFormat("id-ID").format(value);
 }
 
 function calcProgress(used: number, limit: number | null) {
@@ -230,14 +243,14 @@ function formatShortDate(value: string | null) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("id-ID", {
     month: "short",
     day: "numeric",
   }).format(date);
 }
 
 function formatTopbarDate() {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("id-ID", {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -295,7 +308,7 @@ export default function DashboardPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeNav, setActiveNav] = useState("Overview");
+  const [activeNav, setActiveNav] = useState("Ringkasan");
   const [shareForm, setShareForm] = useState({
     filename: "",
     analysisId: "",
@@ -317,6 +330,56 @@ export default function DashboardPage() {
   });
   const [consultSubmitting, setConsultSubmitting] = useState(false);
 
+  // Quick sign state
+  const [signFile, setSignFile] = useState<File | null>(null);
+  const [signQuickName, setSignQuickName] = useState("");
+  const [signingInProgress, setSigningInProgress] = useState(false);
+  const [signResult, setSignResult] = useState<{ url: string; filename: string; documentId: string } | null>(null);
+  const [signError, setSignError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [signActiveTab, setSignActiveTab] = useState<"list" | "quick" | "share">("list");
+  const [signPanelDocId, setSignPanelDocId] = useState<string | null>(null);
+  const [signPanelSigners, setSignPanelSigners] = useState<DocumentSignersResponse | null>(null);
+  const [signPanelEvents, setSignPanelEvents] = useState<DocumentEventsResponse | null>(null);
+  const [signPanelLoading, setSignPanelLoading] = useState(false);
+  const [signPanelForm, setSignPanelForm] = useState({ signerName: "", consentText: "Saya menyetujui penandatanganan elektronik dokumen ini.", documentHash: "" });
+  const [signPanelRejectReason, setSignPanelRejectReason] = useState("");
+  const [signPanelProcessing, setSignPanelProcessing] = useState(false);
+  const [signShareForm, setSignShareForm] = useState({ selectedDocId: "", filename: "", signerEmails: "", companyPaysAnalysis: false, expiresAt: "" });
+  const [signShareProcessing, setSignShareProcessing] = useState(false);
+
+  // --- Inline analysis state ---
+  const [analysisFile, setAnalysisFile] = useState<File | null>(null);
+  const [analysisRunning, setAnalysisRunning] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisDragOver, setAnalysisDragOver] = useState(false);
+  const [viewingAnalysisId, setViewingAnalysisId] = useState<string | null>(null);
+  const [viewingAnalysis, setViewingAnalysis] = useState<AnalysisResponse | null>(null);
+  const [viewingAnalysisLoading, setViewingAnalysisLoading] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [highlightText, setHighlightText] = useState<string | null>(null);
+  const [highlightColor, setHighlightColor] = useState("rgba(251, 146, 60, 0.35)");
+  const [activeClauseIndex, setActiveClauseIndex] = useState<number | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      const token = await getValidAccessToken();
+      if (token) {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+    } catch (e) {
+      console.error("Logout error:", e);
+    } finally {
+      clearSession();
+      router.replace("/login/");
+    }
+  };
+
   const selectedDocument = useMemo(
     () => documents.find((doc) => doc.document_id === selectedDocumentId) ?? null,
     [documents, selectedDocumentId],
@@ -335,11 +398,15 @@ export default function DashboardPage() {
         timeoutMs?: number;
       },
     ) => {
-      const token = getAccessToken();
+      let token = await getValidAccessToken();
       if (!token) {
-        clearSession();
-        router.replace("/login/");
-        throw new Error("Sesi berakhir. Silakan login ulang.");
+        // Try refresh before giving up
+        token = await getValidAccessToken();
+        if (!token) {
+          clearSession();
+          router.replace("/login/");
+          throw new Error("Sesi berakhir. Silakan login ulang.");
+        }
       }
       const res = await fetch(url, {
         method: options?.method ?? "GET",
@@ -352,6 +419,26 @@ export default function DashboardPage() {
       });
 
       if (res.status === 401) {
+        // Token might be expired, attempt refresh
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          // Retry the request with the new token
+          const retryRes = await fetch(url, {
+            method: options?.method ?? "GET",
+            headers: {
+              Authorization: `Bearer ${newToken}`,
+              ...(options?.headers || {}),
+            },
+            body: options?.body,
+            signal: AbortSignal.timeout(options?.timeoutMs ?? 25000),
+          });
+          if (!retryRes.ok && retryRes.status === 401) {
+            clearSession();
+            router.replace("/login/");
+            throw new Error("Sesi berakhir. Silakan login ulang.");
+          }
+          return retryRes;
+        }
         clearSession();
         router.replace("/login/");
         throw new Error("Sesi berakhir. Silakan login ulang.");
@@ -459,7 +546,8 @@ export default function DashboardPage() {
   );
 
   const loadData = useCallback(async () => {
-    if (!getAccessToken()) {
+    const accToken = await getValidAccessToken();
+    if (!accToken) {
       router.replace("/login/");
       return;
     }
@@ -523,6 +611,13 @@ export default function DashboardPage() {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (notice) {
+      const timer = setTimeout(() => setNotice(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notice]);
 
   useEffect(() => {
     if (!selectedDocumentId) {
@@ -754,14 +849,16 @@ export default function DashboardPage() {
   const topbarDate = useMemo(() => formatTopbarDate(), []);
   const topbarTitle =
     activeSection === "documents"
-      ? "Documents"
+      ? "Pusat Dokumen"
       : activeSection === "analysis"
-        ? "Analysis"
-        : activeSection === "consultation"
-          ? "Consultation"
-          : activeSection === "account"
-            ? "Account"
-            : "Overview";
+        ? "Analisis Dokumen"
+        : activeSection === "sign"
+          ? "Tanda Tangan"
+          : activeSection === "consultation"
+            ? "Konsultasi"
+            : activeSection === "account"
+              ? "Pengaturan Akun"
+              : "Ringkasan";
 
   function renderOverview() {
     const recentDocuments = documents.slice(0, 6);
@@ -771,38 +868,66 @@ export default function DashboardPage() {
     const awaitingSignatures = documents.filter(
       (doc) => doc.status === "pending_signatures" || doc.status === "partially_signed",
     ).length;
-    const verifiedUsers = new Set(documents.map((doc) => doc.owner_email).filter(Boolean)).size || 1;
-    const chartRows = [55, 70, 45, 90, 65, 30, 20];
-    const planPill = profile ? formatPlan(profile.plan) : "Enterprise";
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d;
+    });
+    
+    const chartLabels = last7Days.map((d) =>
+      d.toLocaleDateString("id-ID", { weekday: "short" })
+    );
+
+    const chartCounts = last7Days.map((d) => {
+      // Create fresh Date objects for start/end to avoid mutating `d` if we reuse it
+      const clone = new Date(d);
+      const startOfDay = new Date(clone.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(clone.setHours(23, 59, 59, 999));
+      
+      return documents.filter((doc) => {
+        if (!doc.updated_at) return false;
+        const docDate = new Date(doc.updated_at);
+        return docDate >= startOfDay && docDate <= endOfDay;
+      }).length;
+    });
+
+    const maxCount = Math.max(...chartCounts, 1);
+    const chartRows = chartCounts.map((count) => (count / maxCount) * 100);
+    const planPill = profile ? formatPlan(profile.plan) : "Free";
+
+    const docLimit =
+      profile?.plan === "enterprise" || profile?.plan === "business"
+        ? Infinity
+        : profile?.plan === "plus"
+          ? 5000
+          : profile?.plan === "starter"
+            ? 500
+            : 100;
+            
+    const storageProgress = docLimit === Infinity ? 0 : Math.min(100, Math.round((documentsMeta.total / docLimit) * 100));
+    const storageValue = docLimit === Infinity ? `${documentsMeta.total} Dokumen` : `${documentsMeta.total} / ${formatNumber(docLimit)}`;
 
     const quotaRows = [
       {
-        key: "signatures",
-        label: "Signatures",
-        value: `${quotaInfo?.esign_used ?? 0} / ${formatLimit(quotaInfo?.esign_limit ?? null)}`,
-        progress: esignProgress ?? 0,
+        key: "analysis",
+        label: "Analisis Kontrak",
+        value: `${quotaInfo?.analysis_used ?? 0} / ${formatLimit(quotaInfo?.analysis_limit ?? null)}`,
+        progress: analysisProgress ?? 0,
         tone: "blue" as const,
       },
       {
-        key: "storage",
-        label: "Document Storage",
-        value: `${documentsMeta.total} / 500`,
-        progress: Math.min(100, Math.round((documentsMeta.total / 500) * 100)),
+        key: "signatures",
+        label: "Tanda Tangan Elektronik",
+        value: `${quotaInfo?.esign_used ?? 0} / ${formatLimit(quotaInfo?.esign_limit ?? null)}`,
+        progress: esignProgress ?? 0,
         tone: "green" as const,
       },
       {
-        key: "kyc",
-        label: "KYC Verifications",
-        value: `${quotaInfo?.analysis_used ?? 0} / ${formatLimit(quotaInfo?.analysis_limit ?? null)}`,
-        progress: analysisProgress ?? 0,
+        key: "storage",
+        label: "Pusat Dokumen",
+        value: storageValue,
+        progress: storageProgress,
         tone: "amber" as const,
-      },
-      {
-        key: "meterai",
-        label: "e-Meterai Used",
-        value: `${documentsMeta.pending_my_action} / 200`,
-        progress: Math.min(100, Math.round((documentsMeta.pending_my_action / 200) * 100)),
-        tone: "blue" as const,
       },
     ];
 
@@ -811,7 +936,7 @@ export default function DashboardPage() {
         <div className={styles.statGrid}>
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Total Documents</p>
+              <p className={styles.statLabel}>Total Dokumen</p>
               <span className={`${styles.statIconWrap} ${styles.iconBlue}`}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -820,17 +945,14 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className={styles.statValue}>{formatNumber(documentsMeta.total)}</p>
-            <p className={`${styles.statChange} ${styles.changeUp}`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-              +12.4% <span>vs last month</span>
+            <p className={styles.statMeta}>
+              Semua dokumen
             </p>
           </article>
 
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Signed This Month</p>
+              <p className={styles.statLabel}>Ditandatangani Bulan Ini</p>
               <span className={`${styles.statIconWrap} ${styles.iconGreen}`}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" />
@@ -838,17 +960,14 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className={styles.statValue}>{formatNumber(signedThisMonth)}</p>
-            <p className={`${styles.statChange} ${styles.changeUp}`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-              +8.7% <span>vs last month</span>
+            <p className={styles.statMeta}>
+              Bulan ini
             </p>
           </article>
 
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Awaiting Signatures</p>
+              <p className={styles.statLabel}>Menunggu Tanda Tangan</p>
               <span className={`${styles.statIconWrap} ${styles.iconAmber}`}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
@@ -857,32 +976,24 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className={styles.statValue}>{formatNumber(awaitingSignatures)}</p>
-            <p className={`${styles.statChange} ${styles.changeDown}`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-              +3.2% <span>vs last month</span>
+            <p className={styles.statMeta}>
+              Butuh perhatian
             </p>
           </article>
 
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Verified Users</p>
+              <p className={styles.statLabel}>Tindakan Tertunda</p>
               <span className={`${styles.statIconWrap} ${styles.iconPurple}`}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
               </span>
             </div>
-            <p className={styles.statValue}>{formatNumber(verifiedUsers)}</p>
-            <p className={`${styles.statChange} ${styles.changeUp}`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-              +21.1% <span>vs last month</span>
+            <p className={styles.statValue}>{formatNumber(documentsMeta.pending_my_action)}</p>
+            <p className={styles.statMeta}>
+              Dokumen menunggu Anda
             </p>
           </article>
         </div>
@@ -891,8 +1002,8 @@ export default function DashboardPage() {
           <article className={styles.card}>
             <div className={styles.cardHeader}>
               <div>
-                <p className={styles.cardTitle}>Recent Documents</p>
-                <p className={styles.cardSub}>Latest document activity across your organization</p>
+                <p className={styles.cardTitle}>Dokumen Terbaru</p>
+                <p className={styles.cardSub}>Aktivitas dokumen terbaru di organisasi Anda</p>
               </div>
               <a
                 href="#"
@@ -900,26 +1011,28 @@ export default function DashboardPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   setActiveSection("documents");
-                  setActiveNav("Document Center");
+                  setActiveNav("Pusat Dokumen");
                 }}
               >
-                View all →
+                Lihat semua &rarr;
               </a>
             </div>
 
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Document</th>
-                  <th>Signer</th>
+                  <th>Dokumen</th>
+                  <th>Penandatangan</th>
                   <th>Status</th>
-                  <th>Date</th>
+                  <th>Tanggal</th>
                 </tr>
               </thead>
               <tbody>
                 {recentDocuments.length === 0 ? (
                   <tr>
-                    <td colSpan={4}>No document activity yet.</td>
+                    <td colSpan={4} className="p-0">
+                      <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada aktivitas dokumen.</div>
+                    </td>
                   </tr>
                 ) : (
                   recentDocuments.map((doc, index) => {
@@ -936,12 +1049,12 @@ export default function DashboardPage() {
                             : styles.badgeDraft;
                     const badgeLabel =
                       variant === "signed"
-                        ? "Signed"
+                        ? "Selesai"
                         : variant === "pending"
-                          ? "Pending"
+                          ? "Tertunda"
                           : variant === "rejected"
-                            ? "Rejected"
-                            : "Draft";
+                            ? "Ditolak"
+                            : "Draf";
                     const ext = doc.filename.includes(".") ? doc.filename.split(".").pop()?.toUpperCase() : "FILE";
                     const avatarClass =
                       index % 3 === 0
@@ -954,7 +1067,7 @@ export default function DashboardPage() {
                       <tr key={doc.document_id}>
                         <td>
                           <p className={styles.docName}>{doc.filename}</p>
-                          <p className={styles.docMeta}>{formatStatus(doc.status)} · {ext}</p>
+                          <p className={styles.docMeta}>{formatStatus(doc.status)} - {ext}</p>
                         </td>
                         <td>
                           <div className={styles.docSigner}>
@@ -977,11 +1090,11 @@ export default function DashboardPage() {
           <div className={styles.stackCol}>
             <article className={styles.card}>
               <div className={styles.cardHeader}>
-                <div className={styles.cardTitle}>Quick Actions</div>
+                <div className={styles.cardTitle}>Aksi Cepat</div>
               </div>
               <div className={styles.cardBody}>
                 <div className={styles.quickGrid}>
-                  <Link href="/cek-dokumen/" className={styles.quickBtn}>
+                  <button type="button" onClick={() => { setActiveSection("analysis"); setActiveNav("Analisis Dokumen"); }} className={styles.quickBtn}>
                     <span className={`${styles.quickIcon} ${styles.quickIconBlue}`}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -989,9 +1102,9 @@ export default function DashboardPage() {
                         <line x1="12" y1="3" x2="12" y2="15" />
                       </svg>
                     </span>
-                    <p className={styles.quickName}>Upload Doc</p>
-                    <p className={styles.quickDesc}>PDF or DOCX</p>
-                  </Link>
+                    <p className={styles.quickName}>Unggah Dok</p>
+                    <p className={styles.quickDesc}>PDF atau DOCX</p>
+                  </button>
 
                   <a
                     href="#"
@@ -999,7 +1112,7 @@ export default function DashboardPage() {
                     onClick={(e) => {
                       e.preventDefault();
                       setActiveSection("documents");
-                      setActiveNav("Document Center");
+                      setActiveNav("Pusat Dokumen");
                     }}
                   >
                     <span className={`${styles.quickIcon} ${styles.quickIconGreen}`}>
@@ -1008,38 +1121,53 @@ export default function DashboardPage() {
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                       </svg>
                     </span>
-                    <p className={styles.quickName}>Sign Now</p>
-                    <p className={styles.quickDesc}>Pending docs</p>
+                    <p className={styles.quickName}>Tanda Tangan</p>
+                    <p className={styles.quickDesc}>Dokumen tertunda</p>
                   </a>
 
-                  <a href="#" className={styles.quickBtn}>
+                  <a
+                    href="#"
+                    className={styles.quickBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveSection("consultation");
+                      setActiveNav("Konsultasi");
+                    }}
+                  >
                     <span className={`${styles.quickIcon} ${styles.quickIconAmber}`}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                       </svg>
                     </span>
-                    <p className={styles.quickName}>Verify KYC</p>
-                    <p className={styles.quickDesc}>New request</p>
+                    <p className={styles.quickName}>Konsultasi</p>
+                    <p className={styles.quickDesc}>Ahli hukum</p>
                   </a>
 
-                  <Link href="/bisnis/" className={styles.quickBtn}>
+                  <a
+                    href="#"
+                    className={styles.quickBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveSection("account");
+                      setActiveNav("Pengaturan Akun");
+                    }}
+                  >
                     <span className={`${styles.quickIcon} ${styles.quickIconPurple}`}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                        <line x1="8" y1="21" x2="16" y2="21" />
-                        <line x1="12" y1="17" x2="12" y2="21" />
+                        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                        <circle cx="12" cy="12" r="3" />
                       </svg>
                     </span>
-                    <p className={styles.quickName}>Use Template</p>
-                    <p className={styles.quickDesc}>12 available</p>
-                  </Link>
+                    <p className={styles.quickName}>Pengaturan</p>
+                    <p className={styles.quickDesc}>Akun & plan</p>
+                  </a>
                 </div>
               </div>
             </article>
 
             <article className={styles.card}>
               <div className={styles.cardHeader}>
-                <div className={styles.cardTitle}>Plan Usage</div>
+                <div className={styles.cardTitle}>Penggunaan Paket</div>
                 <span className={styles.planPill}>{planPill}</span>
               </div>
               <div className={styles.cardBody}>
@@ -1074,8 +1202,8 @@ export default function DashboardPage() {
           <article className={styles.card}>
             <div className={styles.cardHeader}>
               <div>
-                <p className={styles.cardTitle}>Signing Volume</p>
-                <p className={styles.cardSub}>Last 7 days</p>
+                <p className={styles.cardTitle}>Volume Penandatanganan</p>
+                <p className={styles.cardSub}>7 hari terakhir</p>
               </div>
             </div>
             <div className={styles.cardBody}>
@@ -1083,11 +1211,12 @@ export default function DashboardPage() {
                 {chartRows.map((height, index) => (
                   <div key={index} className={styles.chartBarWrap}>
                     <div
-                      className={`${styles.chartBar} ${index < 5 ? styles.chartBarPrimary : styles.chartBarLight}`}
+                      className={`${styles.chartBar} ${index === 6 ? styles.chartBarPrimary : styles.chartBarLight}`}
                       style={{ height: `${height}%` }}
-                      data-val={String(height)}
+                      data-val={String(Math.round(chartCounts[index]))}
+                      title={`${chartCounts[index]} dokumen`}
                     />
-                    <div className={styles.chartLabel}>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index]}</div>
+                    <div className={styles.chartLabel}>{chartLabels[index]}</div>
                   </div>
                 ))}
               </div>
@@ -1096,23 +1225,23 @@ export default function DashboardPage() {
 
           <article className={styles.card}>
             <div className={styles.cardHeader}>
-              <div className={styles.cardTitle}>Activity Feed</div>
+              <div className={styles.cardTitle}>Aktivitas Terbaru</div>
               <a
                 href="#"
                 className={styles.cardLink}
                 onClick={(e) => {
                   e.preventDefault();
                   setActiveSection("documents");
-                  setActiveNav("Document Center");
+                  setActiveNav("Pusat Dokumen");
                 }}
               >
-                See all
+                Lihat semua
               </a>
             </div>
             <div className={`${styles.cardBody} ${styles.cardBodyCompact}`}>
               <div className={styles.activityList}>
                 {feedItems.length === 0 ? (
-                  <p className={styles.activityTime}>No activity yet.</p>
+                  <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada aktivitas.</div>
                 ) : (
                   feedItems.map((event, index) => {
                     const actor = toDisplayName(event.actor_email, "System");
@@ -1149,15 +1278,15 @@ export default function DashboardPage() {
           <article className={styles.card}>
             <div className={styles.cardHeader}>
               <div>
-                <p className={styles.cardTitle}>Awaiting Signers</p>
-                <p className={styles.cardSub}>Requires attention</p>
+                <p className={styles.cardTitle}>Menunggu Penandatangan</p>
+                <p className={styles.cardSub}>Membutuhkan perhatian</p>
               </div>
-              <span className={styles.pendingPill}>{pendingRows.length} pending</span>
+              <span className={styles.pendingPill}>{pendingRows.length} tertunda</span>
             </div>
             <div className={`${styles.cardBody} ${styles.cardBodyCompact}`}>
               <div className={styles.signerList}>
                 {pendingRows.length === 0 ? (
-                  <p className={styles.activityTime}>No pending signer.</p>
+                  <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Tidak ada penandatangan yang tertunda.</div>
                 ) : (
                   pendingRows.map((doc, index) => {
                     const signerName = toDisplayName(doc.owner_email, "Signer");
@@ -1196,86 +1325,518 @@ export default function DashboardPage() {
   function renderAnalysisPanel() {
     const analysisDocuments = documents.filter((doc) => Boolean(doc.analysis_id));
 
+    const handleAnalysisDrop = (e: React.DragEvent) => { e.preventDefault(); setAnalysisDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setAnalysisFile(f); setAnalysisError(null); setAnalysisResult(null); } else { setAnalysisError("Hanya file PDF yang didukung."); } };
+    const handleAnalysisFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setAnalysisFile(f); setAnalysisError(null); setAnalysisResult(null); } };
+
+    const handleAnalyze = async () => {
+      if (!analysisFile) return;
+      setAnalysisRunning(true); setAnalysisError(null); setAnalysisResult(null);
+      try {
+        const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
+        const fd = new FormData(); fd.append("file", analysisFile);
+        const res = await fetch("/api/analyze", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+        if (!res.ok) { const err = await res.json().catch(() => ({ detail: "Gagal menganalisis." })); throw new Error(parseApiError(err, "Gagal menganalisis dokumen.")); }
+        const data = await res.json();
+        setPdfUrl(URL.createObjectURL(analysisFile));
+        setAnalysisResult(data); setNotice("Analisis selesai!"); loadDocuments();
+      } catch (err) { setAnalysisError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setAnalysisRunning(false); }
+    };
+
+    const loadAnalysisResult = async (analysisId: string) => {
+      setViewingAnalysisId(analysisId); setViewingAnalysisLoading(true); setViewingAnalysis(null); setPdfUrl(null);
+      try {
+        const data = await requestJson<AnalysisResponse>(`/api/analysis/${analysisId}`, { fallbackError: "Gagal memuat analisis." });
+        setViewingAnalysis(data);
+
+        // Fetch the PDF
+        try {
+          const res = await requestWithAuth(`/api/analysis/${analysisId}/pdf/`, { method: "GET" });
+          if (res.ok) {
+            const blob = await res.blob();
+            setPdfUrl(URL.createObjectURL(blob));
+          }
+        } catch { /* PDF not available */ }
+      } catch { /* ignore */ } finally { setViewingAnalysisLoading(false); }
+    };
+
+    const handleClauseSelect = (text: string | null, clauseIndex: number) => {
+      if (text) {
+        setHighlightText(text);
+        setActiveClauseIndex(clauseIndex);
+        const result = viewingAnalysis || analysisResult;
+        const clause = result?.clauses?.find((c: any) => c.clause_index === clauseIndex);
+        if (clause) {
+          const colorMap: Record<string, string> = {
+            high: "rgba(239, 68, 68, 0.3)",
+            medium: "rgba(245, 158, 11, 0.3)",
+            low: "rgba(59, 130, 246, 0.3)",
+            safe: "rgba(34, 197, 94, 0.3)",
+          };
+          setHighlightColor(colorMap[clause.risk_level] || "rgba(251, 146, 60, 0.35)");
+        }
+      } else {
+        setHighlightText(null);
+        setActiveClauseIndex(null);
+      }
+    };
+
+    const handleReset = () => {
+      setViewingAnalysisId(null);
+      setViewingAnalysis(null);
+      setAnalysisResult(null);
+      setAnalysisFile(null);
+      setPdfUrl(null);
+      setChatOpen(false);
+    };
+
+    // If viewing a specific analysis result or just completed an analysis
+    if (viewingAnalysisId || analysisResult) {
+      const activeResult = viewingAnalysis || (analysisResult as AnalysisResponse);
+      const isLoading = viewingAnalysisId && viewingAnalysisLoading;
+
+      if (isLoading || !activeResult) {
+        return (
+          <section className="min-h-[60vh] flex items-center justify-center border border-border-light bg-white rounded-xl">
+            <div className="text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-primary-orange border-t-transparent rounded-full mx-auto mb-3" />
+              <p className="text-sm text-neutral-gray">Memuat hasil analisis...</p>
+            </div>
+          </section>
+        );
+      }
+
+      return (
+        <section className="h-[calc(100vh-100px)] flex flex-col bg-white border border-border-light rounded-xl overflow-hidden relative">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border-light bg-gray-50/50">
+            <div>
+              <p className="text-sm font-semibold text-dark-navy">Hasil Analisis</p>
+              <p className="text-xs text-neutral-gray">{activeResult.filename || "Dokumen"}</p>
+            </div>
+            <button type="button" onClick={handleReset} className={styles.actionBtn}>
+              Analisis Baru
+            </button>
+          </div>
+
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
+            {/* Left panel */}
+            <div className="w-full md:w-[60%] overflow-y-auto border-b md:border-b-0 md:border-r border-border-light min-h-0 flex-1 md:flex-none p-4 lg:p-6 bg-light-cream">
+              {pdfUrl && (
+                <div className="md:hidden mb-3">
+                  <a href={pdfUrl} download={activeResult.filename || "dokumen.pdf"} className="flex items-center justify-center gap-2 w-full py-2 bg-dark-navy text-white rounded-xl text-xs font-semibold hover:bg-gray-800 transition-colors">
+                    📄 Lihat PDF
+                  </a>
+                </div>
+              )}
+              <AnalysisResults
+                result={activeResult}
+                onReset={handleReset}
+                onClauseSelect={handleClauseSelect}
+                activeClauseIndex={activeClauseIndex}
+              />
+            </div>
+
+            {/* Right panel */}
+            {pdfUrl ? (
+              <div className="hidden md:block md:w-[40%] bg-gray-100 min-h-0 relative">
+                <PdfViewer
+                  pdfUrl={pdfUrl}
+                  highlightText={highlightText}
+                  highlightColor={highlightColor}
+                />
+              </div>
+            ) : (
+              <div className="hidden md:flex md:w-[40%] items-center justify-center bg-gray-50">
+                <p className="text-neutral-gray text-sm">PDF tidak tersedia</p>
+              </div>
+            )}
+          </div>
+
+          {/* Chat Panel placed absolutely within this container wrapper */}
+          <div className="absolute inset-y-0 right-0 z-50 overflow-hidden pointer-events-none" style={{ width: '100%', maxWidth: '400px' }}>
+             <ChatPanel
+                analysisId={activeResult.analysis_id}
+                analysisResult={activeResult}
+                isOpen={chatOpen}
+                onToggle={() => setChatOpen(!chatOpen)}
+                initialRemainingChats={activeResult.remaining_chats ?? null}
+             />
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section className="space-y-4">
+        {/* Upload + Analyze */}
         <article className={styles.card}>
           <div className={styles.cardHeader}>
-            <div>
-              <p className={styles.cardTitle}>Analysis Workspace</p>
-              <p className={styles.cardSub}>Akses hasil analisis kontrak yang sudah diproses.</p>
-            </div>
-            <Link href="/cek-dokumen/" className={styles.cardLink}>
-              Analyze New Document
-            </Link>
+            <div><p className={styles.cardTitle}>Analisis Dokumen</p><p className={styles.cardSub}>Upload kontrak PDF untuk dianalisis oleh AI.</p></div>
           </div>
           <div className={styles.cardBody}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Link
-                href="/cek-dokumen/"
-                className="rounded-lg border border-border-light bg-white px-4 py-3 text-sm font-semibold text-dark-navy hover:border-dark-navy/40"
-              >
-                Upload and Analyze Contract
-              </Link>
-              <Link
-                href="/bisnis/"
-                className="rounded-lg border border-border-light bg-white px-4 py-3 text-sm font-semibold text-dark-navy hover:border-dark-navy/40"
-              >
-                View Business Plans
-              </Link>
-            </div>
+            {!analysisFile && !analysisRunning && (
+              <div className={`${styles.uploadZone} ${analysisDragOver ? styles.uploadZoneActive : ""}`} onDragOver={(e) => { e.preventDefault(); setAnalysisDragOver(true); }} onDragLeave={() => setAnalysisDragOver(false)} onDrop={handleAnalysisDrop} onClick={() => document.getElementById("analysis-file-input")?.click()}>
+                <input id="analysis-file-input" type="file" accept=".pdf" onChange={handleAnalysisFileSelect} style={{ display: "none" }} />
+                <div className={styles.uploadIcon}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                <p className={styles.uploadTitle}>Drag &amp; drop PDF atau klik untuk upload</p>
+                <p className={styles.uploadHint}>Maksimal 20MB - Hanya file PDF</p>
+              </div>
+            )}
+            {analysisFile && !analysisRunning && (
+              <div className={styles.signFormWrap}>
+                <div className={styles.filePreview}>
+                  <div className={styles.fileIcon}><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                  <div className={styles.fileInfo}><p className={styles.fileName}>{analysisFile.name}</p><p className={styles.fileMeta}>{(analysisFile.size / (1024*1024)).toFixed(1)} MB - PDF</p></div>
+                  <button type="button" className={styles.fileRemove} onClick={() => { setAnalysisFile(null); setAnalysisError(null); }}>&times;</button>
+                </div>
+                <button type="button" onClick={handleAnalyze} className={styles.signBtn} style={{ marginTop: 12 }}>Analisis Sekarang</button>
+              </div>
+            )}
+            {analysisRunning && (
+              <div style={{ textAlign: "center", padding: 32 }}>
+                <div className={styles.spinner} style={{ width: 32, height: 32, borderWidth: 3, margin: "0 auto 12px" }} />
+                <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>Menganalisis dokumen...</p>
+                <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>Proses ini memakan waktu sekitar 15 detik.</p>
+              </div>
+            )}
+            {analysisError && <div className={styles.alertError} style={{ marginTop: 16 }}>{analysisError}</div>}
           </div>
         </article>
 
+        {/* Previous analysis results */}
         <article className={styles.card}>
           <div className={styles.cardHeader}>
-            <div>
-              <p className={styles.cardTitle}>Analysis Results</p>
-              <p className={styles.cardSub}>Daftar hasil analisis yang terkait dokumen kolaborasi.</p>
-            </div>
+            <div><p className={styles.cardTitle}>Riwayat Analisis</p><p className={styles.cardSub}>Dokumen yang sudah pernah dianalisis.</p></div>
           </div>
           <div className={styles.cardBody}>
             {analysisDocuments.length === 0 ? (
-              <p className="text-sm text-neutral-gray">Belum ada hasil analisis yang tersimpan.</p>
+              <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada hasil analisis. Upload dokumen di atas untuk memulai.</div>
             ) : (
-              <div className="space-y-2">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {analysisDocuments.slice(0, 20).map((doc) => (
-                  <div
-                    key={doc.document_id}
-                    className="flex flex-col gap-3 rounded-lg border border-border-light p-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-dark-navy">{doc.filename}</p>
-                      <p className="text-xs text-neutral-gray">
-                        Analysis ID: {doc.analysis_id} · Updated {formatDateTime(doc.updated_at)}
-                      </p>
+                  <div key={doc.document_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: "1px solid #f0f0f0", borderRadius: 10, background: "#fafbfc" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.filename}</p>
+                      <p style={{ fontSize: 11, color: "#94a3b8" }}>ID: {doc.analysis_id} - {formatDateTime(doc.updated_at)}</p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {doc.analysis_id ? (
-                        <Link
-                          href={`/cek-dokumen/${doc.analysis_id}/`}
-                          className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
-                        >
-                          Open Result
-                        </Link>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedDocumentId(doc.document_id);
-                          setActiveSection("documents");
-                          setActiveNav("Document Center");
-                        }}
-                        className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
-                      >
-                        Open in Document Center
-                      </button>
-                    </div>
+                    <button type="button" onClick={() => loadAnalysisResult(doc.analysis_id!)} className={styles.actionBtn}>Lihat Hasil</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
         </article>
+      </section>
+    );
+  }
+
+  function renderSignPanel() {
+    // --- Helpers ---
+    const handleFileDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setSignFile(f); setSignResult(null); setSignError(null); } else { setSignError("Hanya file PDF yang didukung."); } };
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setSignFile(f); setSignResult(null); setSignError(null); } };
+    const formatFileSize = (b: number) => b < 1024 ? `${b} B` : b < 1024*1024 ? `${(b/1024).toFixed(1)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
+
+    const handleQuickSign = async () => {
+      if (!signFile) return;
+      const name = signQuickName.trim() || profile?.name || "";
+      if (!name) { setSignError("Nama penandatangan wajib diisi."); return; }
+      setSigningInProgress(true); setSignError(null); setSignResult(null);
+      try {
+        const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
+        const fd = new FormData(); fd.append("file", signFile); fd.append("signer_name", name);
+        const res = await fetch("/api/documents/quick-sign/", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+        if (!res.ok) { const err = await res.json().catch(() => ({ detail: "Gagal menandatangani." })); throw new Error(parseApiError(err, "Gagal menandatangani dokumen.")); }
+        const blob = await res.blob(); const url = URL.createObjectURL(blob);
+        setSignResult({ url, filename: parseFilenameFromDisposition(res.headers.get("content-disposition"), "signed-document.pdf"), documentId: res.headers.get("x-document-id") || "" });
+        setNotice("Dokumen berhasil ditandatangani!"); loadDocuments();
+      } catch (err) { setSignError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setSigningInProgress(false); }
+    };
+
+    const loadSignPanelDoc = async (docId: string) => {
+      setSignPanelDocId(docId); setSignPanelLoading(true); setSignPanelSigners(null); setSignPanelEvents(null);
+      try {
+        const [signers, events] = await Promise.all([
+          requestJson<DocumentSignersResponse>(`/api/documents/${docId}/signers`, { fallbackError: "Gagal memuat signer." }),
+          requestJson<DocumentEventsResponse>(`/api/documents/${docId}/events`, { fallbackError: "Gagal memuat events." }),
+        ]);
+        setSignPanelSigners(signers); setSignPanelEvents(events);
+        setSignPanelForm((prev) => ({ ...prev, signerName: profile?.name || "" }));
+      } catch { /* ignore */ } finally { setSignPanelLoading(false); }
+    };
+
+    const handlePanelSign = async (e: FormEvent) => {
+      e.preventDefault(); if (!signPanelDocId) return;
+      setSignPanelProcessing(true);
+      try {
+        await requestJson<DocumentActionResponse>(`/api/documents/${signPanelDocId}/sign`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signer_name: signPanelForm.signerName, consent_text: signPanelForm.consentText, document_hash: signPanelForm.documentHash || "consent-only" }),
+          fallbackError: "Gagal menandatangani.",
+        });
+        setNotice("Berhasil menandatangani!"); loadDocuments(); loadSignPanelDoc(signPanelDocId);
+      } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignPanelProcessing(false); }
+    };
+
+    const handlePanelReject = async (e: FormEvent) => {
+      e.preventDefault(); if (!signPanelDocId) return;
+      setSignPanelProcessing(true);
+      try {
+        await requestJson<DocumentActionResponse>(`/api/documents/${signPanelDocId}/reject`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: signPanelRejectReason || null }),
+          fallbackError: "Gagal menolak.",
+        });
+        setNotice("Dokumen berhasil ditolak."); loadDocuments(); loadSignPanelDoc(signPanelDocId);
+      } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignPanelProcessing(false); }
+    };
+
+    const handleShareSubmit = async (e: FormEvent) => {
+      e.preventDefault(); setSignShareProcessing(true);
+      try {
+        const selectedDoc = documents.find((d) => d.document_id === signShareForm.selectedDocId);
+        await requestJson<ShareDocumentResponse>("/api/documents/share", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: selectedDoc?.filename || signShareForm.filename, analysis_id: selectedDoc?.analysis_id || null,
+            signer_emails: signShareForm.signerEmails.split(",").map((s) => s.trim()).filter(Boolean),
+            company_pays_analysis: signShareForm.companyPaysAnalysis, expires_at: signShareForm.expiresAt || null,
+          }),
+          fallbackError: "Gagal membagikan dokumen.",
+        });
+        setNotice("Dokumen berhasil dikirim untuk ditandatangani!"); loadDocuments();
+        setSignShareForm({ selectedDocId: "", filename: "", signerEmails: "", companyPaysAnalysis: false, expiresAt: "" });
+        setSignActiveTab("list");
+      } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignShareProcessing(false); }
+    };
+
+    const panelDoc = signPanelDocId ? documents.find((d) => d.document_id === signPanelDocId) : null;
+    const canSign = panelDoc && panelDoc.my_signer_status === "pending";
+    const canReject = panelDoc && panelDoc.my_signer_status === "pending";
+    const isCompleted = panelDoc?.status === "completed";
+
+    const tabClass = (t: string) => `${styles.signTab} ${signActiveTab === t ? styles.signTabActive : ""}`;
+
+    return (
+      <section>
+        {/* Tab Navigation */}
+        <div className={styles.signTabs}>
+          <button type="button" className={tabClass("list")} onClick={() => setSignActiveTab("list")}>
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Dokumen Saya
+          </button>
+          <button type="button" className={tabClass("quick")} onClick={() => setSignActiveTab("quick")}>
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Tanda Tangan Cepat
+          </button>
+          <button type="button" className={tabClass("share")} onClick={() => setSignActiveTab("share")}>
+            <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Bagikan Dokumen
+          </button>
+        </div>
+
+        {/* Tab 1: Dokumen Saya */}
+        {signActiveTab === "list" && (
+          <div className={styles.twoCol}>
+            <article className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div><p className={styles.cardTitle}>Daftar Dokumen</p><p className={styles.cardSub}>Semua dokumen — tanda tangani, lacak status, dan unduh.</p></div>
+                <button type="button" onClick={() => loadDocuments()} className={styles.actionBtn}>Muat Ulang</button>
+              </div>
+              <div className={styles.cardBody} style={{ padding: 0 }}>
+                {documents.length === 0 ? (
+                  <div className="flex w-full min-h-[200px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada dokumen. Gunakan &quot;Tanda Tangan Cepat&quot; atau &quot;Bagikan Dokumen&quot; untuk memulai.</div>
+                ) : (
+                  <table className={styles.table}>
+                    <thead><tr><th>Dokumen</th><th>Status</th><th>Peran</th><th>Progress</th><th>Updated</th></tr></thead>
+                    <tbody>
+                      {documents.map((doc) => (
+                        <tr key={doc.document_id} onClick={() => loadSignPanelDoc(doc.document_id)} style={{ cursor: "pointer", background: signPanelDocId === doc.document_id ? "#f8fafc" : undefined }}>
+                          <td><span className={styles.docName}>{doc.filename}</span></td>
+                          <td><span className={`${styles.badge} ${styles[`badge${statusVariant(doc.status).charAt(0).toUpperCase() + statusVariant(doc.status).slice(1)}` as keyof typeof styles] || ""}`}>{formatStatus(doc.status)}</span></td>
+                          <td style={{ fontSize: 12, color: "#64748b" }}>{doc.my_signer_role === "sender" ? "Pengirim" : "Penerima"}</td>
+                          <td style={{ fontSize: 12, color: "#64748b" }}>{doc.signers_signed}/{doc.signers_total} ditandatangani</td>
+                          <td style={{ fontSize: 12, color: "#94a3b8" }}>{formatShortDate(doc.updated_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </article>
+
+            {/* Detail Panel */}
+            <article className={styles.card}>
+              <div className={styles.cardHeader}><div><p className={styles.cardTitle}>Detail &amp; Aksi</p></div></div>
+              <div className={styles.cardBody}>
+                {!panelDoc ? (
+                  <div className="flex w-full min-h-[250px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Pilih dokumen untuk melihat detail.</div>
+                ) : signPanelLoading ? (
+                  <p style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: 24 }}>Memuat...</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {/* Doc info */}
+                    <div style={{ padding: "12px 0", borderBottom: "1px solid #f0f0f0" }}>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{panelDoc.filename}</p>
+                      <p style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Status: {formatStatus(panelDoc.status)} - {panelDoc.signers_signed}/{panelDoc.signers_total} tanda tangan</p>
+                    </div>
+
+                    {/* Signers list */}
+                    {signPanelSigners && (
+                      <div>
+                        <p className={styles.signLabel} style={{ marginBottom: 8 }}>Penandatangan</p>
+                        <div className={styles.signerList}>
+                          {signPanelSigners.signers.map((s) => (
+                            <div key={s.email} className={styles.signerRow}>
+                              <span className={`${styles.docAvatar} ${s.status === "signed" ? styles.docAvatarGreen : s.status === "rejected" ? styles.docAvatarAmber : styles.docAvatarBlue}`}>{toInitials(s.name || s.email)}</span>
+                              <div className={styles.signerInfo}><p className={styles.signerName}>{s.name || s.email}</p><p className={styles.signerEmail}>{s.email} - {s.role === "sender" ? "Pengirim" : "Penerima"}</p></div>
+                              <span className={`${styles.badge} ${s.status === "signed" ? styles.badgeSigned : s.status === "rejected" ? styles.badgeRejected : styles.badgePending}`}>{s.status === "signed" ? "Telah TTD" : s.status === "rejected" ? "Ditolak" : "Tertunda"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sign form */}
+                    {canSign && (
+                      <form onSubmit={handlePanelSign} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <p className={styles.signLabel}>Tanda Tangani Dokumen Ini</p>
+                        <input type="text" placeholder={profile?.name || "Nama"} value={signPanelForm.signerName} onChange={(e) => setSignPanelForm((f) => ({ ...f, signerName: e.target.value }))} className={styles.signInput} required />
+                        <div className={styles.consentBox}>
+                          <svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          <p>Saya menyetujui penandatanganan elektronik dokumen ini secara sah.</p>
+                        </div>
+                        <button type="submit" disabled={signPanelProcessing} className={styles.signBtn}>
+                          {signPanelProcessing ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani</>}
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Reject form */}
+                    {canReject && (
+                      <form onSubmit={handlePanelReject} style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+                        <p className={styles.signLabel} style={{ color: "#dc2626" }}>Tolak Dokumen</p>
+                        <input type="text" placeholder="Alasan penolakan (opsional)" value={signPanelRejectReason} onChange={(e) => setSignPanelRejectReason(e.target.value)} className={styles.signInput} />
+                        <button type="submit" disabled={signPanelProcessing} className={styles.signBtn} style={{ background: "#dc2626", boxShadow: "0 2px 8px rgba(220,38,38,0.2)", alignSelf: "flex-start" }}>
+                          {signPanelProcessing ? "Menolak..." : "Tolak Dokumen"}
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Download buttons for completed */}
+                    {isCompleted && (
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        <a href={`/api/documents/${panelDoc.document_id}/certificate/pdf`} target="_blank" rel="noopener" className={styles.downloadBtn}>Sertifikat</a>
+                        <a href={`/api/documents/${panelDoc.document_id}/signed-pdf`} target="_blank" rel="noopener" className={styles.downloadBtn} style={{ background: "#1a56e8" }}>PDF Hasil TTD</a>
+                      </div>
+                    )}
+
+                    {/* Audit trail */}
+                    {signPanelEvents && signPanelEvents.events.length > 0 && (
+                      <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+                        <p className={styles.signLabel}>Audit Trail</p>
+                        <div className={styles.activityList}>
+                          {signPanelEvents.events.slice(0, 8).map((ev) => (
+                            <div key={ev.id} className={styles.activityItem}>
+                              <div className={styles.activityDotWrap}><div className={`${styles.activityDot} ${ev.event_type === "signed" || ev.event_type === "quick_signed" ? styles.dotGreen : ev.event_type === "rejected" ? styles.dotRed : styles.dotBlue}`}/><div className={styles.activityLine}/></div>
+                              <div className={styles.activityContent}><p className={styles.activityText}><b>{ev.event_type.replace(/_/g, " ")}</b> oleh {toDisplayName(ev.actor_email)}</p><p className={styles.activityTime}>{formatDateTime(ev.created_at)}</p></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </article>
+          </div>
+        )}
+
+        {/* Tab 2: Tanda Tangan Cepat */}
+        {signActiveTab === "quick" && (
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div><p className={styles.cardTitle}>Tanda Tangan Cepat</p><p className={styles.cardSub}>Upload PDF dan tanda tangani langsung dengan sertifikat digital.</p></div>
+            </div>
+            <div className={styles.cardBody}>
+              {!signFile && !signResult && (
+                <div className={`${styles.uploadZone} ${dragOver ? styles.uploadZoneActive : ""}`} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleFileDrop} onClick={() => document.getElementById("sign-file-input")?.click()}>
+                  <input id="sign-file-input" type="file" accept=".pdf" onChange={handleFileSelect} style={{ display: "none" }} />
+                  <div className={styles.uploadIcon}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                  <p className={styles.uploadTitle}>Drag &amp; drop PDF atau klik untuk upload</p>
+                  <p className={styles.uploadHint}>Maksimal 20MB - Hanya file PDF</p>
+                </div>
+              )}
+              {signFile && !signResult && (
+                <div className={styles.signFormWrap}>
+                  <div className={styles.filePreview}>
+                    <div className={styles.fileIcon}><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                    <div className={styles.fileInfo}><p className={styles.fileName}>{signFile.name}</p><p className={styles.fileMeta}>{formatFileSize(signFile.size)} - PDF</p></div>
+                    <button type="button" className={styles.fileRemove} onClick={() => { setSignFile(null); setSignError(null); }}>&times;</button>
+                  </div>
+                  <div className={styles.signFields}>
+                    <div><label className={styles.signLabel}>Nama Penandatangan</label><input type="text" value={signQuickName} onChange={(e) => setSignQuickName(e.target.value)} placeholder={profile?.name || "Nama lengkap"} className={styles.signInput} /></div>
+                    <div className={styles.consentBox}><svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>Saya menyetujui penandatanganan elektronik dokumen ini.</p></div>
+                    <button type="button" onClick={handleQuickSign} disabled={signingInProgress} className={styles.signBtn}>
+                      {signingInProgress ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani Sekarang</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {signResult && (
+                <div className={styles.signSuccess}>
+                  <div className={styles.successIcon}><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+                  <p className={styles.successTitle}>Dokumen Berhasil Ditandatangani!</p>
+                  <p className={styles.successSub}>Sertifikat digital telah ditambahkan ke dalam PDF Anda.</p>
+                  <div className={styles.successActions}>
+                    <a href={signResult.url} download={signResult.filename} className={styles.downloadBtn}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download</a>
+                    <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setSignError(null); setSignQuickName(""); }}>Tanda Tangani Lagi</button>
+                  </div>
+                </div>
+              )}
+              {signError && <div className={styles.alertError} style={{ marginTop: 16 }}>{signError}</div>}
+            </div>
+          </article>
+        )}
+
+        {/* Tab 3: Bagikan Dokumen */}
+        {signActiveTab === "share" && (
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div><p className={styles.cardTitle}>Bagikan Dokumen untuk Ditandatangani</p><p className={styles.cardSub}>Pilih dokumen, tambahkan penerima, dan kirim untuk co-sign.</p></div>
+            </div>
+            <div className={styles.cardBody}>
+              <form onSubmit={handleShareSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <label className={styles.signLabel}>Pilih Dokumen</label>
+                  <select value={signShareForm.selectedDocId} onChange={(e) => { const doc = documents.find((d) => d.document_id === e.target.value); setSignShareForm((f) => ({ ...f, selectedDocId: e.target.value, filename: doc?.filename || "" })); }} className={styles.signInput} style={{ appearance: "auto" }} required>
+                    <option value="">-- Pilih dokumen yang akan dibagikan --</option>
+                    {documents.filter((d) => d.my_signer_role === "sender").map((doc) => (
+                      <option key={doc.document_id} value={doc.document_id}>{doc.filename} {doc.analysis_id ? "(sudah dianalisis)" : ""}</option>
+                    ))}
+                  </select>
+                  {!documents.some((d) => d.my_signer_role === "sender") && (
+                    <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>Belum ada dokumen milik Anda. Gunakan &quot;Tanda Tangan Cepat&quot; untuk membuat dokumen terlebih dahulu.</p>
+                  )}
+                </div>
+                {(() => { const sd = documents.find((d) => d.document_id === signShareForm.selectedDocId); return sd ? (
+                  <div style={{ padding: "10px 14px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f0f0f0", fontSize: 12, color: "#475569" }}>
+                    <p><strong>Dokumen:</strong> {sd.filename}</p>
+                    <p><strong>Status:</strong> {formatStatus(sd.status)} - {sd.signers_signed}/{sd.signers_total} ditandatangani</p>
+                    {sd.analysis_id && <p style={{ color: "#059669" }}>Analisis AI terdeteksi otomatis</p>}
+                  </div>
+                ) : null; })()}
+                <div><label className={styles.signLabel}>Email Penerima</label><input type="text" value={signShareForm.signerEmails} onChange={(e) => setSignShareForm((f) => ({ ...f, signerEmails: e.target.value }))} placeholder="nama@email.com, nama2@email.com" className={styles.signInput} required /><p style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Pisahkan beberapa email dengan koma</p></div>
+                <div><label className={styles.signLabel}>Batas Waktu (opsional)</label><input type="datetime-local" value={signShareForm.expiresAt} onChange={(e) => setSignShareForm((f) => ({ ...f, expiresAt: e.target.value }))} className={styles.signInput} /></div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+                  <input type="checkbox" checked={signShareForm.companyPaysAnalysis} onChange={(e) => setSignShareForm((f) => ({ ...f, companyPaysAnalysis: e.target.checked }))} />
+                  Dibayar Perusahaan -- tanggung biaya analisis AI untuk penerima
+                </label>
+                <button type="submit" disabled={signShareProcessing || !signShareForm.selectedDocId} className={styles.signBtn}>
+                  {signShareProcessing ? <><span className={styles.spinner}/>Mengirim...</> : <>Kirim untuk Ditandatangani</>}
+                </button>
+              </form>
+            </div>
+          </article>
+        )}
       </section>
     );
   }
@@ -1288,7 +1849,7 @@ export default function DashboardPage() {
         <article className={styles.card}>
           <div className={styles.cardHeader}>
             <div>
-              <p className={styles.cardTitle}>Book Legal Consultation</p>
+              <p className={styles.cardTitle}>Jadwalkan Konsultasi Hukum</p>
               <p className={styles.cardSub}>Kirim permintaan konsultasi ke tim ahli hukum TanyaHukum.</p>
             </div>
           </div>
@@ -1368,7 +1929,7 @@ export default function DashboardPage() {
         <article className="border-b border-border-light bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light px-4 py-3 sm:px-5">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Document Center</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Pusat Dokumen</h2>
               <p className="text-xs text-neutral-gray">Kelola kolaborasi tanda tangan dan audit dokumen.</p>
             </div>
             <button
@@ -1436,7 +1997,7 @@ export default function DashboardPage() {
                     checked={shareForm.companyPaysAnalysis}
                     onChange={(e) => setShareForm((prev) => ({ ...prev, companyPaysAnalysis: e.target.checked }))}
                   />
-                  Company pays analysis
+                  Perusahaan Tanggung Biaya Analisis
                 </label>
                 <button
                   type="submit"
@@ -1461,16 +2022,16 @@ export default function DashboardPage() {
                   <tr className="border-b border-border-light bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-neutral-gray">
                     <th className="px-4 py-2 sm:px-5">Dokumen</th>
                     <th className="px-4 py-2 sm:px-5">Status</th>
-                    <th className="px-4 py-2 sm:px-5">Signer</th>
+                    <th className="px-4 py-2 sm:px-5">Penandatangan</th>
                     <th className="px-4 py-2 sm:px-5">Peran Anda</th>
-                    <th className="px-4 py-2 sm:px-5">Updated</th>
+                    <th className="px-4 py-2 sm:px-5">Diperbarui</th>
                   </tr>
                 </thead>
                 <tbody>
                   {documents.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-4 text-center text-neutral-gray sm:px-5">
-                        Belum ada dokumen kolaborasi.
+                      <td colSpan={5} className="p-0">
+                        <div className="flex w-full min-h-[160px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada dokumen kolaborasi.</div>
                       </td>
                     </tr>
                   ) : (
@@ -1495,7 +2056,7 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 sm:px-5 text-dark-navy">
-                            {doc.signers_signed}/{doc.signers_total} signed
+                            {doc.signers_signed}/{doc.signers_total} selesai
                           </td>
                           <td className="px-4 py-3 sm:px-5 text-dark-navy">
                             {doc.my_signer_role || "-"} / {doc.my_signer_status || "-"}
@@ -1522,14 +2083,14 @@ export default function DashboardPage() {
               </div>
             </div>
             {!selectedDocument ? (
-              <div className="px-4 py-4 text-sm text-neutral-gray sm:px-5">Pilih dokumen untuk melihat detail.</div>
+              <div className="flex w-full min-h-[300px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Pilih dokumen untuk melihat detail.</div>
             ) : (
               <div className="space-y-4 px-4 py-4 sm:px-5">
                 <div className="space-y-1 border-b border-border-light pb-3">
                   <p className="text-sm font-semibold text-dark-navy">{selectedDocument.filename}</p>
-                  <p className="text-xs text-neutral-gray">Updated {formatDateTime(selectedDocument.updated_at)}</p>
+                  <p className="text-xs text-neutral-gray">Diperbarui {formatDateTime(selectedDocument.updated_at)}</p>
                   <p className="text-xs text-neutral-gray">
-                    {signedCount}/{totalSignerCount} signer selesai
+                    {signedCount}/{totalSignerCount} penandatangan selesai
                   </p>
                 </div>
 
@@ -1542,14 +2103,13 @@ export default function DashboardPage() {
                   >
                     {loadingDocumentDetails ? "Memuat..." : "Refresh Detail"}
                   </button>
-                  {selectedDocument.analysis_id ? (
-                    <Link
-                      href={`/cek-dokumen/${selectedDocument.analysis_id}/`}
+                    <button
+                      type="button"
+                      onClick={() => { setActiveSection("analysis"); setActiveNav("Analisis Dokumen"); if (selectedDocument.analysis_id) { setViewingAnalysisId(selectedDocument.analysis_id); } }}
                       className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
                     >
                       Buka Analisis
-                    </Link>
-                  ) : null}
+                    </button>
                   {selectedDocument.status === "completed" ? (
                     <>
                       <button
@@ -1574,7 +2134,7 @@ export default function DashboardPage() {
                         }
                         className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
                       >
-                        Signed PDF
+                        PDF Hasil TTD
                       </button>
                     </>
                   ) : null}
@@ -1640,17 +2200,17 @@ export default function DashboardPage() {
 
                 <div className="grid gap-3">
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Signer</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Penandatangan</p>
                     <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                       {(selectedSigners?.signers || []).length === 0 ? (
-                        <p className="text-xs text-neutral-gray">Belum ada data signer.</p>
+                        <div className="flex w-full min-h-[100px] items-center justify-center p-4 text-xs text-neutral-gray text-center">Belum ada data signer.</div>
                       ) : (
                         selectedSigners?.signers.map((signer) => (
                           <div key={`${signer.email}-${signer.role}`} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{signer.email}</p>
                             <p className="text-[11px] text-neutral-gray">
-                              {signer.role} • {signer.status}
-                              {signer.signed_at ? ` • ${formatDateTime(signer.signed_at)}` : ""}
+                              {signer.role} &bull; {signer.status}
+                              {signer.signed_at ? ` \u2022 ${formatDateTime(signer.signed_at)}` : ""}
                             </p>
                           </div>
                         ))
@@ -1668,7 +2228,7 @@ export default function DashboardPage() {
                           <div key={event.id} className="border-b border-border-light px-3 py-2 last:border-b-0">
                             <p className="text-xs font-medium text-dark-navy">{event.event_type}</p>
                             <p className="text-[11px] text-neutral-gray">
-                              {event.actor_email || "system"} • {formatDateTime(event.created_at)}
+                              {event.actor_email || "system"} &bull; {formatDateTime(event.created_at)}
                             </p>
                           </div>
                         ))
@@ -1690,7 +2250,7 @@ export default function DashboardPage() {
                           >
                             <p className="text-xs font-medium text-dark-navy">{signature.signer_name}</p>
                             <p className="text-[11px] text-neutral-gray">
-                              {signature.signer_email} • {formatDateTime(signature.signed_at)}
+                              {signature.signer_email} &bull; {formatDateTime(signature.signed_at)}
                             </p>
                           </div>
                         ))}
@@ -1746,18 +2306,13 @@ export default function DashboardPage() {
         <article className="border-b border-border-light bg-white p-4 sm:p-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Langkah Lanjutan</h3>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link
-              href="/bisnis/"
-              className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
-            >
-              Lihat Paket Bisnis
-            </Link>
-            <Link
-              href="/cek-dokumen/"
+            <button
+              type="button"
+              onClick={() => { setActiveSection("analysis"); setActiveNav("Analisis Dokumen"); }}
               className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
             >
               Analisis Dokumen Baru
-            </Link>
+            </button>
           </div>
         </article>
       </section>
@@ -1785,7 +2340,10 @@ export default function DashboardPage() {
     <main className={styles.app}>
       <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         <div className={styles.sidebarHeader}>
-          <img src="/logo.svg" alt="TanyaHukum" className={styles.logoWordmark} />
+          <Link href="/" className="flex-shrink-0">
+            <img src="/logo.svg" alt="TanyaHukum" className={styles.logoImg} />
+            <img src="/favicon.svg" alt="TanyaHukum" className={styles.faviconImg} />
+          </Link>
         </div>
 
         <button
@@ -1801,13 +2359,13 @@ export default function DashboardPage() {
 
         <nav className={styles.nav}>
           <div className={styles.navSection}>
-            <p className={styles.navLabel}>Main</p>
+            <p className={styles.navLabel}>Ringkasan</p>
             <a
               href="#"
-              className={navItemClass("Overview")}
+              className={navItemClass("Ringkasan")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Overview");
+                setActiveNav("Ringkasan");
                 setActiveSection("overview");
               }}
             >
@@ -1819,14 +2377,55 @@ export default function DashboardPage() {
                   <rect x="3" y="14" width="7" height="7" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Overview</span>
+              <span className={styles.navItemLabel}>Dasbor</span>
+            </a>
+          </div>
+
+          <div className={styles.navSection}>
+            <p className={styles.navLabel}>Dokumen</p>
+            <a
+              href="#"
+              className={navItemClass("Analisis Dokumen")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Analisis Dokumen");
+                setActiveSection("analysis");
+              }}
+            >
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Analisis Dokumen</span>
             </a>
             <a
               href="#"
-              className={navItemClass("Document Center")}
+              className={navItemClass("Tanda Tangan")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Document Center");
+                setActiveNav("Tanda Tangan");
+                setActiveSection("sign");
+              }}
+            >
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Tanda Tangan</span>
+            </a>
+          </div>
+
+          <div className={styles.navSection}>
+            <p className={styles.navLabel}>Kolaborasi</p>
+            <a
+              href="#"
+              className={navItemClass("Pusat Dokumen")}
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveNav("Pusat Dokumen");
                 setActiveSection("documents");
               }}
             >
@@ -1836,83 +2435,37 @@ export default function DashboardPage() {
                   <polyline points="14 2 14 8 20 8" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Document Center</span>
+              <span className={styles.navItemLabel}>Pusat Dokumen</span>
               <span className={styles.navBadge}>{documentsMeta.pending_my_action}</span>
             </a>
             <a
               href="#"
-              className={navItemClass("Analysis Results")}
+              className={navItemClass("Konsultasi")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Analysis Results");
-                setActiveSection("analysis");
-              }}
-            >
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>Analysis Results</span>
-            </a>
-            <a
-              href="#"
-              className={navItemClass("Consultation")}
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveNav("Consultation");
+                setActiveNav("Konsultasi");
                 setActiveSection("consultation");
               }}
             >
               <span className={styles.navIcon}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Consultation</span>
+              <span className={styles.navItemLabel}>Konsultasi</span>
             </a>
           </div>
 
-          <div className={styles.navSection}>
-            <p className={styles.navLabel}>Workspace</p>
-            <Link
-              href="/cek-dokumen/"
-              className={navItemClass("Analyze Contract")}
-              onClick={() => setActiveNav("Analyze Contract")}
-            >
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>Analyze Contract</span>
-            </Link>
-            <Link
-              href="/bisnis/"
-              className={navItemClass("Business Plans")}
-              onClick={() => setActiveNav("Business Plans")}
-            >
-              <span className={styles.navIcon}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                </svg>
-              </span>
-              <span className={styles.navItemLabel}>Business Plans</span>
-            </Link>
-          </div>
+
 
           <div className={styles.navSection}>
-            <p className={styles.navLabel}>Account</p>
+            <p className={styles.navLabel}>Akun</p>
             <a
               href="#"
-              className={navItemClass("Account Settings")}
+              className={navItemClass("Pengaturan Akun")}
               onClick={(e) => {
                 e.preventDefault();
-                setActiveNav("Account Settings");
+                setActiveNav("Pengaturan Akun");
                 setActiveSection("account");
               }}
             >
@@ -1922,7 +2475,7 @@ export default function DashboardPage() {
                   <circle cx="12" cy="12" r="3" />
                 </svg>
               </span>
-              <span className={styles.navItemLabel}>Account Settings</span>
+              <span className={styles.navItemLabel}>Pengaturan Akun</span>
             </a>
           </div>
         </nav>
@@ -1934,6 +2487,18 @@ export default function DashboardPage() {
               <p className={styles.userName}>{profile?.name || "Akun"}</p>
               <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
             </div>
+            <button 
+              type="button" 
+              onClick={handleLogout}
+              className="ml-auto p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              title="Keluar"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
           </div>
         </div>
       </aside>
@@ -1951,10 +2516,10 @@ export default function DashboardPage() {
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
-              <input type="text" placeholder="Search documents…" aria-label="Search documents" />
+              <input type="text" placeholder="Cari dokumen..." aria-label="Cari dokumen" />
             </label>
 
-            <a href="#" className={styles.iconBtn} title="Notifications">
+            <a href="#" className={styles.iconBtn} title="Notifikasi">
               <span className={styles.notifDot} />
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1962,13 +2527,13 @@ export default function DashboardPage() {
               </svg>
             </a>
 
-            <Link href="/cek-dokumen/" className={styles.primaryBtn}>
+            <button type="button" onClick={() => { setActiveSection("analysis"); setActiveNav("Analisis Dokumen"); }} className={styles.primaryBtn}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              Send for Signature
-            </Link>
+              Analisis Dokumen
+            </button>
           </div>
         </header>
 
@@ -1986,11 +2551,20 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {notice ? <div className={styles.alertSuccess}>{notice}</div> : null}
+          {notice && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-dark-navy text-white text-sm font-medium rounded-full shadow-lg border border-border-light flex items-center gap-2 animate-in slide-in-from-bottom-5">
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              {notice}
+            </div>
+          )}
 
           {activeSection === "overview" && renderOverview()}
           {activeSection === "documents" && renderDocumentsPanel()}
           {activeSection === "analysis" && renderAnalysisPanel()}
+          {activeSection === "sign" && renderSignPanel()}
           {activeSection === "consultation" && renderConsultationPanel()}
           {activeSection === "account" && renderAccountPanel()}
         </div>

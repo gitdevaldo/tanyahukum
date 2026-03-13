@@ -12,6 +12,7 @@ import {
   FAQ,
   FinalCTA,
   Footer,
+  BackToTop,
 } from "@/components/landing";
 
 export default function HomePage() {
@@ -30,6 +31,7 @@ export default function HomePage() {
       <FAQ />
       <FinalCTA />
       <Footer />
+      <BackToTop />
     </>
   );
 }

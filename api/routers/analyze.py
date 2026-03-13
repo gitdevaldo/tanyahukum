@@ -13,9 +13,9 @@ from slowapi.util import get_remote_address
 from api.models.schemas import AnalysisResponse
 from api.services.analyzer import analyze_contract
 from api.services.storage import save_analysis, get_analysis, get_analysis_pdf
+from api.services.documents import attach_document_analysis, create_analyzed_document, resolve_document_analysis_quota_owner
 from api.services.guardrails import MAX_FILE_SIZE, validate_pdf_upload
 from api.dependencies import verify_api_key, get_optional_bearer_token
-from api.services.documents import resolve_document_analysis_quota_owner, attach_document_analysis
 from api.services.supabase_auth import (
     SupabaseServiceError,
     get_auth_user,
@@ -64,6 +64,7 @@ async def analyze_pdf(
 
     auth_user_id: str | None = None
     auth_email: str | None = None
+    auth_name: str | None = None
 
     # If authenticated user is present, consume analysis quota atomically
     if access_token:
@@ -72,14 +73,14 @@ async def analyze_pdf(
             user_meta = auth_user.get("user_metadata") or {}
             auth_user_id = auth_user["id"]
             auth_email = auth_user.get("email", "")
-            name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
+            auth_name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
             account_type, plan = resolve_account_plan_from_user_meta(user_meta)
 
             await asyncio.to_thread(
                 upsert_user_profile_and_quota,
                 auth_user_id,
                 auth_email,
-                name,
+                auth_name,
                 plan,
                 account_type,
             )
@@ -108,20 +109,35 @@ async def analyze_pdf(
         except Exception as e:
             logger.warning(f"Failed to persist analysis (non-fatal): {e}")
 
-        if document_id and auth_user_id and auth_email:
-            try:
-                await asyncio.to_thread(
-                    attach_document_analysis,
-                    document_id,
-                    auth_user_id,
-                    auth_email,
-                    result.analysis_id,
-                    file.filename,
-                )
-            except SupabaseServiceError as e:
-                if e.status_code >= 500:
-                    raise HTTPException(status_code=500, detail="Gagal mengaitkan hasil analisis ke dokumen.")
-                raise HTTPException(status_code=e.status_code, detail=e.detail)
+        if auth_user_id and auth_email and auth_name:
+            if document_id:
+                try:
+                    await asyncio.to_thread(
+                        attach_document_analysis,
+                        document_id,
+                        auth_user_id,
+                        auth_email,
+                        result.analysis_id,
+                        file.filename,
+                        request_id=getattr(request.state, "request_id", None),
+                    )
+                except SupabaseServiceError as e:
+                    if e.status_code >= 500:
+                        raise HTTPException(status_code=500, detail="Gagal mengaitkan hasil analisis ke dokumen.")
+                    raise HTTPException(status_code=e.status_code, detail=e.detail)
+            else:
+                try:
+                    await asyncio.to_thread(
+                        create_analyzed_document,
+                        auth_user_id,
+                        auth_email,
+                        auth_name,
+                        result.analysis_id,
+                        file.filename,
+                        getattr(request.state, "request_id", None),
+                    )
+                except SupabaseServiceError as e:
+                    logger.warning(f"Failed to create standalone analyzed document: {e}")
 
         return result
     except ValueError as e:

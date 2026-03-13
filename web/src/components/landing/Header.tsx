@@ -40,7 +40,7 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-light-cream border-b border-border-light px-[5%] py-3 sm:py-4">
+    <header className="sticky top-0 z-50 bg-light-cream/95 backdrop-blur-sm border-b border-border-light px-[5%] py-3 sm:py-4">
       <nav className="mx-auto flex max-w-[1400px] items-center justify-between">
         <Link href="/" className="flex-shrink-0">
           <img src="/logo.svg" alt="TanyaHukum" className="h-10 sm:h-12" />
