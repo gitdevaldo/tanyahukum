@@ -675,33 +675,60 @@ export default function DashboardPage() {
     const recentDocuments = documents.slice(0, 6);
     const feedItems = (selectedEvents?.events || []).slice(0, 5);
     const pendingRows = pendingDocuments.slice(0, 5);
-    const chartPalette = ["#1a56e8", "#3b82f6", "#0fc56a", "#f59e0b", "#8b5cf6", "#ff6b35", "#06b6d4"];
+    const chartRows = [
+      { day: "Mon", value: 55 },
+      { day: "Tue", value: 70 },
+      { day: "Wed", value: 45 },
+      { day: "Thu", value: 90 },
+      { day: "Fri", value: 65 },
+      { day: "Sat", value: 30 },
+      { day: "Sun", value: 20 },
+    ];
 
     return (
       <section>
         <div className={styles.statGrid}>
           <article className={styles.statCard}>
-            <p className={styles.statLabel}>Total Dokumen</p>
+            <div className={styles.statCardTop}>
+              <p className={styles.statLabel}>Total Dokumen</p>
+              <span className={`${styles.statIconWrap} ${styles.iconBlue}`}>DOC</span>
+            </div>
             <p className={styles.statValue}>{documentsMeta.total}</p>
-            <p className={styles.statMeta}>{documentsMeta.owned_total} milik akun Anda</p>
-          </article>
-          <article className={styles.statCard}>
-            <p className={styles.statLabel}>Butuh Aksi Anda</p>
-            <p className={styles.statValue}>{documentsMeta.pending_my_action}</p>
-            <p className={styles.statMeta}>Dokumen menunggu tanda tangan Anda</p>
-          </article>
-          <article className={styles.statCard}>
-            <p className={styles.statLabel}>Analisis Tersisa</p>
-            <p className={styles.statValue}>{String(quotaInfo?.analysis_remaining ?? "Unlimited")}</p>
-            <p className={styles.statMeta}>
-              {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
+            <p className={`${styles.statChange} ${styles.changeUp}`}>
+              {documentsMeta.owned_total} <span>dokumen milik akun</span>
             </p>
           </article>
+
           <article className={styles.statCard}>
-            <p className={styles.statLabel}>e-Sign Tersisa</p>
+            <div className={styles.statCardTop}>
+              <p className={styles.statLabel}>Butuh Aksi Anda</p>
+              <span className={`${styles.statIconWrap} ${styles.iconAmber}`}>ACT</span>
+            </div>
+            <p className={styles.statValue}>{documentsMeta.pending_my_action}</p>
+            <p className={`${styles.statChange} ${styles.changeWarn}`}>
+              Prioritas <span>untuk tanda tangan</span>
+            </p>
+          </article>
+
+          <article className={styles.statCard}>
+            <div className={styles.statCardTop}>
+              <p className={styles.statLabel}>Analisis Tersisa</p>
+              <span className={`${styles.statIconWrap} ${styles.iconGreen}`}>AI</span>
+            </div>
+            <p className={styles.statValue}>{String(quotaInfo?.analysis_remaining ?? "Unlimited")}</p>
+            <p className={`${styles.statChange} ${styles.changeUp}`}>
+              {quotaInfo?.analysis_used ?? 0} <span>terpakai bulan ini</span>
+            </p>
+          </article>
+
+          <article className={styles.statCard}>
+            <div className={styles.statCardTop}>
+              <p className={styles.statLabel}>e-Sign Tersisa</p>
+              <span className={`${styles.statIconWrap} ${styles.iconOrange}`}>SIGN</span>
+            </div>
             <p className={styles.statValue}>{String(quotaInfo?.esign_remaining ?? "Unlimited")}</p>
-            <p className={styles.statMeta}>
-              {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
+            <p className={`${styles.statChange} ${styles.changeUp}`}>
+              {quotaInfo?.esign_used ?? 0} <span>dokumen diproses</span>
             </p>
           </article>
         </div>
@@ -753,7 +780,9 @@ export default function DashboardPage() {
                           </button>
                         </td>
                         <td>
-                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}
+                          >
                             {formatStatus(doc.status)}
                           </span>
                         </td>
@@ -833,7 +862,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className={styles.quotaBar}>
-                    <div className={styles.quotaFill} style={{ width: `${esignProgress ?? 0}%` }} />
+                    <div className={`${styles.quotaFill} ${styles.quotaFillGreen}`} style={{ width: `${esignProgress ?? 0}%` }} />
                   </div>
                 </div>
                 <p className={styles.statMeta}>Reset kuota: {formatDateTime(quotaInfo?.reset_at ?? null)}</p>
@@ -851,19 +880,15 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className={styles.cardBody}>
-              <div className="grid grid-cols-7 gap-2">
-                {[55, 70, 45, 90, 65, 30, 20].map((height, index) => (
-                  <div key={index} className="flex flex-col items-center justify-end gap-1">
+              <div className={styles.chartArea}>
+                {chartRows.map((item, index) => (
+                  <div key={item.day} className={styles.chartBarWrap}>
                     <div
-                      className="w-full rounded-t-sm"
-                      style={{
-                        height: `${height}px`,
-                        backgroundColor: chartPalette[index],
-                      }}
+                      className={`${styles.chartBar} ${index % 2 === 0 ? styles.chartBarPrimary : styles.chartBarLight}`}
+                      style={{ height: `${item.value}%` }}
+                      data-val={`${item.value}%`}
                     />
-                    <span className="text-[10px] text-neutral-gray">
-                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index]}
-                    </span>
+                    <span className={styles.chartLabel}>{item.day}</span>
                   </div>
                 ))}
               </div>
@@ -881,12 +906,28 @@ export default function DashboardPage() {
                 {feedItems.length === 0 ? (
                   <p className={styles.activityTime}>Belum ada activity feed.</p>
                 ) : (
-                  feedItems.map((event) => (
+                  feedItems.map((event, index) => (
                     <div key={event.id} className={styles.activityItem}>
-                      <p className={styles.activityText}>
-                        {event.event_type} • {event.actor_email || "system"}
-                      </p>
-                      <p className={styles.activityTime}>{formatDateTime(event.created_at)}</p>
+                      <div className={styles.activityDotWrap}>
+                        <span
+                          className={`${styles.activityDot} ${
+                            index % 4 === 0
+                              ? styles.dotBlue
+                              : index % 4 === 1
+                                ? styles.dotGreen
+                                : index % 4 === 2
+                                  ? styles.dotAmber
+                                  : styles.dotRed
+                          }`}
+                        />
+                        <span className={styles.activityLine} />
+                      </div>
+                      <div className={styles.activityContent}>
+                        <p className={styles.activityText}>
+                          {event.event_type} • {event.actor_email || "system"}
+                        </p>
+                        <p className={styles.activityTime}>{formatDateTime(event.created_at)}</p>
+                      </div>
                     </div>
                   ))
                 )}
@@ -1350,6 +1391,15 @@ export default function DashboardPage() {
           </Link>
         </div>
 
+        <button
+          type="button"
+          className={styles.sidebarToggle}
+          onClick={() => setSidebarCollapsed((prev) => !prev)}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {sidebarCollapsed ? ">" : "<"}
+        </button>
+
         <nav className={styles.nav}>
           <div className={styles.navSection}>
             <p className={styles.navLabel}>Workspace</p>
@@ -1357,30 +1407,41 @@ export default function DashboardPage() {
               type="button"
               className={sectionButtonClass("overview")}
               onClick={() => setActiveSection("overview")}
+              data-short="OV"
             >
-              {sidebarCollapsed ? "OV" : "Overview"}
+              <span className={styles.navItemLabel}>Overview</span>
             </button>
             <button
               type="button"
               className={sectionButtonClass("documents")}
               onClick={() => setActiveSection("documents")}
+              data-short="DOC"
             >
-              {sidebarCollapsed ? "DOC" : "Document Center"}
+              <span className={styles.navItemLabel}>Document Center</span>
+              {documentsMeta.pending_my_action > 0 ? (
+                <span className={styles.navBadge}>{documentsMeta.pending_my_action}</span>
+              ) : null}
             </button>
             <button
               type="button"
               className={sectionButtonClass("account")}
               onClick={() => setActiveSection("account")}
+              data-short="ACC"
             >
-              {sidebarCollapsed ? "ACC" : "Account"}
+              <span className={styles.navItemLabel}>Account</span>
             </button>
           </div>
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <p className={styles.userName}>{sidebarCollapsed ? userInitial : profile?.name || "Akun"}</p>
+          <div className={styles.userCard}>
+            <span className={styles.avatar}>{userInitial}</span>
+            <div className={styles.userInfo}>
+              <p className={styles.userName}>{profile?.name || "Akun"}</p>
+              <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
+            </div>
+          </div>
           <div className={styles.sidebarMeta}>
-            <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
             <p className="mt-2 text-[11px] text-neutral-gray">
               Plan <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
             </p>
@@ -1400,12 +1461,11 @@ export default function DashboardPage() {
           </div>
 
           <div className={styles.topbarActions}>
-            <button
-              type="button"
-              className={`${styles.actionBtn} ${styles.sidebarToggleButton}`}
-              onClick={() => setSidebarCollapsed((prev) => !prev)}
-            >
-              {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            <label className={styles.searchBox}>
+              <input type="text" placeholder="Cari dokumen..." aria-label="Cari dokumen" />
+            </label>
+            <button type="button" className={styles.actionBtn}>
+              Notifikasi
             </button>
             <Link href="/cek-dokumen/" className={styles.primaryBtn}>
               Cek Dokumen
