@@ -220,25 +220,9 @@ function parseFilenameFromDisposition(contentDisposition: string | null, fallbac
   return fallback;
 }
 
-type SummaryCardProps = {
-  title: string;
-  value: string;
-  detail: string;
-};
-
-function SummaryCard({ title, value, detail }: SummaryCardProps) {
-  return (
-    <article className="rounded-xl border border-border-light bg-white p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">{title}</p>
-      <p className="mt-1 text-2xl font-bold leading-none text-dark-navy">{value}</p>
-      <p className="mt-2 text-xs text-neutral-gray">{detail}</p>
-    </article>
-  );
-}
-
 export default function DashboardPage() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+  const [activeSection, setActiveSection] = useState<DashboardSection>("documents");
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [documents, setDocuments] = useState<DashboardDocumentItem[]>([]);
@@ -282,7 +266,6 @@ export default function DashboardPage() {
 
   const signedCount = selectedDocument?.signers_signed ?? 0;
   const totalSignerCount = selectedDocument?.signers_total ?? 0;
-  const signedProgress = totalSignerCount > 0 ? Math.round((signedCount / totalSignerCount) * 100) : 0;
 
   const requestWithAuth = useCallback(
     async (
@@ -666,198 +649,179 @@ export default function DashboardPage() {
   function sectionButtonClass(section: DashboardSection) {
     const active = activeSection === section;
     return [
-      "w-full rounded-lg border px-3 py-2 text-left text-sm font-semibold transition-colors",
+      "w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors lg:text-left text-center",
       active
         ? "border-dark-navy bg-dark-navy text-white"
-        : "border-border-light bg-white text-dark-navy hover:border-dark-navy/50",
+        : "border-border-light bg-white text-dark-navy hover:border-dark-navy/40",
     ].join(" ");
   }
 
+  const pendingDocuments = useMemo(
+    () => documents.filter((doc) => doc.my_signer_status === "pending").slice(0, 8),
+    [documents],
+  );
+
   function renderOverview() {
     return (
-      <section className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            title="Dokumen Aktif"
-            value={String(documentsMeta.total)}
-            detail={`${documentsMeta.owned_total} dokumen Anda`}
-          />
-          <SummaryCard
-            title="Butuh Aksi Anda"
-            value={String(documentsMeta.pending_my_action)}
-            detail="Dokumen menunggu tanda tangan Anda"
-          />
-          <SummaryCard
-            title="Analisis Tersisa"
-            value={String(quotaInfo?.analysis_remaining ?? "Unlimited")}
-            detail={`Terpakai ${quotaInfo?.analysis_used ?? 0} dari ${formatLimit(quotaInfo?.analysis_limit ?? null)}`}
-          />
-          <SummaryCard
-            title="e-Sign Tersisa"
-            value={String(quotaInfo?.esign_remaining ?? "Unlimited")}
-            detail={`Terpakai ${quotaInfo?.esign_used ?? 0} dari ${formatLimit(quotaInfo?.esign_limit ?? null)}`}
-          />
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-3">
-          <article className="rounded-xl border border-border-light bg-white p-5 xl:col-span-2">
-            <h2 className="text-base font-bold text-dark-navy">Pemakaian Kuota</h2>
-            <p className="mt-1 text-sm text-neutral-gray">Ringkasan penggunaan kuota pada periode saat ini.</p>
-
-            <div className="mt-4 space-y-4">
-              <div className="rounded-lg border border-border-light p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <p className="font-semibold text-dark-navy">Analisis AI</p>
-                  <p className="text-neutral-gray">
-                    {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
-                  </p>
-                </div>
-                {analysisProgress === null ? (
-                  <p className="mt-2 text-xs text-neutral-gray">Paket Anda memiliki kuota analisis unlimited.</p>
-                ) : (
-                  <>
-                    <div className="mt-2 h-2 rounded-full bg-gray-100">
-                      <div
-                        className="h-2 rounded-full bg-dark-navy"
-                        style={{ width: `${analysisProgress}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-neutral-gray">{analysisProgress}% terpakai</p>
-                  </>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-border-light p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <p className="font-semibold text-dark-navy">e-Sign</p>
-                  <p className="text-neutral-gray">
-                    {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
-                  </p>
-                </div>
-                {esignProgress === null ? (
-                  <p className="mt-2 text-xs text-neutral-gray">Paket Anda memiliki kuota e-sign unlimited.</p>
-                ) : (
-                  <>
-                    <div className="mt-2 h-2 rounded-full bg-gray-100">
-                      <div
-                        className="h-2 rounded-full bg-primary-orange"
-                        style={{ width: `${esignProgress}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-neutral-gray">{esignProgress}% terpakai</p>
-                  </>
-                )}
-              </div>
-            </div>
-          </article>
-
-          <article className="rounded-xl border border-border-light bg-white p-5">
-            <h2 className="text-base font-bold text-dark-navy">Aksi Cepat</h2>
-            <div className="mt-4 space-y-2">
-              <Link
-                href="/cek-dokumen/"
-                className="block rounded-lg border border-border-light px-4 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy"
-              >
-                Mulai Analisis Dokumen
-              </Link>
-              <button
-                type="button"
-                onClick={() => setActiveSection("documents")}
-                className="block w-full rounded-lg border border-border-light px-4 py-2 text-left text-sm font-medium text-dark-navy hover:border-dark-navy"
-              >
-                Buka Document Center
-              </button>
-              <Link
-                href="/bisnis/"
-                className="block rounded-lg border border-border-light px-4 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy"
-              >
-                Upgrade Paket
-              </Link>
-            </div>
-
-            <div className="mt-5 rounded-lg border border-border-light bg-gray-50 p-3 text-xs text-neutral-gray">
-              <p>Reset kuota berikutnya</p>
-              <p className="mt-1 font-semibold text-dark-navy">{formatDateTime(quotaInfo?.reset_at ?? null)}</p>
-            </div>
-          </article>
-        </div>
-      </section>
-    );
-  }
-
-  function renderDocumentListCard(doc: DashboardDocumentItem) {
-    const selected = selectedDocumentId === doc.document_id;
-    return (
-      <button
-        key={doc.document_id}
-        type="button"
-        onClick={() => setSelectedDocumentId(doc.document_id)}
-        className={[
-          "w-full rounded-lg border px-4 py-3 text-left transition-colors",
-          selected
-            ? "border-dark-navy bg-gray-50"
-            : "border-border-light bg-white hover:border-dark-navy/50",
-        ].join(" ")}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-dark-navy">{doc.filename}</p>
-            <p className="mt-1 text-xs text-neutral-gray">ID: {doc.document_id}</p>
+      <section className="space-y-5">
+        <article className="rounded-lg border border-border-light bg-white">
+          <div className="border-b border-border-light px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Ringkasan Operasional</h2>
           </div>
-          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}>
-            {formatStatus(doc.status)}
-          </span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-neutral-gray">
-          <p>Total {doc.signers_total}</p>
-          <p>Pending {doc.signers_pending}</p>
-          <p>Signed {doc.signers_signed}</p>
-        </div>
-      </button>
+          <div className="grid divide-y divide-border-light sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+            <div className="px-4 py-4 sm:px-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Total Dokumen</p>
+              <p className="mt-1 text-2xl font-semibold text-dark-navy">{documentsMeta.total}</p>
+              <p className="text-xs text-neutral-gray">{documentsMeta.owned_total} milik akun Anda</p>
+            </div>
+            <div className="px-4 py-4 sm:px-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Butuh Aksi</p>
+              <p className="mt-1 text-2xl font-semibold text-dark-navy">{documentsMeta.pending_my_action}</p>
+              <p className="text-xs text-neutral-gray">Menunggu tanda tangan Anda</p>
+            </div>
+            <div className="px-4 py-4 sm:px-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Sisa Analisis</p>
+              <p className="mt-1 text-2xl font-semibold text-dark-navy">
+                {String(quotaInfo?.analysis_remaining ?? "Unlimited")}
+              </p>
+              <p className="text-xs text-neutral-gray">
+                {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
+              </p>
+            </div>
+            <div className="px-4 py-4 sm:px-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Sisa e-Sign</p>
+              <p className="mt-1 text-2xl font-semibold text-dark-navy">
+                {String(quotaInfo?.esign_remaining ?? "Unlimited")}
+              </p>
+              <p className="text-xs text-neutral-gray">
+                {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-lg border border-border-light bg-white">
+          <div className="border-b border-border-light px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Pemakaian Kuota</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-sm">
+              <thead>
+                <tr className="border-b border-border-light bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-neutral-gray">
+                  <th className="px-4 py-2 sm:px-5">Fitur</th>
+                  <th className="px-4 py-2 sm:px-5">Terpakai</th>
+                  <th className="px-4 py-2 sm:px-5">Limit</th>
+                  <th className="px-4 py-2 sm:px-5">Persentase</th>
+                  <th className="px-4 py-2 sm:px-5">Reset</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-border-light">
+                  <td className="px-4 py-3 sm:px-5 font-medium text-dark-navy">Analisis AI</td>
+                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{quotaInfo?.analysis_used ?? 0}</td>
+                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{formatLimit(quotaInfo?.analysis_limit ?? null)}</td>
+                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{analysisProgress === null ? "-" : `${analysisProgress}%`}</td>
+                  <td className="px-4 py-3 sm:px-5 text-neutral-gray" rowSpan={2}>{formatDateTime(quotaInfo?.reset_at ?? null)}</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 sm:px-5 font-medium text-dark-navy">e-Sign</td>
+                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{quotaInfo?.esign_used ?? 0}</td>
+                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{formatLimit(quotaInfo?.esign_limit ?? null)}</td>
+                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{esignProgress === null ? "-" : `${esignProgress}%`}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="rounded-lg border border-border-light bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-light px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Prioritas Hari Ini</h2>
+            <button
+              type="button"
+              onClick={() => setActiveSection("documents")}
+              className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/50"
+            >
+              Buka Document Center
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-sm">
+              <thead>
+                <tr className="border-b border-border-light bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-neutral-gray">
+                  <th className="px-4 py-2 sm:px-5">Dokumen</th>
+                  <th className="px-4 py-2 sm:px-5">Status Anda</th>
+                  <th className="px-4 py-2 sm:px-5">Status Dokumen</th>
+                  <th className="px-4 py-2 sm:px-5">Update</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingDocuments.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-4 text-center text-neutral-gray sm:px-5">
+                      Tidak ada dokumen pending untuk Anda saat ini.
+                    </td>
+                  </tr>
+                ) : (
+                  pendingDocuments.map((doc) => (
+                    <tr key={doc.document_id} className="border-b border-border-light last:border-b-0">
+                      <td className="px-4 py-3 sm:px-5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDocumentId(doc.document_id);
+                            setActiveSection("documents");
+                          }}
+                          className="text-left font-medium text-dark-navy underline-offset-2 hover:underline"
+                        >
+                          {doc.filename}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 sm:px-5 text-dark-navy">{doc.my_signer_status || "-"}</td>
+                      <td className="px-4 py-3 sm:px-5 text-dark-navy">{formatStatus(doc.status)}</td>
+                      <td className="px-4 py-3 sm:px-5 text-neutral-gray">{formatDateTime(doc.updated_at)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
     );
   }
 
   function renderDocumentsPanel() {
     return (
-      <section className="grid gap-4 xl:grid-cols-5">
-        <div className="space-y-4 xl:col-span-2">
-          <article className="rounded-xl border border-border-light bg-white p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-bold text-dark-navy">Document Center</h2>
-              <button
-                type="button"
-                onClick={() => loadDocuments()}
-                disabled={refreshingDocuments}
-                className="rounded-lg border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {refreshingDocuments ? "Memuat..." : "Muat Ulang"}
-              </button>
+      <section className="space-y-4">
+        <article className="rounded-lg border border-border-light bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light px-4 py-3 sm:px-5">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Document Center</h2>
+              <p className="text-xs text-neutral-gray">Kelola kolaborasi tanda tangan dan audit dokumen.</p>
             </div>
-            <p className="mt-1 text-xs text-neutral-gray">
-              Semua dokumen kolaborasi, status signer, dan aksi e-sign dalam satu tempat.
-            </p>
+            <button
+              type="button"
+              onClick={() => loadDocuments()}
+              disabled={refreshingDocuments}
+              className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {refreshingDocuments ? "Memuat..." : "Muat Ulang"}
+            </button>
+          </div>
 
-            <div className="mt-4 space-y-2">
-              {documents.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border-light bg-gray-50 p-4 text-sm text-neutral-gray">
-                  Belum ada dokumen kolaborasi.
-                </div>
-              ) : (
-                documents.map(renderDocumentListCard)
-              )}
-            </div>
-          </article>
-
-          <article className="rounded-xl border border-border-light bg-white p-4">
-            <h3 className="text-sm font-bold text-dark-navy">Bagikan Dokumen untuk Tanda Tangan</h3>
-            <form className="mt-3 space-y-3" onSubmit={submitShare}>
+          <details className="px-4 py-3 sm:px-5">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-dark-navy">
+              Bagikan dokumen baru
+            </summary>
+            <form className="mt-4 grid gap-3 lg:grid-cols-2" onSubmit={submitShare}>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-neutral-gray">Nama Dokumen</label>
                 <input
                   type="text"
                   value={shareForm.filename}
                   onChange={(e) => setShareForm((prev) => ({ ...prev, filename: e.target.value }))}
-                  className="w-full rounded-lg border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
                   placeholder="Perjanjian Kerja Sama Vendor"
                   required
                 />
@@ -869,21 +833,19 @@ export default function DashboardPage() {
                   type="text"
                   value={shareForm.analysisId}
                   onChange={(e) => setShareForm((prev) => ({ ...prev, analysisId: e.target.value }))}
-                  className="w-full rounded-lg border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
-                  placeholder="Masukkan analysis_id jika sudah ada"
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
                 />
               </div>
 
-              <div>
+              <div className="lg:col-span-2">
                 <label className="mb-1 block text-xs font-semibold text-neutral-gray">Email Signer</label>
                 <textarea
                   value={shareForm.signerEmails}
                   onChange={(e) => setShareForm((prev) => ({ ...prev, signerEmails: e.target.value }))}
-                  className="h-24 w-full rounded-lg border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                  className="h-24 w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
                   placeholder="email1@contoh.com, email2@contoh.com"
                   required
                 />
-                <p className="mt-1 text-[11px] text-neutral-gray">Pisahkan email dengan koma atau baris baru.</p>
               </div>
 
               <div>
@@ -892,76 +854,112 @@ export default function DashboardPage() {
                   type="datetime-local"
                   value={shareForm.expiresAt}
                   onChange={(e) => setShareForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
-                  className="w-full rounded-lg border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-xs text-neutral-gray">
-                <input
-                  type="checkbox"
-                  checked={shareForm.companyPaysAnalysis}
-                  onChange={(e) => setShareForm((prev) => ({ ...prev, companyPaysAnalysis: e.target.checked }))}
-                />
-                Company pays analysis
-              </label>
-
-              <button
-                type="submit"
-                disabled={processingShare}
-                className="w-full rounded-lg bg-dark-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {processingShare ? "Memproses..." : "Bagikan Dokumen"}
-              </button>
+              <div className="flex items-end justify-between gap-4">
+                <label className="flex items-center gap-2 text-xs text-neutral-gray">
+                  <input
+                    type="checkbox"
+                    checked={shareForm.companyPaysAnalysis}
+                    onChange={(e) => setShareForm((prev) => ({ ...prev, companyPaysAnalysis: e.target.checked }))}
+                  />
+                  Company pays analysis
+                </label>
+                <button
+                  type="submit"
+                  disabled={processingShare}
+                  className="rounded-md bg-dark-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {processingShare ? "Memproses..." : "Bagikan"}
+                </button>
+              </div>
             </form>
-          </article>
-        </div>
+          </details>
+        </article>
 
-        <div className="space-y-4 xl:col-span-3">
-          <article className="rounded-xl border border-border-light bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold text-dark-navy">Detail Dokumen</h2>
-                <p className="text-xs text-neutral-gray">
-                  Pilih dokumen untuk melihat signer, audit trail, dan aksi tanda tangan.
-                </p>
-              </div>
-              {selectedDocument && (
-                <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${statusBadgeClass(selectedDocument.status)}`}>
-                  {formatStatus(selectedDocument.status)}
-                </span>
-              )}
+        <div className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
+          <article className="rounded-lg border border-border-light bg-white">
+            <div className="border-b border-border-light px-4 py-3 sm:px-5">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Daftar Dokumen</h3>
             </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead>
+                  <tr className="border-b border-border-light bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-neutral-gray">
+                    <th className="px-4 py-2 sm:px-5">Dokumen</th>
+                    <th className="px-4 py-2 sm:px-5">Status</th>
+                    <th className="px-4 py-2 sm:px-5">Signer</th>
+                    <th className="px-4 py-2 sm:px-5">Peran Anda</th>
+                    <th className="px-4 py-2 sm:px-5">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-4 text-center text-neutral-gray sm:px-5">
+                        Belum ada dokumen kolaborasi.
+                      </td>
+                    </tr>
+                  ) : (
+                    documents.map((doc) => {
+                      const selected = selectedDocumentId === doc.document_id;
+                      return (
+                        <tr
+                          key={doc.document_id}
+                          onClick={() => setSelectedDocumentId(doc.document_id)}
+                          className={[
+                            "cursor-pointer border-b border-border-light align-top transition-colors last:border-b-0",
+                            selected ? "bg-gray-50" : "hover:bg-gray-50/60",
+                          ].join(" ")}
+                        >
+                          <td className="px-4 py-3 sm:px-5">
+                            <p className="font-medium text-dark-navy">{doc.filename}</p>
+                            <p className="mt-1 text-xs text-neutral-gray">{doc.document_id}</p>
+                          </td>
+                          <td className="px-4 py-3 sm:px-5">
+                            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}>
+                              {formatStatus(doc.status)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 sm:px-5 text-dark-navy">
+                            {doc.signers_signed}/{doc.signers_total} signed
+                          </td>
+                          <td className="px-4 py-3 sm:px-5 text-dark-navy">
+                            {doc.my_signer_role || "-"} / {doc.my_signer_status || "-"}
+                          </td>
+                          <td className="px-4 py-3 sm:px-5 text-neutral-gray">{formatDateTime(doc.updated_at)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </article>
 
-            {!selectedDocument ? (
-              <div className="mt-4 rounded-lg border border-dashed border-border-light bg-gray-50 p-4 text-sm text-neutral-gray">
-                Belum ada dokumen yang dipilih.
+          <article className="rounded-lg border border-border-light bg-white">
+            <div className="border-b border-border-light px-4 py-3 sm:px-5">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Detail & Aksi</h3>
+                {selectedDocument ? (
+                  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(selectedDocument.status)}`}>
+                    {formatStatus(selectedDocument.status)}
+                  </span>
+                ) : null}
               </div>
+            </div>
+            {!selectedDocument ? (
+              <div className="px-4 py-4 text-sm text-neutral-gray sm:px-5">Pilih dokumen untuk melihat detail.</div>
             ) : (
-              <div className="mt-4 space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-lg border border-border-light p-3">
-                    <p className="text-xs text-neutral-gray">Nama Dokumen</p>
-                    <p className="mt-1 text-sm font-semibold text-dark-navy">{selectedDocument.filename}</p>
-                  </div>
-                  <div className="rounded-lg border border-border-light p-3">
-                    <p className="text-xs text-neutral-gray">Update Terakhir</p>
-                    <p className="mt-1 text-sm font-semibold text-dark-navy">{formatDateTime(selectedDocument.updated_at)}</p>
-                  </div>
-                  <div className="rounded-lg border border-border-light p-3">
-                    <p className="text-xs text-neutral-gray">Signer Selesai</p>
-                    <p className="mt-1 text-sm font-semibold text-dark-navy">
-                      {signedCount} / {totalSignerCount}
-                    </p>
-                    <div className="mt-2 h-2 rounded-full bg-gray-100">
-                      <div className="h-2 rounded-full bg-dark-navy" style={{ width: `${signedProgress}%` }} />
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-border-light p-3">
-                    <p className="text-xs text-neutral-gray">Peran Anda</p>
-                    <p className="mt-1 text-sm font-semibold text-dark-navy">
-                      {selectedDocument.my_signer_role || "-"} / {selectedDocument.my_signer_status || "-"}
-                    </p>
-                  </div>
+              <div className="space-y-4 px-4 py-4 sm:px-5">
+                <div className="space-y-1 border-b border-border-light pb-3">
+                  <p className="text-sm font-semibold text-dark-navy">{selectedDocument.filename}</p>
+                  <p className="text-xs text-neutral-gray">Updated {formatDateTime(selectedDocument.updated_at)}</p>
+                  <p className="text-xs text-neutral-gray">
+                    {signedCount}/{totalSignerCount} signer selesai
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -969,16 +967,16 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => loadDocumentDetails(selectedDocument.document_id, selectedDocument.status)}
                     disabled={loadingDocumentDetails}
-                    className="rounded-lg border border-border-light px-3 py-2 text-xs font-semibold text-dark-navy hover:border-dark-navy disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {loadingDocumentDetails ? "Memuat detail..." : "Muat Detail"}
+                    {loadingDocumentDetails ? "Memuat..." : "Refresh Detail"}
                   </button>
                   {selectedDocument.analysis_id ? (
                     <Link
                       href={`/cek-dokumen/${selectedDocument.analysis_id}/`}
-                      className="rounded-lg border border-border-light px-3 py-2 text-xs font-semibold text-dark-navy hover:border-dark-navy"
+                      className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
                     >
-                      Buka Hasil Analisis
+                      Buka Analisis
                     </Link>
                   ) : null}
                   {selectedDocument.status === "completed" ? (
@@ -991,9 +989,9 @@ export default function DashboardPage() {
                             "certificate.pdf",
                           )
                         }
-                        className="rounded-lg border border-border-light px-3 py-2 text-xs font-semibold text-dark-navy hover:border-dark-navy"
+                        className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
                       >
-                        Unduh Sertifikat PDF
+                        Sertifikat PDF
                       </button>
                       <button
                         type="button"
@@ -1003,73 +1001,60 @@ export default function DashboardPage() {
                             "signed-document.pdf",
                           )
                         }
-                        className="rounded-lg border border-border-light px-3 py-2 text-xs font-semibold text-dark-navy hover:border-dark-navy"
+                        className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
                       >
-                        Unduh Signed PDF
+                        Signed PDF
                       </button>
                     </>
                   ) : null}
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <form onSubmit={submitSign} className="rounded-lg border border-border-light p-4">
-                    <h3 className="text-sm font-bold text-dark-navy">Tanda Tangani Dokumen</h3>
-                    <div className="mt-3 space-y-2">
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-neutral-gray">Nama Signer</label>
-                        <input
-                          type="text"
-                          value={signForm.signerName}
-                          onChange={(e) => setSignForm((prev) => ({ ...prev, signerName: e.target.value }))}
-                          className="w-full rounded-lg border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-neutral-gray">Consent Text</label>
-                        <textarea
-                          value={signForm.consentText}
-                          onChange={(e) => setSignForm((prev) => ({ ...prev, consentText: e.target.value }))}
-                          className="h-20 w-full rounded-lg border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-neutral-gray">Document Hash</label>
-                        <input
-                          type="text"
-                          value={signForm.documentHash}
-                          onChange={(e) => setSignForm((prev) => ({ ...prev, documentHash: e.target.value }))}
-                          className="w-full rounded-lg border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                          placeholder="hash dokumen saat ini"
-                          required
-                        />
-                      </div>
-                    </div>
+                <div className="grid gap-3 border-b border-border-light pb-4">
+                  <form onSubmit={submitSign} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Sign</p>
+                    <input
+                      type="text"
+                      value={signForm.signerName}
+                      onChange={(e) => setSignForm((prev) => ({ ...prev, signerName: e.target.value }))}
+                      className="w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
+                      placeholder="Nama signer"
+                      required
+                    />
+                    <textarea
+                      value={signForm.consentText}
+                      onChange={(e) => setSignForm((prev) => ({ ...prev, consentText: e.target.value }))}
+                      className="h-16 w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
+                      required
+                    />
+                    <input
+                      type="text"
+                      value={signForm.documentHash}
+                      onChange={(e) => setSignForm((prev) => ({ ...prev, documentHash: e.target.value }))}
+                      className="w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
+                      placeholder="Document hash"
+                      required
+                    />
                     <button
                       type="submit"
                       disabled={processingSign}
-                      className="mt-3 w-full rounded-lg bg-dark-navy px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-md bg-dark-navy px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {processingSign ? "Memproses..." : "Kirim Tanda Tangan"}
                     </button>
                   </form>
 
-                  <form onSubmit={submitReject} className="rounded-lg border border-border-light p-4">
-                    <h3 className="text-sm font-bold text-dark-navy">Tolak Dokumen</h3>
-                    <div className="mt-3">
-                      <label className="mb-1 block text-xs font-semibold text-neutral-gray">Alasan (Opsional)</label>
-                      <textarea
-                        value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        className="h-28 w-full rounded-lg border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                        placeholder="Berikan alasan penolakan dokumen."
-                      />
-                    </div>
+                  <form onSubmit={submitReject} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Reject</p>
+                    <textarea
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      className="h-16 w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
+                      placeholder="Alasan penolakan (opsional)"
+                    />
                     <button
                       type="submit"
                       disabled={processingReject}
-                      className="mt-3 w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {processingReject ? "Memproses..." : "Tolak Dokumen"}
                     </button>
@@ -1077,34 +1062,24 @@ export default function DashboardPage() {
                 </div>
 
                 {detailError ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                     {detailError}
                   </div>
                 ) : null}
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-lg border border-border-light p-4">
-                    <h3 className="text-sm font-bold text-dark-navy">Daftar Signer</h3>
-                    <div className="mt-3 space-y-2">
+                <div className="grid gap-3">
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Signer</p>
+                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                       {(selectedSigners?.signers || []).length === 0 ? (
-                        <p className="text-xs text-neutral-gray">Data signer belum tersedia.</p>
+                        <p className="text-xs text-neutral-gray">Belum ada data signer.</p>
                       ) : (
                         selectedSigners?.signers.map((signer) => (
-                          <div key={`${signer.email}-${signer.role}`} className="rounded-md border border-border-light p-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-xs font-semibold text-dark-navy">{signer.email}</p>
-                              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                                signer.status === "signed"
-                                  ? "border-green-200 bg-green-50 text-green-700"
-                                  : signer.status === "rejected"
-                                    ? "border-red-200 bg-red-50 text-red-700"
-                                    : "border-amber-200 bg-amber-50 text-amber-700"
-                              }`}>
-                                {signer.status}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-[11px] text-neutral-gray">
-                              Role: {signer.role} {signer.signed_at ? `| Signed: ${formatDateTime(signer.signed_at)}` : ""}
+                          <div key={`${signer.email}-${signer.role}`} className="rounded-md border border-border-light px-3 py-2">
+                            <p className="text-xs font-medium text-dark-navy">{signer.email}</p>
+                            <p className="text-[11px] text-neutral-gray">
+                              {signer.role} • {signer.status}
+                              {signer.signed_at ? ` • ${formatDateTime(signer.signed_at)}` : ""}
                             </p>
                           </div>
                         ))
@@ -1112,48 +1087,46 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-border-light p-4">
-                    <h3 className="text-sm font-bold text-dark-navy">Audit Trail</h3>
-                    <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Audit Trail</p>
+                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                       {(selectedEvents?.events || []).length === 0 ? (
-                        <p className="text-xs text-neutral-gray">Belum ada event untuk dokumen ini.</p>
+                        <p className="text-xs text-neutral-gray">Belum ada event.</p>
                       ) : (
                         selectedEvents?.events.map((event) => (
-                          <div key={event.id} className="rounded-md border border-border-light p-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-semibold text-dark-navy">{event.event_type}</p>
-                              <p className="text-[11px] text-neutral-gray">{formatDateTime(event.created_at)}</p>
-                            </div>
-                            <p className="mt-1 truncate text-[11px] text-neutral-gray">
-                              {event.actor_email || "system"} {event.request_id ? `| req ${event.request_id}` : ""}
+                          <div key={event.id} className="rounded-md border border-border-light px-3 py-2">
+                            <p className="text-xs font-medium text-dark-navy">{event.event_type}</p>
+                            <p className="text-[11px] text-neutral-gray">
+                              {event.actor_email || "system"} • {formatDateTime(event.created_at)}
                             </p>
                           </div>
                         ))
                       )}
                     </div>
                   </div>
-                </div>
 
-                {selectedCertificate ? (
-                  <div className="rounded-lg border border-border-light p-4">
-                    <h3 className="text-sm font-bold text-dark-navy">Sertifikat Tanda Tangan</h3>
-                    <p className="mt-1 text-xs text-neutral-gray">
-                      Selesai pada {formatDateTime(selectedCertificate.completed_at)}
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      {selectedCertificate.signatures.map((signature) => (
-                        <div
-                          key={`${signature.signer_email}-${signature.signed_at}`}
-                          className="rounded-md border border-border-light p-2"
-                        >
-                          <p className="text-xs font-semibold text-dark-navy">{signature.signer_name}</p>
-                          <p className="text-[11px] text-neutral-gray">{signature.signer_email}</p>
-                          <p className="text-[11px] text-neutral-gray">Signed: {formatDateTime(signature.signed_at)}</p>
-                        </div>
-                      ))}
+                  {selectedCertificate ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Sertifikat</p>
+                      <p className="mb-2 text-[11px] text-neutral-gray">
+                        Selesai pada {formatDateTime(selectedCertificate.completed_at)}
+                      </p>
+                      <div className="max-h-32 space-y-2 overflow-y-auto pr-1">
+                        {selectedCertificate.signatures.map((signature) => (
+                          <div
+                            key={`${signature.signer_email}-${signature.signed_at}`}
+                            className="rounded-md border border-border-light px-3 py-2"
+                          >
+                            <p className="text-xs font-medium text-dark-navy">{signature.signer_name}</p>
+                            <p className="text-[11px] text-neutral-gray">
+                              {signature.signer_email} • {formatDateTime(signature.signed_at)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
             )}
           </article>
@@ -1164,50 +1137,53 @@ export default function DashboardPage() {
 
   function renderAccountPanel() {
     return (
-      <section className="grid gap-4 lg:grid-cols-3">
-        <article className="rounded-xl border border-border-light bg-white p-5 lg:col-span-2">
-          <h2 className="text-base font-bold text-dark-navy">Profil Akun</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-border-light p-3">
-              <p className="text-xs text-neutral-gray">Nama</p>
-              <p className="mt-1 text-sm font-semibold text-dark-navy">{profile?.name || "-"}</p>
-            </div>
-            <div className="rounded-lg border border-border-light p-3">
-              <p className="text-xs text-neutral-gray">Email</p>
-              <p className="mt-1 break-all text-sm font-semibold text-dark-navy">{profile?.email || "-"}</p>
-            </div>
-            <div className="rounded-lg border border-border-light p-3">
-              <p className="text-xs text-neutral-gray">Tipe Akun</p>
-              <p className="mt-1 text-sm font-semibold text-dark-navy">
-                {profile ? formatAccountType(profile.account_type) : "-"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border-light p-3">
-              <p className="text-xs text-neutral-gray">Plan</p>
-              <p className="mt-1 text-sm font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</p>
-            </div>
-            <div className="rounded-lg border border-border-light p-3 sm:col-span-2">
-              <p className="text-xs text-neutral-gray">User ID</p>
-              <p className="mt-1 break-all text-sm font-semibold text-dark-navy">{profile?.user_id || "-"}</p>
-            </div>
+      <section className="space-y-4">
+        <article className="rounded-lg border border-border-light bg-white">
+          <div className="border-b border-border-light px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Profil Akun</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-sm">
+              <tbody>
+                <tr className="border-b border-border-light">
+                  <td className="w-56 px-4 py-3 text-neutral-gray sm:px-5">Nama</td>
+                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.name || "-"}</td>
+                </tr>
+                <tr className="border-b border-border-light">
+                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Email</td>
+                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.email || "-"}</td>
+                </tr>
+                <tr className="border-b border-border-light">
+                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Tipe Akun</td>
+                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">
+                    {profile ? formatAccountType(profile.account_type) : "-"}
+                  </td>
+                </tr>
+                <tr className="border-b border-border-light">
+                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Plan</td>
+                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile ? formatPlan(profile.plan) : "-"}</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 text-neutral-gray sm:px-5">User ID</td>
+                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.user_id || "-"}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </article>
 
-        <article className="rounded-xl border border-border-light bg-white p-5">
-          <h2 className="text-base font-bold text-dark-navy">Kebutuhan Lanjutan</h2>
-          <p className="mt-2 text-sm text-neutral-gray">
-            Untuk kuota lebih besar, kontrol role tim, dan workflow enterprise, lakukan upgrade paket.
-          </p>
-          <div className="mt-4 space-y-2">
+        <article className="rounded-lg border border-border-light bg-white p-4 sm:p-5">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Langkah Lanjutan</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href="/bisnis/"
-              className="block rounded-lg border border-border-light px-3 py-2 text-sm font-semibold text-dark-navy hover:border-dark-navy"
+              className="rounded-md border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
             >
               Lihat Paket Bisnis
             </Link>
             <Link
               href="/cek-dokumen/"
-              className="block rounded-lg border border-border-light px-3 py-2 text-sm font-semibold text-dark-navy hover:border-dark-navy"
+              className="rounded-md border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
             >
               Analisis Dokumen Baru
             </Link>
