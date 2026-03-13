@@ -1,5 +1,8 @@
 """Email service using Resend for TanyaHukum transactional emails."""
 import logging
+from datetime import datetime
+from html import escape
+
 import resend
 from api.config import settings
 
@@ -277,4 +280,201 @@ def send_admin_notification(
         return True
     except Exception as e:
         logger.error(f"Failed to send admin notification email: {e}", exc_info=True)
+        return False
+
+
+def _format_id_datetime(value: str | None) -> str:
+    if not value:
+        return "-"
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.strftime("%d %b %Y %H:%M UTC")
+    except ValueError:
+        return value
+
+
+def send_signing_invitation(
+    to_email: str,
+    sender_name: str,
+    sender_email: str,
+    document_name: str,
+    review_link: str,
+    expires_at: str | None = None,
+    company_pays_analysis: bool = False,
+) -> bool:
+    """Send co-sign invitation email for shared documents."""
+    safe_sender_name = escape(sender_name)
+    safe_sender_email = escape(sender_email)
+    safe_document_name = escape(document_name)
+    safe_review_link = escape(review_link, quote=True)
+    expires_text = _format_id_datetime(expires_at)
+    company_pays_text = (
+        "Analisis AI untuk dokumen ini ditanggung oleh pengirim."
+        if company_pays_analysis
+        else "Analisis AI akan menggunakan kuota akun Anda."
+    )
+
+    content = f"""\
+<h1 style="margin:0 0 8px;font-size:22px;color:#1A2332;font-weight:700;">
+  Permintaan Tanda Tangan Dokumen
+</h1>
+<p style="margin:0 0 20px;font-size:15px;color:#4B5563;line-height:1.6;">
+  {safe_sender_name} ({safe_sender_email}) mengundang Anda untuk meninjau dan menandatangani dokumen berikut.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;background-color:#F8F5F1;border-radius:12px;overflow:hidden;">
+<tr><td style="padding:20px 24px;">
+  <p style="margin:0 0 4px;font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Dokumen</p>
+  <p style="margin:0 0 12px;font-size:16px;color:#1A2332;font-weight:700;">{safe_document_name}</p>
+  <p style="margin:0;font-size:13px;color:#6B7280;">Batas waktu tanda tangan: {escape(expires_text)}</p>
+</td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+<tr><td style="background-color:#FFF5F0;border-radius:10px;padding:14px 16px;">
+  <p style="margin:0;font-size:14px;color:#1A2332;line-height:1.5;">{escape(company_pays_text)}</p>
+</td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+<tr><td align="center">
+  <a href="{safe_review_link}" style="display:inline-block;background-color:#FF6B35;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">
+    Buka Dokumen
+  </a>
+</td></tr>
+</table>
+
+<p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
+  Jika tombol tidak berfungsi, buka tautan ini: <br>
+  <a href="{safe_review_link}" style="color:#FF6B35;text-decoration:none;">{safe_review_link}</a>
+</p>"""
+
+    html = _base_layout(content)
+
+    try:
+        params: resend.Emails.SendParams = {
+            "from": settings.resend_from_email,
+            "to": [to_email],
+            "subject": f"Permintaan Tanda Tangan — {document_name}",
+            "html": html,
+            "reply_to": sender_email,
+        }
+        result = resend.Emails.send(params)
+        logger.info(f"Signing invitation sent to {to_email}: {result}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send signing invitation to {to_email}: {e}", exc_info=True)
+        return False
+
+
+def send_signing_status_update(
+    to_email: str,
+    document_name: str,
+    actor_name: str,
+    actor_email: str,
+    action: str,
+    detail_link: str,
+) -> bool:
+    """Send signer action status update (signed/rejected) to stakeholders."""
+    safe_document_name = escape(document_name)
+    safe_actor_name = escape(actor_name)
+    safe_actor_email = escape(actor_email)
+    safe_detail_link = escape(detail_link, quote=True)
+    action_label = "menandatangani" if action == "signed" else "menolak menandatangani"
+    subject_label = "ditandatangani" if action == "signed" else "ditolak"
+
+    content = f"""\
+<h1 style="margin:0 0 8px;font-size:22px;color:#1A2332;font-weight:700;">
+  Update Tanda Tangan Dokumen
+</h1>
+<p style="margin:0 0 20px;font-size:15px;color:#4B5563;line-height:1.6;">
+  {safe_actor_name} ({safe_actor_email}) telah {action_label} dokumen <strong>{safe_document_name}</strong>.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+<tr><td align="center">
+  <a href="{safe_detail_link}" style="display:inline-block;background-color:#FF6B35;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">
+    Lihat Status Dokumen
+  </a>
+</td></tr>
+</table>
+
+<p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
+  Tautan alternatif: <a href="{safe_detail_link}" style="color:#FF6B35;text-decoration:none;">{safe_detail_link}</a>
+</p>"""
+
+    html = _base_layout(content)
+
+    try:
+        params: resend.Emails.SendParams = {
+            "from": settings.resend_from_email,
+            "to": [to_email],
+            "subject": f"Dokumen {subject_label} — {document_name}",
+            "html": html,
+            "reply_to": actor_email,
+        }
+        result = resend.Emails.send(params)
+        logger.info(f"Signing status update sent to {to_email}: {result}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send signing status update to {to_email}: {e}", exc_info=True)
+        return False
+
+
+def send_signing_completed_notice(
+    to_email: str,
+    document_name: str,
+    signed_pdf_link: str,
+    certificate_link: str,
+) -> bool:
+    """Send completion notice with download links when all parties have signed."""
+    safe_document_name = escape(document_name)
+    safe_signed_pdf_link = escape(signed_pdf_link, quote=True)
+    safe_certificate_link = escape(certificate_link, quote=True)
+
+    content = f"""\
+<h1 style="margin:0 0 8px;font-size:22px;color:#1A2332;font-weight:700;">
+  Dokumen Selesai Ditandatangani
+</h1>
+<p style="margin:0 0 20px;font-size:15px;color:#4B5563;line-height:1.6;">
+  Semua pihak telah menandatangani dokumen <strong>{safe_document_name}</strong>.
+  Anda sekarang dapat mengunduh dokumen final dan sertifikatnya.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+<tr><td align="center">
+  <a href="{safe_signed_pdf_link}" style="display:inline-block;background-color:#FF6B35;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">
+    Unduh Dokumen Final
+  </a>
+</td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+<tr><td align="center">
+  <a href="{safe_certificate_link}" style="display:inline-block;background-color:#1A2332;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">
+    Unduh Sertifikat
+  </a>
+</td></tr>
+</table>
+
+<p style="margin:0;font-size:13px;color:#6B7280;line-height:1.6;">
+  Jika tombol tidak berfungsi:
+  <a href="{safe_signed_pdf_link}" style="color:#FF6B35;text-decoration:none;">Dokumen Final</a> |
+  <a href="{safe_certificate_link}" style="color:#FF6B35;text-decoration:none;">Sertifikat</a>
+</p>"""
+
+    html = _base_layout(content)
+
+    try:
+        params: resend.Emails.SendParams = {
+            "from": settings.resend_from_email,
+            "to": [to_email],
+            "subject": f"Dokumen Selesai — {document_name}",
+            "html": html,
+        }
+        result = resend.Emails.send(params)
+        logger.info(f"Signing completed email sent to {to_email}: {result}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send signing completed email to {to_email}: {e}", exc_info=True)
         return False

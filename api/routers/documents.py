@@ -1,7 +1,7 @@
 """Document sharing and signing endpoints (v2.0-B/C)."""
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -10,6 +10,7 @@ from api.models.schemas import (
     ShareDocumentRequest,
     ShareDocumentResponse,
     DocumentSignersResponse,
+    DocumentAnalysisResponse,
     DocumentEventsResponse,
     SignDocumentRequest,
     RejectDocumentRequest,
@@ -24,10 +25,13 @@ from api.services.supabase_auth import (
 from api.services.documents import (
     create_document_share,
     list_document_signers,
+    get_document_analysis,
     list_document_events,
     sign_document,
     reject_document,
     get_document_certificate,
+    get_document_certificate_pdf,
+    get_signed_document_pdf,
 )
 
 router = APIRouter()
@@ -90,6 +94,21 @@ async def get_signers(
         return DocumentSignersResponse(**result)
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal mengambil signer dokumen.")
+
+
+@router.get("/documents/{document_id}/analysis", response_model=DocumentAnalysisResponse)
+@limiter.limit("120/minute")
+async def get_document_analysis_result(
+    request: Request,
+    document_id: str,
+    access_token: str = Depends(verify_bearer_token),
+):
+    try:
+        user_id, email, _, _ = await _resolve_user(access_token)
+        result = await asyncio.to_thread(get_document_analysis, document_id, user_id, email)
+        return DocumentAnalysisResponse(**result)
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal mengambil analisis dokumen.")
 
 
 @router.get("/documents/{document_id}/events", response_model=DocumentEventsResponse)
@@ -186,3 +205,53 @@ async def get_certificate(
         return CertificateResponse(**result)
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal mengambil sertifikat dokumen.")
+
+
+@router.get("/documents/{document_id}/certificate/pdf")
+@limiter.limit("60/minute")
+async def download_certificate_pdf(
+    request: Request,
+    document_id: str,
+    access_token: str = Depends(verify_bearer_token),
+):
+    try:
+        user_id, email, _, _ = await _resolve_user(access_token)
+        result = await asyncio.to_thread(
+            get_document_certificate_pdf,
+            document_id,
+            user_id,
+            email,
+            getattr(request.state, "request_id", None),
+        )
+        return Response(
+            content=result["pdf_bytes"],
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={result['filename']}"},
+        )
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal mengunduh PDF sertifikat.")
+
+
+@router.get("/documents/{document_id}/signed-pdf")
+@limiter.limit("60/minute")
+async def download_signed_pdf(
+    request: Request,
+    document_id: str,
+    access_token: str = Depends(verify_bearer_token),
+):
+    try:
+        user_id, email, _, _ = await _resolve_user(access_token)
+        result = await asyncio.to_thread(
+            get_signed_document_pdf,
+            document_id,
+            user_id,
+            email,
+            getattr(request.state, "request_id", None),
+        )
+        return Response(
+            content=result["pdf_bytes"],
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={result['filename']}"},
+        )
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal mengunduh dokumen final bertanda tangan.")

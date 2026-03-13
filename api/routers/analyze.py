@@ -5,7 +5,7 @@ GET /api/analysis/{id}/pdf — Retrieve saved PDF.
 import re
 import asyncio
 import logging
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Form
 from fastapi.responses import Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -15,6 +15,7 @@ from api.services.analyzer import analyze_contract
 from api.services.storage import save_analysis, get_analysis, get_analysis_pdf
 from api.services.guardrails import MAX_FILE_SIZE, validate_pdf_upload
 from api.dependencies import verify_api_key, get_optional_bearer_token
+from api.services.documents import resolve_document_analysis_quota_owner, attach_document_analysis
 from api.services.supabase_auth import (
     SupabaseServiceError,
     get_auth_user,
@@ -32,6 +33,7 @@ limiter = Limiter(key_func=get_remote_address)
 async def analyze_pdf(
     request: Request,
     file: UploadFile = File(...),
+    document_id: str | None = Form(default=None),
     access_token: str | None = Depends(get_optional_bearer_token),
 ):
     """Upload a contract PDF for legal risk analysis."""
@@ -56,18 +58,35 @@ async def analyze_pdf(
     if not is_valid:
         raise HTTPException(status_code=422, detail=error)
 
+    if document_id and not access_token:
+        raise HTTPException(status_code=401, detail="Bearer token diperlukan untuk analisis dokumen sharing.")
+
+    auth_user_id: str | None = None
+    auth_email: str | None = None
+
     # If authenticated user is present, consume analysis quota atomically
     if access_token:
         try:
             auth_user = await asyncio.to_thread(get_auth_user, access_token)
             user_meta = auth_user.get("user_metadata") or {}
-            user_id = auth_user["id"]
-            email = auth_user.get("email", "")
-            name = user_meta.get("name") or email.split("@")[0] or "Pengguna"
+            auth_user_id = auth_user["id"]
+            auth_email = auth_user.get("email", "")
+            name = user_meta.get("name") or auth_email.split("@")[0] or "Pengguna"
             plan = user_meta.get("plan") or "free"
 
-            await asyncio.to_thread(upsert_user_profile_and_quota, user_id, email, name, plan)
-            await asyncio.to_thread(consume_analysis_quota, user_id)
+            await asyncio.to_thread(upsert_user_profile_and_quota, auth_user_id, auth_email, name, plan)
+
+            quota_user_id = auth_user_id
+            if document_id:
+                billing = await asyncio.to_thread(
+                    resolve_document_analysis_quota_owner,
+                    document_id,
+                    auth_user_id,
+                    auth_email,
+                )
+                quota_user_id = billing["billed_user_id"]
+
+            await asyncio.to_thread(consume_analysis_quota, quota_user_id)
         except SupabaseServiceError as e:
             if e.status_code >= 500:
                 raise HTTPException(status_code=500, detail="Gagal memverifikasi kuota pengguna.")
@@ -80,6 +99,22 @@ async def analyze_pdf(
             await asyncio.to_thread(save_analysis, result.model_dump(), pdf_bytes)
         except Exception as e:
             logger.warning(f"Failed to persist analysis (non-fatal): {e}")
+
+        if document_id and auth_user_id and auth_email:
+            try:
+                await asyncio.to_thread(
+                    attach_document_analysis,
+                    document_id,
+                    auth_user_id,
+                    auth_email,
+                    result.analysis_id,
+                    file.filename,
+                )
+            except SupabaseServiceError as e:
+                if e.status_code >= 500:
+                    raise HTTPException(status_code=500, detail="Gagal mengaitkan hasil analisis ke dokumen.")
+                raise HTTPException(status_code=e.status_code, detail=e.detail)
+
         return result
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # Internal API key for Next.js → FastAPI auth
     internal_api_key: str = os.getenv("INTERNAL_API_KEY", "7s9DTtir3BH7TCGDZYGF6UKW--eulLPvEBi6gPMwvUc")
+    app_base_url: str = os.getenv("APP_BASE_URL", "https://tanyahukum.dev")
 
     # Analysis settings
     max_upload_size_mb: int = 15

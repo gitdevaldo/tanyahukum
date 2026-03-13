@@ -1,6 +1,8 @@
 """Document sharing and signing service (v2.0-B/C)."""
 from __future__ import annotations
 
+import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -9,7 +11,16 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
 from api.config import settings
+from api.services.email import (
+    send_signing_invitation,
+    send_signing_status_update,
+    send_signing_completed_notice,
+)
+from api.services.signing_pdf import build_certificate_pdf, build_signed_document_pdf
 from api.services.supabase_auth import SupabaseServiceError
+from api.services.storage import get_analysis, get_analysis_pdf
+
+logger = logging.getLogger(__name__)
 
 
 def _db_connect():
@@ -33,6 +44,33 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _app_base_url() -> str:
+    if settings.app_base_url:
+        return settings.app_base_url.rstrip("/")
+    return "https://tanyahukum.dev"
+
+
+def _document_review_link(document_id: str) -> str:
+    return f"{_app_base_url()}/cek-dokumen/?document_id={document_id}"
+
+
+def _signed_pdf_download_link(document_id: str) -> str:
+    return f"{_app_base_url()}/api/documents/{document_id}/signed-pdf"
+
+
+def _certificate_pdf_download_link(document_id: str) -> str:
+    return f"{_app_base_url()}/api/documents/{document_id}/certificate/pdf"
+
+
+def _safe_download_filename(filename: str, suffix: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", filename).strip("-")
+    if not sanitized:
+        sanitized = "document"
+    if sanitized.lower().endswith(".pdf"):
+        sanitized = sanitized[:-4]
+    return f"{sanitized}-{suffix}.pdf"
 
 
 def _append_event(
@@ -142,6 +180,20 @@ def create_document_share(
     except Exception as e:
         raise SupabaseServiceError(status_code=500, detail=f"Gagal membuat dokumen sharing: {e}")
 
+    review_link = _document_review_link(document_id)
+    for recipient_email in recipient_emails:
+        sent = send_signing_invitation(
+            to_email=recipient_email,
+            sender_name=owner_name,
+            sender_email=owner_email,
+            document_name=filename,
+            review_link=review_link,
+            expires_at=expiry.isoformat() if expiry else None,
+            company_pays_analysis=company_pays_analysis,
+        )
+        if not sent:
+            logger.warning("Failed to send signing invitation email to %s", recipient_email)
+
     return {
         "document_id": document_id,
         "status": "pending_signatures",
@@ -209,6 +261,107 @@ def list_document_signers(document_id: str, user_id: str, email: str) -> dict:
             }
             for s in signers
         ],
+    }
+
+
+def resolve_document_analysis_quota_owner(
+    document_id: str,
+    requester_user_id: str,
+    requester_email: str,
+) -> dict:
+    """Resolve which user quota should be charged for a shared-document analysis."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            doc = _load_document_with_access(cur, document_id, requester_user_id, requester_email)
+            now = _now_utc()
+            if doc["expires_at"] and doc["expires_at"] <= now:
+                cur.execute(
+                    "UPDATE public.documents SET status='expired', updated_at=NOW() WHERE id=%s;",
+                    (document_id,),
+                )
+                conn.commit()
+                raise SupabaseServiceError(status_code=409, detail="Dokumen sudah kedaluwarsa.")
+            if doc["status"] in ("expired", "rejected"):
+                raise SupabaseServiceError(
+                    status_code=409,
+                    detail=f"Dokumen berstatus {doc['status']} dan tidak dapat dianalisis ulang.",
+                )
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal memproses billing analisis dokumen: {e}")
+
+    owner_user_id = str(doc["owner_id"])
+    company_pays = bool(doc["company_pays_analysis"])
+    billed_user_id = owner_user_id if company_pays else requester_user_id
+    return {
+        "document_id": document_id,
+        "owner_user_id": owner_user_id,
+        "company_pays_analysis": company_pays,
+        "billed_user_id": billed_user_id,
+    }
+
+
+def attach_document_analysis(
+    document_id: str,
+    requester_user_id: str,
+    requester_email: str,
+    analysis_id: str,
+    filename: str,
+) -> dict:
+    """Link a newly created analysis result to an existing shared document."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            doc = _load_document_with_access(cur, document_id, requester_user_id, requester_email)
+            if doc["status"] in ("expired", "rejected"):
+                raise SupabaseServiceError(
+                    status_code=409,
+                    detail=f"Dokumen berstatus {doc['status']} dan tidak dapat diperbarui.",
+                )
+            cur.execute(
+                """
+                UPDATE public.documents
+                SET
+                    analysis_id = %s,
+                    filename = COALESCE(NULLIF(%s, ''), filename),
+                    status = CASE WHEN status = 'draft' THEN 'analyzed' ELSE status END,
+                    updated_at = NOW()
+                WHERE id = %s;
+                """,
+                (analysis_id, filename.strip(), document_id),
+            )
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal mengaitkan analisis ke dokumen: {e}")
+
+    return {"document_id": document_id, "analysis_id": analysis_id}
+
+
+def get_document_analysis(document_id: str, user_id: str, email: str) -> dict:
+    """Fetch linked analysis result for a shared document (owner or signer only)."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            doc = _load_document_with_access(cur, document_id, user_id, email)
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal memuat dokumen: {e}")
+
+    analysis_id = doc.get("analysis_id")
+    if not analysis_id:
+        raise SupabaseServiceError(status_code=404, detail="Analisis untuk dokumen ini belum tersedia.")
+
+    analysis = get_analysis(analysis_id)
+    if not analysis:
+        raise SupabaseServiceError(status_code=404, detail="Data analisis tidak ditemukan.")
+
+    return {
+        "document_id": document_id,
+        "analysis_id": analysis_id,
+        "company_pays_analysis": bool(doc["company_pays_analysis"]),
+        "analysis": analysis,
     }
 
 
@@ -301,6 +454,8 @@ def sign_document(
     signer_email = signer_email.strip().lower()
     now = _now_utc()
     signature_id = str(uuid.uuid4())
+    owner_email: str | None = None
+    participant_emails: list[str] = []
 
     try:
         with _db_connect() as conn, conn.cursor() as cur:
@@ -315,6 +470,18 @@ def sign_document(
                 )
                 conn.commit()
                 raise SupabaseServiceError(status_code=409, detail="Dokumen sudah kedaluwarsa.")
+
+            cur.execute(
+                """
+                SELECT email
+                FROM public.user_profiles
+                WHERE user_id = %s
+                LIMIT 1;
+                """,
+                (doc["owner_id"],),
+            )
+            owner = cur.fetchone()
+            owner_email = owner["email"] if owner else None
 
             cur.execute(
                 """
@@ -414,11 +581,49 @@ def sign_document(
                     request_id=request_id,
                     metadata={"from": previous_status, "to": new_status},
                 )
+
+            if new_status == "completed":
+                cur.execute(
+                    """
+                    SELECT email
+                    FROM public.document_signers
+                    WHERE document_id = %s;
+                    """,
+                    (document_id,),
+                )
+                participant_emails = [row["email"] for row in cur.fetchall() if row.get("email")]
+
             conn.commit()
     except SupabaseServiceError:
         raise
     except Exception as e:
         raise SupabaseServiceError(status_code=500, detail=f"Gagal menandatangani dokumen: {e}")
+
+    detail_link = _document_review_link(document_id)
+    if owner_email and owner_email.lower() != signer_email:
+        sent = send_signing_status_update(
+            to_email=owner_email,
+            document_name=doc["filename"],
+            actor_name=signer_name.strip(),
+            actor_email=signer_email,
+            action="signed",
+            detail_link=detail_link,
+        )
+        if not sent:
+            logger.warning("Failed to send signing status update email to owner: %s", owner_email)
+
+    if new_status == "completed":
+        signed_pdf_link = _signed_pdf_download_link(document_id)
+        certificate_link = _certificate_pdf_download_link(document_id)
+        for recipient_email in {e.lower() for e in participant_emails if e}:
+            sent = send_signing_completed_notice(
+                to_email=recipient_email,
+                document_name=doc["filename"],
+                signed_pdf_link=signed_pdf_link,
+                certificate_link=certificate_link,
+            )
+            if not sent:
+                logger.warning("Failed to send completed-signing email to %s", recipient_email)
 
     return {
         "success": True,
@@ -438,6 +643,7 @@ def reject_document(
 ) -> dict:
     signer_email = signer_email.strip().lower()
     now = _now_utc()
+    owner_email: str | None = None
 
     try:
         with _db_connect() as conn, conn.cursor() as cur:
@@ -445,6 +651,18 @@ def reject_document(
             previous_status = doc["status"]
             if doc["status"] == "completed":
                 raise SupabaseServiceError(status_code=409, detail="Dokumen sudah completed dan tidak bisa ditolak.")
+
+            cur.execute(
+                """
+                SELECT email
+                FROM public.user_profiles
+                WHERE user_id = %s
+                LIMIT 1;
+                """,
+                (doc["owner_id"],),
+            )
+            owner = cur.fetchone()
+            owner_email = owner["email"] if owner else None
 
             cur.execute(
                 """
@@ -503,11 +721,63 @@ def reject_document(
     except Exception as e:
         raise SupabaseServiceError(status_code=500, detail=f"Gagal menolak dokumen: {e}")
 
+    detail_link = _document_review_link(document_id)
+    if owner_email and owner_email.lower() != signer_email:
+        sent = send_signing_status_update(
+            to_email=owner_email,
+            document_name=doc["filename"],
+            actor_name=signer_email.split("@")[0],
+            actor_email=signer_email,
+            action="rejected",
+            detail_link=detail_link,
+        )
+        if not sent:
+            logger.warning("Failed to send rejection status email to owner: %s", owner_email)
+
     return {
         "success": True,
         "document_id": document_id,
         "status": "rejected",
         "message": "Dokumen berhasil ditolak.",
+    }
+
+
+def _load_certificate_source(cur, document_id: str, user_id: str, email: str) -> tuple[dict, list[dict], str | None]:
+    doc = _load_document_with_access(cur, document_id, user_id, email)
+    if doc["status"] != "completed":
+        raise SupabaseServiceError(status_code=409, detail="Sertifikat hanya tersedia untuk dokumen completed.")
+
+    cur.execute(
+        """
+        SELECT signer_email, signer_name, document_hash, signed_at
+        FROM public.signatures
+        WHERE document_id=%s
+        ORDER BY signed_at ASC;
+        """,
+        (document_id,),
+    )
+    signatures = cur.fetchall()
+    completed_at = signatures[-1]["signed_at"].isoformat() if signatures else None
+    return doc, signatures, completed_at
+
+
+def _build_certificate_payload(document_id: str, doc: dict, signatures: list[dict], completed_at: str | None) -> dict:
+    return {
+        "document_id": document_id,
+        "filename": doc["filename"],
+        "status": doc["status"],
+        "completed_at": completed_at,
+        "certificate_pdf_url": _certificate_pdf_download_link(document_id),
+        "signed_pdf_url": _signed_pdf_download_link(document_id),
+        "signatures": [
+            {
+                "signer_email": s["signer_email"],
+                "signer_name": s["signer_name"],
+                "document_hash": s["document_hash"],
+                "signed_at": s["signed_at"].isoformat(),
+            }
+            for s in signatures
+        ],
     }
 
 
@@ -519,21 +789,7 @@ def get_document_certificate(
 ) -> dict:
     try:
         with _db_connect() as conn, conn.cursor() as cur:
-            doc = _load_document_with_access(cur, document_id, user_id, email)
-            if doc["status"] != "completed":
-                raise SupabaseServiceError(status_code=409, detail="Sertifikat hanya tersedia untuk dokumen completed.")
-
-            cur.execute(
-                """
-                SELECT signer_email, signer_name, document_hash, signed_at
-                FROM public.signatures
-                WHERE document_id=%s
-                ORDER BY signed_at ASC;
-                """,
-                (document_id,),
-            )
-            signatures = cur.fetchall()
-            completed_at = signatures[-1]["signed_at"].isoformat() if signatures else None
+            doc, signatures, completed_at = _load_certificate_source(cur, document_id, user_id, email)
             _append_event(
                 cur,
                 document_id=document_id,
@@ -541,7 +797,7 @@ def get_document_certificate(
                 actor_user_id=user_id,
                 actor_email=email,
                 request_id=request_id,
-                metadata={"signatures_count": len(signatures)},
+                metadata={"signatures_count": len(signatures), "action": "certificate_viewed"},
             )
             conn.commit()
     except SupabaseServiceError:
@@ -549,18 +805,88 @@ def get_document_certificate(
     except Exception as e:
         raise SupabaseServiceError(status_code=500, detail=f"Gagal mengambil sertifikat: {e}")
 
+    return _build_certificate_payload(document_id, doc, signatures, completed_at)
+
+
+def get_document_certificate_pdf(
+    document_id: str,
+    user_id: str,
+    email: str,
+    request_id: str | None = None,
+) -> dict:
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            doc, signatures, completed_at = _load_certificate_source(cur, document_id, user_id, email)
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="certificate_viewed",
+                actor_user_id=user_id,
+                actor_email=email,
+                request_id=request_id,
+                metadata={"signatures_count": len(signatures), "action": "certificate_pdf_downloaded"},
+            )
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyiapkan PDF sertifikat: {e}")
+
+    certificate_payload = _build_certificate_payload(document_id, doc, signatures, completed_at)
+    try:
+        pdf_bytes = build_certificate_pdf(certificate_payload)
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal membuat file PDF sertifikat: {e}")
+
     return {
         "document_id": document_id,
-        "filename": doc["filename"],
-        "status": doc["status"],
-        "completed_at": completed_at,
-        "signatures": [
-            {
-                "signer_email": s["signer_email"],
-                "signer_name": s["signer_name"],
-                "document_hash": s["document_hash"],
-                "signed_at": s["signed_at"].isoformat(),
-            }
-            for s in signatures
-        ],
+        "filename": _safe_download_filename(doc["filename"], "certificate"),
+        "pdf_bytes": pdf_bytes,
+    }
+
+
+def get_signed_document_pdf(
+    document_id: str,
+    user_id: str,
+    email: str,
+    request_id: str | None = None,
+) -> dict:
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            doc, signatures, completed_at = _load_certificate_source(cur, document_id, user_id, email)
+            analysis_id = doc.get("analysis_id")
+            if not analysis_id:
+                raise SupabaseServiceError(
+                    status_code=404,
+                    detail="Dokumen ini belum memiliki sumber PDF analisis untuk diunduh.",
+                )
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="certificate_viewed",
+                actor_user_id=user_id,
+                actor_email=email,
+                request_id=request_id,
+                metadata={"signatures_count": len(signatures), "action": "signed_pdf_downloaded"},
+            )
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyiapkan dokumen final: {e}")
+
+    original_pdf = get_analysis_pdf(analysis_id)
+    if not original_pdf:
+        raise SupabaseServiceError(status_code=404, detail="Sumber PDF analisis tidak ditemukan.")
+
+    certificate_payload = _build_certificate_payload(document_id, doc, signatures, completed_at)
+    try:
+        signed_pdf = build_signed_document_pdf(original_pdf, certificate_payload)
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal membuat PDF final bertanda tangan: {e}")
+
+    return {
+        "document_id": document_id,
+        "filename": _safe_download_filename(doc["filename"], "signed"),
+        "pdf_bytes": signed_pdf,
     }

@@ -192,6 +192,13 @@ class DocumentSignersResponse(BaseModel):
     signers: list[DocumentSignerInfo]
 
 
+class DocumentAnalysisResponse(BaseModel):
+    document_id: str
+    analysis_id: str
+    company_pays_analysis: bool
+    analysis: AnalysisResponse
+
+
 class SignDocumentRequest(BaseModel):
     signer_name: str = Field(min_length=2, max_length=120)
     consent_text: str = Field(min_length=5, max_length=3000)
@@ -221,6 +228,8 @@ class CertificateResponse(BaseModel):
     filename: str
     status: str
     completed_at: str | None = None
+    certificate_pdf_url: str | None = None
+    signed_pdf_url: str | None = None
     signatures: list[SignatureRecord]
 
 
