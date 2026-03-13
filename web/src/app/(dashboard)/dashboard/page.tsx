@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/ui";
 import { clearSession, getAccessToken } from "@/lib/auth-session";
+import styles from "./dashboard.module.css";
 
 type AccountType = "personal" | "business";
 type Plan = "free" | "starter" | "plus" | "business" | "enterprise" | null;
@@ -648,12 +648,7 @@ export default function DashboardPage() {
 
   function sectionButtonClass(section: DashboardSection) {
     const active = activeSection === section;
-    return [
-      "w-full border-l-2 px-3 py-2 text-sm font-medium transition-colors lg:text-left text-center",
-      active
-        ? "border-l-dark-navy bg-gray-50 text-dark-navy"
-        : "border-l-transparent text-neutral-gray hover:border-l-dark-navy/40 hover:text-dark-navy",
-    ].join(" ");
+    return `${styles.navItem} ${active ? styles.navItemActive : ""}`;
   }
 
   const pendingDocuments = useMemo(
@@ -662,131 +657,244 @@ export default function DashboardPage() {
   );
 
   function renderOverview() {
+    const recentDocuments = documents.slice(0, 6);
+    const feedItems = (selectedEvents?.events || []).slice(0, 5);
+    const pendingRows = pendingDocuments.slice(0, 5);
+
     return (
-      <section className="space-y-5">
-        <article className="border-b border-border-light bg-white">
-          <div className="border-b border-border-light px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Ringkasan Operasional</h2>
-          </div>
-          <div className="grid divide-y divide-border-light sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
-            <div className="px-4 py-4 sm:px-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Total Dokumen</p>
-              <p className="mt-1 text-2xl font-semibold text-dark-navy">{documentsMeta.total}</p>
-              <p className="text-xs text-neutral-gray">{documentsMeta.owned_total} milik akun Anda</p>
-            </div>
-            <div className="px-4 py-4 sm:px-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Butuh Aksi</p>
-              <p className="mt-1 text-2xl font-semibold text-dark-navy">{documentsMeta.pending_my_action}</p>
-              <p className="text-xs text-neutral-gray">Menunggu tanda tangan Anda</p>
-            </div>
-            <div className="px-4 py-4 sm:px-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Sisa Analisis</p>
-              <p className="mt-1 text-2xl font-semibold text-dark-navy">
-                {String(quotaInfo?.analysis_remaining ?? "Unlimited")}
-              </p>
-              <p className="text-xs text-neutral-gray">
-                {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
-              </p>
-            </div>
-            <div className="px-4 py-4 sm:px-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-gray">Sisa e-Sign</p>
-              <p className="mt-1 text-2xl font-semibold text-dark-navy">
-                {String(quotaInfo?.esign_remaining ?? "Unlimited")}
-              </p>
-              <p className="text-xs text-neutral-gray">
-                {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
-              </p>
-            </div>
-          </div>
-        </article>
+      <section>
+        <div className={styles.statGrid}>
+          <article className={styles.statCard}>
+            <p className={styles.statLabel}>Total Dokumen</p>
+            <p className={styles.statValue}>{documentsMeta.total}</p>
+            <p className={styles.statMeta}>{documentsMeta.owned_total} milik akun Anda</p>
+          </article>
+          <article className={styles.statCard}>
+            <p className={styles.statLabel}>Butuh Aksi Anda</p>
+            <p className={styles.statValue}>{documentsMeta.pending_my_action}</p>
+            <p className={styles.statMeta}>Dokumen menunggu tanda tangan Anda</p>
+          </article>
+          <article className={styles.statCard}>
+            <p className={styles.statLabel}>Analisis Tersisa</p>
+            <p className={styles.statValue}>{String(quotaInfo?.analysis_remaining ?? "Unlimited")}</p>
+            <p className={styles.statMeta}>
+              {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
+            </p>
+          </article>
+          <article className={styles.statCard}>
+            <p className={styles.statLabel}>e-Sign Tersisa</p>
+            <p className={styles.statValue}>{String(quotaInfo?.esign_remaining ?? "Unlimited")}</p>
+            <p className={styles.statMeta}>
+              {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
+            </p>
+          </article>
+        </div>
 
-        <article className="border-b border-border-light bg-white">
-          <div className="border-b border-border-light px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Pemakaian Kuota</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
-              <thead>
-                <tr className="border-b border-border-light bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-neutral-gray">
-                  <th className="px-4 py-2 sm:px-5">Fitur</th>
-                  <th className="px-4 py-2 sm:px-5">Terpakai</th>
-                  <th className="px-4 py-2 sm:px-5">Limit</th>
-                  <th className="px-4 py-2 sm:px-5">Persentase</th>
-                  <th className="px-4 py-2 sm:px-5">Reset</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-border-light">
-                  <td className="px-4 py-3 sm:px-5 font-medium text-dark-navy">Analisis AI</td>
-                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{quotaInfo?.analysis_used ?? 0}</td>
-                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{formatLimit(quotaInfo?.analysis_limit ?? null)}</td>
-                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{analysisProgress === null ? "-" : `${analysisProgress}%`}</td>
-                  <td className="px-4 py-3 sm:px-5 text-neutral-gray" rowSpan={2}>{formatDateTime(quotaInfo?.reset_at ?? null)}</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 sm:px-5 font-medium text-dark-navy">e-Sign</td>
-                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{quotaInfo?.esign_used ?? 0}</td>
-                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{formatLimit(quotaInfo?.esign_limit ?? null)}</td>
-                  <td className="px-4 py-3 sm:px-5 text-dark-navy">{esignProgress === null ? "-" : `${esignProgress}%`}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
+        <div className={styles.twoCol}>
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div>
+                <p className={styles.cardTitle}>Recent Documents</p>
+                <p className={styles.cardSub}>Latest document activity in your workspace</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveSection("documents")}
+                className={styles.actionBtn}
+              >
+                View all
+              </button>
+            </div>
 
-        <article className="border-b border-border-light bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-light px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Prioritas Hari Ini</h2>
-            <button
-              type="button"
-              onClick={() => setActiveSection("documents")}
-              className="border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/50"
-            >
-              Buka Document Center
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
-              <thead>
-                <tr className="border-b border-border-light bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-neutral-gray">
-                  <th className="px-4 py-2 sm:px-5">Dokumen</th>
-                  <th className="px-4 py-2 sm:px-5">Status Anda</th>
-                  <th className="px-4 py-2 sm:px-5">Status Dokumen</th>
-                  <th className="px-4 py-2 sm:px-5">Update</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingDocuments.length === 0 ? (
+            <div className={styles.cardBody}>
+              <table className={styles.table}>
+                <thead>
                   <tr>
-                    <td colSpan={4} className="px-4 py-4 text-center text-neutral-gray sm:px-5">
-                      Tidak ada dokumen pending untuk Anda saat ini.
-                    </td>
+                    <th>Document</th>
+                    <th>Status</th>
+                    <th>Signer</th>
+                    <th>Updated</th>
                   </tr>
-                ) : (
-                  pendingDocuments.map((doc) => (
-                    <tr key={doc.document_id} className="border-b border-border-light last:border-b-0">
-                      <td className="px-4 py-3 sm:px-5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedDocumentId(doc.document_id);
-                            setActiveSection("documents");
-                          }}
-                          className="text-left font-medium text-dark-navy underline-offset-2 hover:underline"
-                        >
-                          {doc.filename}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 sm:px-5 text-dark-navy">{doc.my_signer_status || "-"}</td>
-                      <td className="px-4 py-3 sm:px-5 text-dark-navy">{formatStatus(doc.status)}</td>
-                      <td className="px-4 py-3 sm:px-5 text-neutral-gray">{formatDateTime(doc.updated_at)}</td>
+                </thead>
+                <tbody>
+                  {recentDocuments.length === 0 ? (
+                    <tr>
+                      <td colSpan={4}>Belum ada dokumen kolaborasi.</td>
                     </tr>
+                  ) : (
+                    recentDocuments.map((doc) => (
+                      <tr key={doc.document_id}>
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.tableAction}
+                            onClick={() => {
+                              setSelectedDocumentId(doc.document_id);
+                              setActiveSection("documents");
+                            }}
+                          >
+                            {doc.filename}
+                          </button>
+                        </td>
+                        <td>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}>
+                            {formatStatus(doc.status)}
+                          </span>
+                        </td>
+                        <td>
+                          {doc.signers_signed}/{doc.signers_total}
+                        </td>
+                        <td>{formatDateTime(doc.updated_at)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <div className="space-y-4">
+            <article className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div>
+                  <p className={styles.cardTitle}>Quick Actions</p>
+                </div>
+              </div>
+              <div className={styles.cardBody}>
+                <div className={styles.quickGrid}>
+                  <Link href="/cek-dokumen/" className={styles.quickBtn}>
+                    <p className={styles.quickName}>Analyze Contract</p>
+                    <p className={styles.quickDesc}>Upload and evaluate legal risk</p>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("documents")}
+                    className={styles.quickBtn}
+                  >
+                    <p className={styles.quickName}>Open Document Center</p>
+                    <p className={styles.quickDesc}>Signing workflow and audit trail</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("account")}
+                    className={styles.quickBtn}
+                  >
+                    <p className={styles.quickName}>View Account</p>
+                    <p className={styles.quickDesc}>Plan and quota details</p>
+                  </button>
+                  <Link href="/bisnis/" className={styles.quickBtn}>
+                    <p className={styles.quickName}>Upgrade Plan</p>
+                    <p className={styles.quickDesc}>Business and enterprise options</p>
+                  </Link>
+                </div>
+              </div>
+            </article>
+
+            <article className={styles.card}>
+              <div className={styles.cardHeader}>
+                <div>
+                  <p className={styles.cardTitle}>Plan Usage</p>
+                  <p className={styles.cardSub}>{profile ? formatPlan(profile.plan) : "-"}</p>
+                </div>
+              </div>
+              <div className={styles.cardBody}>
+                <div className={styles.quotaItem}>
+                  <div className={styles.quotaTop}>
+                    <span>Analisis AI</span>
+                    <span>
+                      {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
+                    </span>
+                  </div>
+                  <div className={styles.quotaBar}>
+                    <div className={styles.quotaFill} style={{ width: `${analysisProgress ?? 0}%` }} />
+                  </div>
+                </div>
+                <div className={styles.quotaItem}>
+                  <div className={styles.quotaTop}>
+                    <span>e-Sign</span>
+                    <span>
+                      {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
+                    </span>
+                  </div>
+                  <div className={styles.quotaBar}>
+                    <div className={styles.quotaFill} style={{ width: `${esignProgress ?? 0}%` }} />
+                  </div>
+                </div>
+                <p className={styles.statMeta}>Reset kuota: {formatDateTime(quotaInfo?.reset_at ?? null)}</p>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div className={styles.threeCol}>
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div>
+                <p className={styles.cardTitle}>Signing Volume</p>
+                <p className={styles.cardSub}>Last 7 days</p>
+              </div>
+            </div>
+            <div className={styles.cardBody}>
+              <div className="grid grid-cols-7 gap-2">
+                {[55, 70, 45, 90, 65, 30, 20].map((height, index) => (
+                  <div key={index} className="flex flex-col items-center justify-end gap-1">
+                    <div className="w-full bg-dark-navy/90" style={{ height: `${height}px` }} />
+                    <span className="text-[10px] text-neutral-gray">
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </article>
+
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div>
+                <p className={styles.cardTitle}>Activity Feed</p>
+              </div>
+            </div>
+            <div className={styles.cardBody}>
+              <div className={styles.activityList}>
+                {feedItems.length === 0 ? (
+                  <p className={styles.activityTime}>Belum ada activity feed.</p>
+                ) : (
+                  feedItems.map((event) => (
+                    <div key={event.id} className={styles.activityItem}>
+                      <p className={styles.activityText}>
+                        {event.event_type} • {event.actor_email || "system"}
+                      </p>
+                      <p className={styles.activityTime}>{formatDateTime(event.created_at)}</p>
+                    </div>
                   ))
                 )}
-              </tbody>
-            </table>
-          </div>
-        </article>
+              </div>
+            </div>
+          </article>
+
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <div>
+                <p className={styles.cardTitle}>Awaiting Signers</p>
+                <p className={styles.cardSub}>{pendingRows.length} pending</p>
+              </div>
+            </div>
+            <div className={styles.cardBody}>
+              {pendingRows.length === 0 ? (
+                <p className={styles.activityTime}>Tidak ada signer pending.</p>
+              ) : (
+                pendingRows.map((doc) => (
+                  <div key={doc.document_id} className={styles.pendingRow}>
+                    <p className={styles.pendingName}>{doc.filename}</p>
+                    <p className={styles.pendingMeta}>
+                      Role: {doc.my_signer_role || "-"} • Updated {formatDateTime(doc.updated_at)}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+        </div>
       </section>
     );
   }
@@ -1195,14 +1303,14 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white">
-        <div className="animate-pulse">
-          <div className="h-16 border-b border-border-light bg-white" />
-          <div className="grid min-h-[calc(100vh-64px)] lg:grid-cols-[250px_1fr]">
-            <div className="hidden border-r border-border-light bg-white lg:block" />
-            <div className="space-y-4 px-4 py-5 sm:px-6 lg:px-8">
+      <main className={styles.app}>
+        <div className="animate-pulse w-full">
+          <div className="h-[60px] border-b border-border-light bg-white" />
+          <div className="grid min-h-[calc(100vh-60px)] md:grid-cols-[244px_1fr]">
+            <div className="hidden border-r border-border-light bg-white md:block" />
+            <div className="space-y-4 p-4">
               <div className="h-8 w-40 bg-gray-100" />
-              <div className="h-48 border border-border-light bg-white" />
+              <div className="h-44 border border-border-light bg-white" />
             </div>
           </div>
         </div>
@@ -1211,107 +1319,85 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white">
-      <header className="sticky top-0 z-20 border-b border-border-light bg-white">
-        <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex-shrink-0">
-              <img src="/logo.svg" alt="TanyaHukum" className="h-8" />
-            </Link>
-            <div className="text-sm text-neutral-gray">
-              <p className="font-semibold text-dark-navy">Dashboard Workspace</p>
-              <p>{profile ? `${profile.name} • ${formatAccountType(profile.account_type)}` : "Memuat akun..."}</p>
-            </div>
+    <main className={styles.app}>
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarHeader}>
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo.svg" alt="TanyaHukum" className="h-7" />
+            <span className={styles.logoText}>TanyaHukum</span>
+          </Link>
+        </div>
+
+        <nav className={styles.nav}>
+          <div className={styles.navSection}>
+            <p className={styles.navLabel}>Workspace</p>
+            <button
+              type="button"
+              className={sectionButtonClass("overview")}
+              onClick={() => setActiveSection("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={sectionButtonClass("documents")}
+              onClick={() => setActiveSection("documents")}
+            >
+              Document Center
+            </button>
+            <button
+              type="button"
+              className={sectionButtonClass("account")}
+              onClick={() => setActiveSection("account")}
+            >
+              Account
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <Button href="/cek-dokumen/" variant="secondary" size="sm">
+        </nav>
+
+        <div className={styles.sidebarFooter}>
+          <p className={styles.userName}>{profile?.name || "Akun"}</p>
+          <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
+          <p className="mt-2 text-[11px] text-neutral-gray">
+            Plan <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
+          </p>
+          <p className="mt-1 text-[11px] text-neutral-gray">
+            Chat limit/dokumen <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
+          </p>
+        </div>
+      </aside>
+
+      <section className={styles.main}>
+        <header className={styles.topbar}>
+          <div className={styles.topbarLeft}>
+            <p className={styles.topbarTitle}>Contract Dashboard</p>
+            <p className={styles.topbarSub}>Monitor analysis, signing progress, and account quota</p>
+          </div>
+
+          <div className={styles.topbarActions}>
+            <Link href="/cek-dokumen/" className={styles.actionBtn}>
               Cek Dokumen
-            </Button>
+            </Link>
             <button
               type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="border border-border-light px-4 py-2 text-sm font-semibold text-dark-navy hover:border-dark-navy disabled:cursor-not-allowed disabled:opacity-60"
+              className={styles.actionBtn}
             >
               {loggingOut ? "Memproses..." : "Keluar"}
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="grid min-h-[calc(100vh-64px)] lg:grid-cols-[250px_1fr]">
-        <aside className="border-b border-border-light bg-white lg:border-b-0 lg:border-r">
-          <div className="px-4 py-4 sm:px-6 lg:px-5 lg:py-5">
-            <div className="hidden space-y-1 lg:block">
-              <button
-                type="button"
-                className={sectionButtonClass("documents")}
-                onClick={() => setActiveSection("documents")}
-              >
-                Document Center
-              </button>
-              <button
-                type="button"
-                className={sectionButtonClass("overview")}
-                onClick={() => setActiveSection("overview")}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                className={sectionButtonClass("account")}
-                onClick={() => setActiveSection("account")}
-              >
-                Account
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 lg:hidden">
-              <button
-                type="button"
-                className={sectionButtonClass("documents")}
-                onClick={() => setActiveSection("documents")}
-              >
-                Dokumen
-              </button>
-              <button
-                type="button"
-                className={sectionButtonClass("overview")}
-                onClick={() => setActiveSection("overview")}
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                className={sectionButtonClass("account")}
-                onClick={() => setActiveSection("account")}
-              >
-                Akun
-              </button>
-            </div>
-
-            <div className="mt-4 border-t border-border-light pt-3 text-xs text-neutral-gray">
-              <p>
-                Plan:{" "}
-                <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
-              </p>
-              <p className="mt-1">
-                Tipe Akun:{" "}
-                <span className="font-semibold text-dark-navy">
-                  {profile ? formatAccountType(profile.account_type) : "-"}
-                </span>
-              </p>
-              <p className="mt-1">
-                Chat limit/dokumen:{" "}
-                <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
-              </p>
-            </div>
+        <div className={styles.content}>
+          <div className="mb-4 grid grid-cols-3 gap-2 md:hidden">
+            <button type="button" className={sectionButtonClass("overview")} onClick={() => setActiveSection("overview")}>Overview</button>
+            <button type="button" className={sectionButtonClass("documents")} onClick={() => setActiveSection("documents")}>Dokumen</button>
+            <button type="button" className={sectionButtonClass("account")} onClick={() => setActiveSection("account")}>Akun</button>
           </div>
-        </aside>
 
-        <section className="bg-white px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           {error && (
-            <div className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className={styles.alertError}>
               <p>{error}</p>
               <button
                 type="button"
@@ -1323,19 +1409,13 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {notice ? (
-            <div className="mb-4 border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-              {notice}
-            </div>
-          ) : null}
+          {notice ? <div className={styles.alertSuccess}>{notice}</div> : null}
 
-          <div className="w-full">
-            {activeSection === "overview" && renderOverview()}
-            {activeSection === "documents" && renderDocumentsPanel()}
-            {activeSection === "account" && renderAccountPanel()}
-          </div>
-        </section>
-      </div>
+          {activeSection === "overview" && renderOverview()}
+          {activeSection === "documents" && renderDocumentsPanel()}
+          {activeSection === "account" && renderAccountPanel()}
+        </div>
+      </section>
     </main>
   );
 }
