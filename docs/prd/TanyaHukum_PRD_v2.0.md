@@ -340,7 +340,8 @@ Ini memberikan insentif bagi perusahaan untuk berlangganan paket B2B yang lebih 
 | Frontend | Next.js 15 + React 19 + Tailwind CSS 4 | Production-ready SSR, modern React |
 | Deployment | Self-hosted (DigitalOcean) + Caddy | Full control, HTTPS, reverse proxy |
 | Backend | FastAPI (Python 3.12) | Async, fast, great for AI/ML workloads |
-| Database | MongoDB Atlas (+ vector search) | Document store + native vector search for RAG |
+| Auth + Relational DB | Supabase Auth + Supabase Postgres | Managed auth (email/password) + transactional quota/user data |
+| Vector Database | Qdrant (self-hosted) | High-performance vector retrieval for RAG + payload storage for analyses/bookings |
 | AI Model | Claude Sonnet 4.6 (via DigitalOcean Gradient) | Best reasoning; OpenAI-compatible API |
 | Embeddings | Mistral mistral-embed (1024 dim) | Consistent with regulation corpus |
 | PDF Parsing | pdfplumber (Python) | Layout-aware, handles Indonesian legal PDFs |
@@ -358,19 +359,24 @@ User uploads PDF / receives signing link
     |-- pdfplumber: extract text
     |-- clause_splitter: regex split by Pasal/BAB/numbered sections  
     |-- Mistral API: embed clauses (1024-dim vectors)
-    |-- MongoDB Atlas: $vectorSearch in legal_chunks (121K+ chunks)
+    |-- Qdrant: cosine vector search in legal_chunks (121K+ chunks)
     |-- Claude Sonnet 4.6 (via DO Gradient): analyze risk per clause
     |-- guardrails: input validation, citation grounding, topic enforcement
     |-- signing_service: consent capture, hash generation, PDF stamping (NEW)
     |-- notification_service: Resend email for signing requests (NEW)
+    |-- supabase_auth_service: register/login/me token flow (NEW)
     |
-[MongoDB Atlas]
+[Qdrant]
     |-- legal_chunks: 121K+ regulation chunks with embeddings
-    |-- analyses: analysis results + PDF binary
-    |-- consultation_bookings: lawyer consultation requests
+    |-- analyses: analysis results + PDF binary payload
+    |-- bookings: lawyer consultation requests
+
+[Supabase Postgres]
+    |-- user_profiles: app-level profile + plan metadata
+    |-- user_quotas: analysis/esign/chat limits and usage
     |-- documents: shared documents with signing status (NEW)
+    |-- document_signers: recipient list and per-signer status (NEW)
     |-- signatures: digital signature records (NEW)
-    |-- users: user accounts with quota tracking (NEW)
 ```
 
 ## 6.3 API Endpoints
@@ -382,7 +388,7 @@ User uploads PDF / receives signing link
 | POST | `/api/analyze` | Upload PDF → full contract analysis |
 | POST | `/api/chat` | Follow-up Q&A with legal context |
 | POST | `/api/consultation` | Book lawyer consultation |
-| GET | `/api/health` | Service health + MongoDB/LLM status |
+| GET | `/api/health` | Service health + Qdrant/LLM status |
 | GET | `/api/analysis/{id}` | Retrieve analysis result |
 | GET | `/api/analysis/{id}/pdf` | Retrieve original PDF |
 
@@ -402,61 +408,85 @@ User uploads PDF / receives signing link
 
 ## 6.4 Database Schema (v2.0 Additions)
 
-**users collection:**
+**Supabase Auth user (`auth.users`)**
 ```
 {
-  _id: ObjectId,
+  id: uuid,
   email: string,
-  name: string,
-  phone: string | null,
-  plan: "free" | "starter" | "plus" | "b2b_starter" | "b2b_business" | "b2b_enterprise",
-  company_name: string | null,
-  quota: {
-    analysis: { used: number, limit: number, reset_at: Date },
-    esign: { used: number, limit: number, reset_at: Date },
-    chat_per_doc: number
-  },
-  created_at: Date
+  encrypted_password: string,
+  created_at: timestamptz
 }
 ```
 
-**documents collection:**
+**`public.user_profiles` table**
 ```
 {
-  _id: string (document_id),
-  owner_id: ObjectId (ref users),
-  analysis_id: string (ref analyses),
-  filename: string,
+  user_id: uuid (PK, ref auth.users.id),
+  email: text,
+  name: text,
+  phone: text | null,
+  plan: "free" | "starter" | "plus" | "b2b_starter" | "b2b_business" | "b2b_enterprise",
+  company_name: text | null,
+  created_at: timestamptz,
+  updated_at: timestamptz
+}
+```
+
+**`public.user_quotas` table**
+```
+{
+  user_id: uuid (PK, ref auth.users.id),
+  analysis_used: integer,
+  analysis_limit: integer,
+  esign_used: integer,
+  esign_limit: integer,
+  chat_per_doc_limit: integer,
+  reset_at: timestamptz,
+  updated_at: timestamptz
+}
+```
+
+**`public.documents` table**
+```
+{
+  id: uuid (PK),
+  owner_id: uuid (ref auth.users.id),
+  analysis_id: text,
+  filename: text,
   status: "draft" | "analyzed" | "pending_signatures" | "partially_signed" | "completed" | "expired" | "rejected",
   company_pays_analysis: boolean,
-  signers: [
-    {
-      email: string,
-      name: string | null,
-      role: "sender" | "recipient",
-      status: "pending" | "signed" | "rejected",
-      signed_at: Date | null,
-      signature_id: ObjectId | null
-    }
-  ],
-  expires_at: Date | null,
-  created_at: Date,
-  updated_at: Date
+  expires_at: timestamptz | null,
+  created_at: timestamptz,
+  updated_at: timestamptz
 }
 ```
 
-**signatures collection:**
+**`public.document_signers` table**
 ```
 {
-  _id: ObjectId,
-  document_id: string,
-  signer_email: string,
-  signer_name: string,
-  ip_address: string,
-  user_agent: string,
-  consent_text: string,
-  document_hash: string (SHA-256 of original PDF),
-  signed_at: Date
+  id: uuid (PK),
+  document_id: uuid (ref documents.id),
+  email: text,
+  name: text | null,
+  role: "sender" | "recipient",
+  status: "pending" | "signed" | "rejected",
+  signed_at: timestamptz | null,
+  signature_id: uuid | null
+}
+```
+
+**`public.signatures` table**
+```
+{
+  id: uuid (PK),
+  document_id: uuid (ref documents.id),
+  signer_email: text,
+  signer_name: text,
+  ip_address: text,
+  user_agent: text,
+  consent_text: text,
+  document_hash: text (SHA-256),
+  signed_at: timestamptz
 }
 ```
 
@@ -464,7 +494,7 @@ User uploads PDF / receives signing link
 
 1. **Corpus Building** — PDFs hukum dari BPK (peraturan.bpk.go.id), hanya regulasi berstatus 'Berlaku'.
 2. **Chunking** — Per-pasal boundaries, ~300-500 token per chunk.
-3. **Embedding** — Mistral mistral-embed (1024 dim) → MongoDB Atlas vector search.
+3. **Embedding** — Mistral mistral-embed (1024 dim) → Qdrant cosine vector search.
 4. **Retrieval** — embed(clause_text) → cosine similarity → top-5 law chunks.
 5. **Generation** — top-5 chunks + klausa → Claude Sonnet 4.6 → risk score + citation.
 
@@ -507,8 +537,8 @@ Crawler otomatis (`scripts/crawl_bpk_v2.py`) dengan:
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| BPK Crawler | Done | 4,887+ PDFs, 121K+ chunks in MongoDB |
-| Ingestion Pipeline | Done | PDF → chunk → Mistral embed → MongoDB |
+| BPK Crawler | Done | 4,887+ PDFs, 121K+ chunks in Qdrant |
+| Ingestion Pipeline | Done | PDF → chunk → Mistral embed → Qdrant |
 | FastAPI Backend | Done | /api/analyze, /api/chat, /api/health, /api/consultation |
 | Analysis Pipeline | Done | pdfplumber → clause split → RAG → Claude → structured JSON |
 | Guardrails | Done | PDF validation, text length, citation grounding, topic filter |
