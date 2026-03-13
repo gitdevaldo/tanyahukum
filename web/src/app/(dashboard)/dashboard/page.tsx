@@ -1554,7 +1554,7 @@ export default function DashboardPage() {
     <main className={styles.app}>
       <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         <div className={styles.sidebarHeader}>
-          <div className={styles.logoMark}>TH</div>
+          <img src="/favicon.svg" alt="TanyaHukum logo" className={styles.logoMark} />
           <span className={styles.logoText}>TanyaHukum</span>
         </div>
 
