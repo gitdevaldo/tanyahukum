@@ -1161,3 +1161,80 @@ def quick_sign_document(
         "filename": _safe_download_filename(filename, "signed"),
         "pdf_bytes": signed_pdf,
     }
+
+
+def save_visual_signature(
+    document_id: str,
+    owner_id: str,
+    owner_email: str,
+    signer_name: str,
+    signed_pdf_bytes: bytes,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    request_id: str | None = None,
+) -> dict:
+    """Save visually signed PDF and record signature in document."""
+    from datetime import datetime, timezone
+    
+    sb = get_supabase_client()
+    now = datetime.now(timezone.utc)
+    
+    try:
+        # Get document record
+        doc_result = sb.table("documents").select("*").eq("document_id", document_id).single().execute()
+        doc = doc_result.data
+        if not doc:
+            raise SupabaseServiceError(status_code=404, detail="Dokumen tidak ditemukan.")
+        
+        # Get signer record
+        signer_result = sb.table("document_signers").select("*").eq("document_id", document_id).eq("signer_email", owner_email).single().execute()
+        signer = signer_result.data
+        if not signer:
+            raise SupabaseServiceError(status_code=404, detail="Signer tidak ditemukan.")
+        
+        # Update signer status to signed
+        sb.table("document_signers").update({
+            "status": "signed",
+            "signed_at": now.isoformat(),
+        }).eq("document_id", document_id).eq("signer_email", owner_email).execute()
+        
+        # Store signed PDF in Supabase storage
+        storage_path = f"signed_documents/{owner_id}/{document_id}/{now.timestamp()}.pdf"
+        sb.storage.from_("documents").upload(storage_path, signed_pdf_bytes)
+        
+        # Record signature event
+        sb.table("document_events").insert({
+            "document_id": document_id,
+            "event_type": "visual_signed",
+            "actor_email": owner_email,
+            "actor_name": signer_name,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "metadata": {"request_id": request_id},
+        }).execute()
+        
+        # Check if all signers have signed
+        remaining = sb.table("document_signers").select("*").eq("document_id", document_id).neq("status", "signed").execute()
+        new_status = "completed" if len(remaining.data) == 0 else "partially_signed"
+        
+        # Update document status
+        sb.table("documents").update({
+            "status": new_status,
+            "updated_at": now.isoformat(),
+        }).eq("document_id", document_id).execute()
+        
+        return {
+            "success": True,
+            "message": "Tanda tangan visual berhasil disimpan",
+            "document_id": document_id,
+            "signer_email": owner_email,
+            "signer_name": signer_name,
+            "signed_at": now.isoformat(),
+            "new_status": new_status,
+        }
+        
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving visual signature: {e}")
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyimpan tanda tangan visual: {e}")

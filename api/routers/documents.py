@@ -322,3 +322,82 @@ async def quick_sign(
         )
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal menandatangani dokumen.")
+
+
+@router.get("/documents/{document_id}/pdf")
+@limiter.limit("60/minute")
+async def get_document_pdf(
+    request: Request,
+    document_id: str,
+    access_token: str = Depends(verify_bearer_token),
+):
+    """Retrieve document PDF for viewing/signing."""
+    try:
+        user_id, email, _, _ = await _resolve_user(access_token)
+        
+        # Get document from Supabase
+        from api.services.supabase_auth import get_supabase_client
+        sb = get_supabase_client()
+        doc = sb.table("documents").select("*").eq("document_id", document_id).single().execute().data
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
+        
+        # Check access (user must be sender or recipient)
+        if doc["owner_id"] != user_id:
+            signers = sb.table("document_signers").select("*").eq("document_id", document_id).eq("signer_email", email).execute().data
+            if not signers:
+                raise HTTPException(status_code=403, detail="Akses ditolak.")
+        
+        # Get signed PDF from storage or original
+        from api.services.documents import get_signed_document_pdf as fetch_pdf_service
+        result = await asyncio.to_thread(
+            fetch_pdf_service,
+            document_id,
+            user_id,
+            email,
+            getattr(request.state, "request_id", None),
+        )
+        
+        return Response(
+            content=result["pdf_bytes"],
+            media_type="application/pdf",
+        )
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal memuat PDF dokumen.")
+
+
+@router.post("/documents/{document_id}/sign-visual")
+@limiter.limit("30/minute")
+async def sign_document_visual(
+    request: Request,
+    document_id: str,
+    signed_pdf: UploadFile = File(...),
+    signer_name: str = Form(...),
+    access_token: str = Depends(verify_bearer_token),
+):
+    """Save visually signed PDF and record signature."""
+    try:
+        user_id, email, name, _ = await _resolve_user(access_token)
+        pdf_bytes = await signed_pdf.read()
+        
+        if len(pdf_bytes) > 50 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Ukuran file terlalu besar.")
+        
+        # Import the service function to save visual signature
+        from api.services.documents import save_visual_signature
+        result = await asyncio.to_thread(
+            save_visual_signature,
+            document_id,
+            user_id,
+            email,
+            signer_name.strip() or name,
+            pdf_bytes,
+            request.client.host if request.client else None,
+            request.headers.get("User-Agent"),
+            getattr(request.state, "request_id", None),
+        )
+        
+        return result
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal menyimpan tanda tangan visual.")

@@ -362,6 +362,13 @@ export default function DashboardPage() {
     Array<{ id: string; x: number; y: number; width: number; height: number }>
   >([]);
 
+  // Panel signature state (for Detail & Aksi panel signing)
+  const [panelSignatureImage, setPanelSignatureImage] = useState<string | null>(null);
+  const [panelShowPdfSigner, setPanelShowPdfSigner] = useState(false);
+  const [panelSignaturePositions, setPanelSignaturePositions] = useState<
+    Array<{ id: string; x: number; y: number; width: number; height: number }>
+  >([]);
+
   // --- Inline analysis state ---
   const [analysisFile, setAnalysisFile] = useState<File | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(false);
@@ -1638,6 +1645,69 @@ export default function DashboardPage() {
       } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignPanelProcessing(false); }
     };
 
+    const handlePanelVisualSign = async () => {
+      if (!signPanelDocId || !panelSignatureImage || panelSignaturePositions.length === 0 || !panelDoc) return;
+      const name = signPanelForm.signerName.trim() || profile?.name || "";
+      if (!name) { setError("Nama penandatangan wajib diisi."); return; }
+      setSignPanelProcessing(true); setError(null);
+      try {
+        const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
+        
+        // Fetch PDF from document
+        const pdfRes = await fetch(`/api/documents/${signPanelDocId}/pdf`, { 
+          headers: { Authorization: `Bearer ${token}` } 
+        });
+        if (!pdfRes.ok) throw new Error("Gagal memuat dokumen PDF.");
+        const pdfBlob = await pdfRes.blob();
+        
+        // Create FormData with PDF, signature, and positions
+        const fd = new FormData();
+        fd.append("pdf_file", pdfBlob, "document.pdf");
+        fd.append("signature_image", await fetch(panelSignatureImage).then(r => r.blob()), "signature.png");
+        fd.append("positions_json", JSON.stringify(panelSignaturePositions));
+        fd.append("signer_name", name);
+        
+        const res = await fetch("/api/signatures/apply", { 
+          method: "POST", 
+          headers: { Authorization: `Bearer ${token}` }, 
+          body: fd 
+        });
+        
+        if (!res.ok) { 
+          const err = await res.json().catch(() => ({ detail: "Gagal menandatangani." })); 
+          throw new Error(parseApiError(err, "Gagal menandatangani dokumen."));
+        }
+        
+        const result = await res.json();
+        
+        // Save the signed PDF back to the document
+        const signedFd = new FormData();
+        const binaryString = atob(result.signed_pdf);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
+        const signedBlob = new Blob([bytes], { type: "application/pdf" });
+        signedFd.append("signed_pdf", signedBlob, result.filename);
+        signedFd.append("signer_name", name);
+        
+        await fetch(`/api/documents/${signPanelDocId}/sign-visual`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: signedFd
+        });
+        
+        setNotice("Dokumen berhasil ditandatangani!"); 
+        setPanelSignatureImage(null);
+        setPanelSignaturePositions([]);
+        setPanelShowPdfSigner(false);
+        loadDocuments(); 
+        loadSignPanelDoc(signPanelDocId);
+      } catch (err) { 
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan."); 
+      } finally { 
+        setSignPanelProcessing(false); 
+      }
+    };
+
     const handleShareSubmit = async (e: FormEvent) => {
       e.preventDefault(); setSignShareProcessing(true);
       try {
@@ -1744,19 +1814,39 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Sign form */}
+                    {/* Sign form - Visual Signing */}
                     {canSign && (
-                      <form onSubmit={handlePanelSign} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
                         <p className={styles.signLabel}>Tanda Tangani Dokumen Ini</p>
                         <input type="text" placeholder={profile?.name || "Nama"} value={signPanelForm.signerName} onChange={(e) => setSignPanelForm((f) => ({ ...f, signerName: e.target.value }))} className={styles.signInput} required />
-                        <div className={styles.consentBox}>
-                          <svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                          <p>Saya menyetujui penandatanganan elektronik dokumen ini secara sah.</p>
-                        </div>
-                        <button type="submit" disabled={signPanelProcessing} className={styles.signBtn}>
-                          {signPanelProcessing ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani</>}
-                        </button>
-                      </form>
+                        
+                        {!panelSignatureImage && !panelShowPdfSigner && (
+                          <SignaturePad onSignatureChange={setPanelSignatureImage} />
+                        )}
+                        
+                        {panelSignatureImage && !panelShowPdfSigner && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            <div style={{ padding: "12px", background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0", fontSize: 13, color: "#166534" }}>✓ Tanda tangan siap</div>
+                            <button type="button" onClick={() => setPanelShowPdfSigner(true)} className={styles.signBtn}>Lanjut ke Pemosisian</button>
+                            <button type="button" onClick={() => { setPanelSignatureImage(null); setPanelSignaturePositions([]); }} className={styles.signBtn} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>Ganti Tanda Tangan</button>
+                          </div>
+                        )}
+                        
+                        {panelShowPdfSigner && panelSignatureImage && panelDoc && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            <PdfSigningViewer
+                              pdfUrl={`/api/documents/${signPanelDocId}/pdf`}
+                              signatureImage={panelSignatureImage}
+                              onPositionsChange={setPanelSignaturePositions}
+                              onClose={() => setPanelShowPdfSigner(false)}
+                            />
+                            <div className={styles.consentBox}><svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>Saya menyetujui penandatanganan elektronik dokumen ini secara sah.</p></div>
+                            <button type="button" onClick={handlePanelVisualSign} disabled={signPanelProcessing || panelSignaturePositions.length === 0} className={styles.signBtn}>
+                              {signPanelProcessing ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani</>}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {/* Reject form */}
