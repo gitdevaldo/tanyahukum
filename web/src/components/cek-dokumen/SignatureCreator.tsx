@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import styles from "./SignatureCreator.module.css";
+import { getValidAccessToken } from "@/lib/auth-session";
 
 interface SignatureCreatorProps {
   onSignatureCreated: (sig: { type: "text" | "drawn" | "image"; content: string; displayName: string }) => void;
@@ -13,6 +14,7 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
   const [signatureType, setSignatureType] = useState<"text" | "drawn" | "image">("text");
   const [drawnSignature, setDrawnSignature] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
 
@@ -90,45 +92,76 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
     reader.readAsDataURL(file);
   };
 
-  const handleCreateSignature = () => {
-    if (!isComplete()) return;
+  const handleCreateSignature = async () => {
+    if (!isComplete() || saving) return;
 
-    let content = "";
-    if (signatureType === "text") {
-      content = displayName;
-    } else if (signatureType === "drawn") {
-      content = drawnSignature || "";
-    } else if (signatureType === "image") {
-      content = uploadedImage || "";
+    setSaving(true);
+    try {
+      let content = "";
+      if (signatureType === "text") {
+        content = displayName;
+      } else if (signatureType === "drawn") {
+        content = drawnSignature || "";
+      } else if (signatureType === "image") {
+        content = uploadedImage || "";
+      }
+
+      // Get auth token
+      const token = await getValidAccessToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+
+      // Save signature to backend
+      const res = await fetch("/api/user/signatures", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: signatureType,
+          display_name: displayName,
+          content: content,
+          is_default: false,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || "Failed to save signature");
+      }
+
+      // Notify parent that signature was created
+      onSignatureCreated({
+        type: signatureType,
+        content,
+        displayName,
+      });
+
+      // Only call onCanSignChange when button is clicked and saved
+      onCanSignChange(true);
+    } catch (err) {
+      console.error("Error saving signature:", err);
+      alert(err instanceof Error ? err.message : "Failed to save signature");
+    } finally {
+      setSaving(false);
     }
-
-    onSignatureCreated({
-      type: signatureType,
-      content,
-      displayName,
-    });
-
-    // Only call onCanSignChange when button is clicked (not on every keystroke)
-    onCanSignChange(true);
   };
 
   return (
     <div className={styles.container}>
-      <h3 className={styles.title}>Buat Tanda Tangan</h3>
-
-      {/* Display Name Input */}
       <div className={styles.formGroup}>
         <label className={styles.label}>Nama Penandatangan</label>
         <input
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="e.g., John Doe"
+          placeholder="Masukkan nama Anda"
           className={styles.input}
         />
       </div>
 
-      {/* Signature Type Selector */}
       <div className={styles.formGroup}>
         <label className={styles.label}>Jenis Tanda Tangan</label>
         <div className={styles.radioGroup}>
@@ -228,10 +261,10 @@ export function SignatureCreator({ onSignatureCreated, onCanSignChange }: Signat
       <button
         type="button"
         onClick={handleCreateSignature}
-        disabled={!isComplete()}
+        disabled={!isComplete() || saving}
         className={styles.createBtn}
       >
-        Simpan & Lanjutkan
+        {saving ? "Menyimpan..." : "Simpan & Lanjutkan"}
       </button>
     </div>
   );

@@ -181,16 +181,20 @@ from api.services.signature_manager import (
 )
 
 
+class CreateSignatureRequest(BaseModel):
+    type: str
+    display_name: str
+    content: str
+    is_default: bool = False
+
+
 @router.post("/user")
 async def create_user_signature(
-    signature_type: str,
-    display_name: str,
-    content: str,
-    is_default: bool = False,
+    body: CreateSignatureRequest,
     auth_user_id: str = Depends(verify_bearer_token),
 ):
     """Create and save a reusable signature for the user."""
-    if not signature_type or signature_type not in ["text", "drawn", "image"]:
+    if not body.type or body.type not in ["text", "drawn", "image"]:
         raise HTTPException(
             status_code=400,
             detail="Invalid signature type. Must be 'text', 'drawn', or 'image'."
@@ -198,10 +202,10 @@ async def create_user_signature(
     
     result = save_user_signature(
         user_id=auth_user_id,
-        signature_type=signature_type,
-        display_name=display_name,
-        content=content,
-        is_default=is_default
+        signature_type=body.type,
+        display_name=body.display_name,
+        content=body.content,
+        is_default=body.is_default
     )
     
     if not result:
