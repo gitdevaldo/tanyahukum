@@ -1482,7 +1482,7 @@ export default function DashboardPage() {
               <div className={`${styles.uploadZone} ${analysisDragOver ? styles.uploadZoneActive : ""}`} onDragOver={(e) => { e.preventDefault(); setAnalysisDragOver(true); }} onDragLeave={() => setAnalysisDragOver(false)} onDrop={handleAnalysisDrop} onClick={() => document.getElementById("analysis-file-input")?.click()}>
                 <input id="analysis-file-input" type="file" accept=".pdf" onChange={handleAnalysisFileSelect} style={{ display: "none" }} />
                 <div className={styles.uploadIcon}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-                <p className={styles.uploadTitle}>Drag &amp; drop PDF atau klik untuk upload</p>
+                <p className={styles.uploadTitle}>Tarik &amp; lepas PDF atau klik untuk unggah</p>
                 <p className={styles.uploadHint}>Maksimal 20MB - Hanya file PDF</p>
               </div>
             )}
@@ -1766,7 +1766,7 @@ export default function DashboardPage() {
                 <div className={`${styles.uploadZone} ${dragOver ? styles.uploadZoneActive : ""}`} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleFileDrop} onClick={() => document.getElementById("sign-file-input")?.click()}>
                   <input id="sign-file-input" type="file" accept=".pdf" onChange={handleFileSelect} style={{ display: "none" }} />
                   <div className={styles.uploadIcon}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-                  <p className={styles.uploadTitle}>Drag &amp; drop PDF atau klik untuk upload</p>
+                  <p className={styles.uploadTitle}>Tarik &amp; lepas PDF atau klik untuk unggah</p>
                   <p className={styles.uploadHint}>Maksimal 20MB - Hanya file PDF</p>
                 </div>
               )}
@@ -1792,7 +1792,7 @@ export default function DashboardPage() {
                   <p className={styles.successTitle}>Dokumen Berhasil Ditandatangani!</p>
                   <p className={styles.successSub}>Sertifikat digital telah ditambahkan ke dalam PDF Anda.</p>
                   <div className={styles.successActions}>
-                    <a href={signResult.url} download={signResult.filename} className={styles.downloadBtn}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download</a>
+                    <a href={signResult.url} download={signResult.filename} className={styles.downloadBtn}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Unduh</a>
                     <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setError(null); setSignQuickName(""); }}>Tanda Tangani Lagi</button>
                   </div>
                 </div>
@@ -2106,7 +2106,7 @@ export default function DashboardPage() {
                     disabled={loadingDocumentDetails}
                     className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {loadingDocumentDetails ? "Memuat..." : "Refresh Detail"}
+                    {loadingDocumentDetails ? "Memuat..." : "Muat Ulang Detail"}
                   </button>
                     <button
                       type="button"
