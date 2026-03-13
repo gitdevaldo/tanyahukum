@@ -306,7 +306,6 @@ export default function DashboardPage() {
   const [processingSign, setProcessingSign] = useState(false);
   const [processingReject, setProcessingReject] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeNav, setActiveNav] = useState("Ringkasan");
@@ -336,7 +335,6 @@ export default function DashboardPage() {
   const [signQuickName, setSignQuickName] = useState("");
   const [signingInProgress, setSigningInProgress] = useState(false);
   const [signResult, setSignResult] = useState<{ url: string; filename: string; documentId: string } | null>(null);
-  const [signError, setSignError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [signActiveTab, setSignActiveTab] = useState<"list" | "quick" | "share">("list");
   const [signPanelDocId, setSignPanelDocId] = useState<string | null>(null);
@@ -353,7 +351,6 @@ export default function DashboardPage() {
   const [analysisFile, setAnalysisFile] = useState<File | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisDragOver, setAnalysisDragOver] = useState(false);
   const [viewingAnalysisId, setViewingAnalysisId] = useState<string | null>(null);
   const [viewingAnalysis, setViewingAnalysis] = useState<AnalysisResponse | null>(null);
@@ -503,10 +500,10 @@ export default function DashboardPage() {
     [requestJson],
   );
 
-  const loadDocumentDetails = useCallback(
+    const loadDocumentDetails = useCallback(
     async (documentId: string, statusHint?: DocumentStatus) => {
       setLoadingDocumentDetails(true);
-      setDetailError(null);
+      setError(null);
       try {
         const [signers, events] = await Promise.all([
           requestJson<DocumentSignersResponse>(`/api/documents/${documentId}/signers/`, {
@@ -538,7 +535,7 @@ export default function DashboardPage() {
         setSelectedSigners(null);
         setSelectedEvents(null);
         setSelectedCertificate(null);
-        setDetailError(err instanceof Error ? err.message : "Gagal memuat detail dokumen.");
+        setError(err instanceof Error ? err.message : "Gagal memuat detail dokumen.");
       } finally {
         setLoadingDocumentDetails(false);
       }
@@ -630,6 +627,13 @@ export default function DashboardPage() {
     const selected = documents.find((doc) => doc.document_id === selectedDocumentId) ?? null;
     loadDocumentDetails(selectedDocumentId, selected?.status);
   }, [selectedDocumentId, documents, loadDocumentDetails]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const quotaInfo = quota?.quota ?? null;
   const analysisProgress = useMemo(
@@ -1326,12 +1330,12 @@ export default function DashboardPage() {
   function renderAnalysisPanel() {
     const analysisDocuments = documents.filter((doc) => Boolean(doc.analysis_id));
 
-    const handleAnalysisDrop = (e: React.DragEvent) => { e.preventDefault(); setAnalysisDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setAnalysisFile(f); setAnalysisError(null); setAnalysisResult(null); } else { setAnalysisError("Hanya file PDF yang didukung."); } };
-    const handleAnalysisFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setAnalysisFile(f); setAnalysisError(null); setAnalysisResult(null); } };
+    const handleAnalysisDrop = (e: React.DragEvent) => { e.preventDefault(); setAnalysisDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setAnalysisFile(f); setError(null); setAnalysisResult(null); } else { setError("Hanya file PDF yang didukung."); } };
+    const handleAnalysisFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setAnalysisFile(f); setError(null); setAnalysisResult(null); } };
 
     const handleAnalyze = async () => {
       if (!analysisFile) return;
-      setAnalysisRunning(true); setAnalysisError(null); setAnalysisResult(null);
+      setAnalysisRunning(true); setError(null); setAnalysisResult(null);
       try {
         const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
         const fd = new FormData(); fd.append("file", analysisFile);
@@ -1340,7 +1344,7 @@ export default function DashboardPage() {
         const data = await res.json();
         setPdfUrl(URL.createObjectURL(analysisFile));
         setAnalysisResult(data); setNotice("Analisis selesai!"); loadDocuments();
-      } catch (err) { setAnalysisError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setAnalysisRunning(false); }
+      } catch (err) { setError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setAnalysisRunning(false); }
     };
 
     const loadAnalysisResult = async (analysisId: string) => {
@@ -1487,7 +1491,7 @@ export default function DashboardPage() {
                 <div className={styles.filePreview}>
                   <div className={styles.fileIcon}><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                   <div className={styles.fileInfo}><p className={styles.fileName}>{analysisFile.name}</p><p className={styles.fileMeta}>{(analysisFile.size / (1024*1024)).toFixed(1)} MB - PDF</p></div>
-                  <button type="button" className={styles.fileRemove} onClick={() => { setAnalysisFile(null); setAnalysisError(null); }}>&times;</button>
+                  <button type="button" className={styles.fileRemove} onClick={() => { setAnalysisFile(null); setError(null); }}>&times;</button>
                 </div>
                 <button type="button" onClick={handleAnalyze} className={styles.signBtn} style={{ marginTop: 12 }}>Analisis Sekarang</button>
               </div>
@@ -1499,7 +1503,7 @@ export default function DashboardPage() {
                 <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>Proses ini memakan waktu sekitar 15 detik.</p>
               </div>
             )}
-            {analysisError && <div className={styles.alertError} style={{ marginTop: 16 }}>{analysisError}</div>}
+
           </div>
         </article>
 
@@ -1532,15 +1536,15 @@ export default function DashboardPage() {
 
   function renderSignPanel() {
     // --- Helpers ---
-    const handleFileDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setSignFile(f); setSignResult(null); setSignError(null); } else { setSignError("Hanya file PDF yang didukung."); } };
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setSignFile(f); setSignResult(null); setSignError(null); } };
+    const handleFileDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setSignFile(f); setSignResult(null); setError(null); } else { setError("Hanya file PDF yang didukung."); } };
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setSignFile(f); setSignResult(null); setError(null); } };
     const formatFileSize = (b: number) => b < 1024 ? `${b} B` : b < 1024*1024 ? `${(b/1024).toFixed(1)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
 
     const handleQuickSign = async () => {
       if (!signFile) return;
       const name = signQuickName.trim() || profile?.name || "";
-      if (!name) { setSignError("Nama penandatangan wajib diisi."); return; }
-      setSigningInProgress(true); setSignError(null); setSignResult(null);
+      if (!name) { setError("Nama penandatangan wajib diisi."); return; }
+      setSigningInProgress(true); setError(null); setSignResult(null);
       try {
         const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
         const fd = new FormData(); fd.append("file", signFile); fd.append("signer_name", name);
@@ -1549,7 +1553,7 @@ export default function DashboardPage() {
         const blob = await res.blob(); const url = URL.createObjectURL(blob);
         setSignResult({ url, filename: parseFilenameFromDisposition(res.headers.get("content-disposition"), "signed-document.pdf"), documentId: res.headers.get("x-document-id") || "" });
         setNotice("Dokumen berhasil ditandatangani!"); loadDocuments();
-      } catch (err) { setSignError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setSigningInProgress(false); }
+      } catch (err) { setError(err instanceof Error ? err.message : "Terjadi kesalahan."); } finally { setSigningInProgress(false); }
     };
 
     const loadSignPanelDoc = async (docId: string) => {
@@ -1771,7 +1775,7 @@ export default function DashboardPage() {
                   <div className={styles.filePreview}>
                     <div className={styles.fileIcon}><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                     <div className={styles.fileInfo}><p className={styles.fileName}>{signFile.name}</p><p className={styles.fileMeta}>{formatFileSize(signFile.size)} - PDF</p></div>
-                    <button type="button" className={styles.fileRemove} onClick={() => { setSignFile(null); setSignError(null); }}>&times;</button>
+                    <button type="button" className={styles.fileRemove} onClick={() => { setSignFile(null); setError(null); }}>&times;</button>
                   </div>
                   <div className={styles.signFields}>
                     <div><label className={styles.signLabel}>Nama Penandatangan</label><input type="text" value={signQuickName} onChange={(e) => setSignQuickName(e.target.value)} placeholder={profile?.name || "Nama lengkap"} className={styles.signInput} /></div>
@@ -1789,11 +1793,11 @@ export default function DashboardPage() {
                   <p className={styles.successSub}>Sertifikat digital telah ditambahkan ke dalam PDF Anda.</p>
                   <div className={styles.successActions}>
                     <a href={signResult.url} download={signResult.filename} className={styles.downloadBtn}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download</a>
-                    <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setSignError(null); setSignQuickName(""); }}>Tanda Tangani Lagi</button>
+                    <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setError(null); setSignQuickName(""); }}>Tanda Tangani Lagi</button>
                   </div>
                 </div>
               )}
-              {signError && <div className={styles.alertError} style={{ marginTop: 16 }}>{signError}</div>}
+
             </div>
           </article>
         )}
@@ -2193,11 +2197,7 @@ export default function DashboardPage() {
                   </form>
                 </div>
 
-                {detailError ? (
-                  <div className="border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                    {detailError}
-                  </div>
-                ) : null}
+
 
                 <div className="grid gap-3">
                   <div>
@@ -2540,25 +2540,29 @@ export default function DashboardPage() {
 
         <div className={styles.content}>
           {error && (
-            <div className={styles.alertError}>
-              <p>{error}</p>
-              <button
-                type="button"
-                onClick={loadData}
-                className="mt-2 border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700"
-              >
-                Coba Lagi
+            <div className="fixed bottom-6 w-[90%] sm:w-auto sm:max-w-sm left-1/2 -translate-x-1/2 z-[100] px-5 py-3.5 bg-red-600 border border-red-500 text-white text-sm font-medium rounded-2xl shadow-[0_8px_30px_rgba(220,38,38,0.2)] flex items-center gap-3 animate-in slide-in-from-bottom-5">
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-100">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span className="flex-1 leading-snug">{error}</span>
+              <button type="button" onClick={() => setError(null)} className="shrink-0 p-1.5 text-white/70 hover:text-white hover:bg-red-500 rounded-full transition-colors" aria-label="Tutup">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
           )}
 
           {notice && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-dark-navy text-white text-sm font-medium rounded-full shadow-lg border border-border-light flex items-center gap-2 animate-in slide-in-from-bottom-5">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <div className="fixed bottom-6 w-[90%] sm:w-auto sm:max-w-sm left-1/2 -translate-x-1/2 z-[100] px-5 py-3.5 bg-dark-navy text-white text-sm font-medium rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-light-cream/10 flex items-center gap-3 animate-in slide-in-from-bottom-5">
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-green-400">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
-              {notice}
+              <span className="flex-1 leading-snug">{notice}</span>
+              <button type="button" onClick={() => setNotice(null)} className="shrink-0 p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" aria-label="Tutup">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           )}
 
