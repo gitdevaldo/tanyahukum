@@ -996,6 +996,48 @@ def get_document_certificate_pdf(
     }
 
 
+def get_document_pdf_for_signing(
+    document_id: str,
+    user_id: str,
+    email: str,
+    request_id: str | None = None,
+) -> dict:
+    """Get original PDF for viewing/signing (no status requirement)."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            doc = _load_document_with_access(cur, document_id, user_id, email)
+            analysis_id = doc.get("analysis_id")
+            if not analysis_id:
+                raise SupabaseServiceError(
+                    status_code=404,
+                    detail="Dokumen belum memiliki PDF analisis.",
+                )
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="pdf_viewed",
+                actor_user_id=user_id,
+                actor_email=email,
+                request_id=request_id,
+                metadata={"action": "pdf_for_signing"},
+            )
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal memuat dokumen: {e}")
+
+    original_pdf = get_analysis_pdf(analysis_id)
+    if not original_pdf:
+        raise SupabaseServiceError(status_code=404, detail="PDF tidak ditemukan.")
+
+    return {
+        "document_id": document_id,
+        "filename": doc["filename"],
+        "pdf_bytes": original_pdf,
+    }
+
+
 def get_signed_document_pdf(
     document_id: str,
     user_id: str,

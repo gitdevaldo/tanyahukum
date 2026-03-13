@@ -34,6 +34,7 @@ from api.services.documents import (
     reject_document,
     get_document_certificate,
     get_document_certificate_pdf,
+    get_document_pdf_for_signing,
     get_signed_document_pdf,
     quick_sign_document,
 )
@@ -331,13 +332,13 @@ async def get_document_pdf(
     document_id: str,
     access_token: str = Depends(verify_bearer_token),
 ):
-    """Retrieve document PDF for viewing/signing."""
+    """Retrieve original document PDF for viewing/signing."""
     try:
         user_id, email, _, _ = await _resolve_user(access_token)
         
-        # Get signed PDF from storage or original
+        # Get original PDF for signing (no completion status required)
         result = await asyncio.to_thread(
-            get_signed_document_pdf,
+            get_document_pdf_for_signing,
             document_id,
             user_id,
             email,
