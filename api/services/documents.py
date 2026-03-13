@@ -1271,3 +1271,77 @@ def save_visual_signature(
     except Exception as e:
         logger.error(f"Error saving visual signature: {e}")
         raise SupabaseServiceError(status_code=500, detail=f"Gagal menyimpan tanda tangan visual: {e}")
+
+
+def get_document_by_id(document_id: str) -> Optional[dict]:
+    """Get document by ID."""
+    try:
+        result = supabase.table("documents").select("*").eq("id", document_id).limit(1).execute()
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.error(f"Error fetching document: {str(e)}")
+        return None
+
+
+def update_document_signer_status(
+    document_id: str,
+    user_id: str,
+    email: str,
+    status: str,  # 'signed', 'rejected', etc.
+) -> bool:
+    """Update signer status for a document."""
+    try:
+        # Find or create signer record
+        result = supabase.table("document_signers").select("*").eq(
+            "document_id", document_id
+        ).eq("email", email).execute()
+        
+        if result.data:
+            # Update existing
+            supabase.table("document_signers").update({
+                "status": status,
+                "signed_at": "now()" if status == "signed" else None,
+            }).eq("id", result.data[0]["id"]).execute()
+        else:
+            # Create new signer record (for owner signing analyzed doc)
+            supabase.table("document_signers").insert({
+                "id": str(uuid.uuid4()),
+                "document_id": document_id,
+                "email": email,
+                "role": "sender",  # Assume owner
+                "status": status,
+                "signed_at": "now()" if status == "signed" else None,
+            }).execute()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error updating signer status: {str(e)}")
+        return False
+
+
+def record_document_event(
+    document_id: str,
+    actor_user_id: str,
+    actor_email: str,
+    event_type: str,
+    details: dict = None,
+    ip_address: str = None,
+    user_agent: str = None,
+) -> bool:
+    """Record an event in audit trail."""
+    try:
+        supabase.table("document_events").insert({
+            "id": str(uuid.uuid4()),
+            "document_id": document_id,
+            "event_type": event_type,
+            "actor_user_id": actor_user_id,
+            "actor_email": actor_email,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "details": details or {},
+        }).execute()
+        return True
+    except Exception as e:
+        logger.error(f"Error recording event: {str(e)}")
+        return False
+

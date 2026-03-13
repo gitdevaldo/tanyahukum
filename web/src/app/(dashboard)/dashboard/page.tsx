@@ -28,6 +28,10 @@ const PdfSigningViewer = dynamic(() => import("@/components/cek-dokumen/PdfSigni
   ssr: false,
 });
 
+const SignatureCreator = dynamic(() => import("@/components/cek-dokumen/SignatureCreator").then(m => ({ default: m.SignatureCreator })), {
+  ssr: false,
+});
+
 type AccountType = "personal" | "business";
 type Plan = "free" | "starter" | "plus" | "business" | "enterprise" | null;
 type DashboardSection = "overview" | "documents" | "analysis" | "sign" | "consultation" | "account";
@@ -381,12 +385,15 @@ export default function DashboardPage() {
     Array<{ id: string; x: number; y: number; width: number; height: number }>
   >([]);
 
-  // Panel signature state (for Detail & Aksi panel signing)
+  // Panel signature state (for Detail & Aksi panel signing - NEW FLOW)
   const [panelSignatureImage, setPanelSignatureImage] = useState<string | null>(null);
   const [panelShowPdfSigner, setPanelShowPdfSigner] = useState(false);
   const [panelSignaturePositions, setPanelSignaturePositions] = useState<
     Array<{ id: string; x: number; y: number; width: number; height: number }>
   >([]);
+  const [panelSignatureName, setPanelSignatureName] = useState<string>("");
+  const [panelSignatureType, setPanelSignatureType] = useState<"text" | "drawn" | "image" | null>(null);
+  const [panelCanSign, setPanelCanSign] = useState(false);
 
   // --- Inline analysis state ---
   const [analysisFile, setAnalysisFile] = useState<File | null>(null);
@@ -675,6 +682,28 @@ export default function DashboardPage() {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  // Listen for signing completion from new tab
+  useEffect(() => {
+    const handleSigningComplete = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "SIGNATURE_COMPLETE") {
+        const docId = event.data.documentId;
+        // Refresh document list
+        loadDocuments();
+        // Show success message
+        setNotice("✓ Dokumen berhasil ditandatangani");
+        // Clear signing panel state
+        setPanelCanSign(false);
+        setPanelSignatureName("");
+        setPanelSignatureType(null);
+        setPanelSignatureImage(null);
+      }
+    };
+
+    window.addEventListener("message", handleSigningComplete);
+    return () => window.removeEventListener("message", handleSigningComplete);
+  }, [loadDocuments]);
 
   const quotaInfo = quota?.quota ?? null;
   const analysisProgress = useMemo(
@@ -1727,6 +1756,19 @@ export default function DashboardPage() {
       }
     };
 
+    const handleOpenSigningPage = () => {
+      if (!signPanelDocId || !panelSignatureName || !panelCanSign) return;
+      // Store signature data in sessionStorage for new tab
+      const sigData = {
+        name: panelSignatureName,
+        type: panelSignatureType,
+        content: panelSignatureImage,
+      };
+      sessionStorage.setItem(`sig_data_${signPanelDocId}`, JSON.stringify(sigData));
+      // Open new tab for full-screen signing
+      window.open(`/dashboard/sign/${signPanelDocId}`, '_blank');
+    };
+
     const handleShareSubmit = async (e: FormEvent) => {
       e.preventDefault(); setSignShareProcessing(true);
       try {
@@ -1836,35 +1878,29 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Sign form - Visual Signing */}
+                    {/* Sign form - NEW Signature Creator Flow */}
                     {canSign && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
-                        <p className={styles.signLabel}>Tanda Tangani Dokumen Ini</p>
-                        <input type="text" placeholder={profile?.name || "Nama"} value={signPanelForm.signerName} onChange={(e) => setSignPanelForm((f) => ({ ...f, signerName: e.target.value }))} className={styles.signInput} required />
-                        
-                        {!panelSignatureImage && !panelShowPdfSigner && (
-                          <SignaturePad onSignatureChange={setPanelSignatureImage} />
-                        )}
-                        
-                        {panelSignatureImage && !panelShowPdfSigner && (
+                        {!panelCanSign ? (
+                          <>
+                            <SignatureCreator 
+                              onSignatureCreated={(sig) => {
+                                setPanelSignatureName(sig.displayName);
+                                setPanelSignatureType(sig.type);
+                                setPanelSignatureImage(sig.content);
+                              }}
+                              onCanSignChange={setPanelCanSign}
+                            />
+                          </>
+                        ) : (
                           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                             <div style={{ padding: "12px", background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0", fontSize: 13, color: "#166534" }}>✓ Tanda tangan siap</div>
-                            <button type="button" onClick={() => setPanelShowPdfSigner(true)} className={styles.signBtn}>Lanjut ke Pemosisian</button>
-                            <button type="button" onClick={() => { setPanelSignatureImage(null); setPanelSignaturePositions([]); }} className={styles.signBtn} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>Ganti Tanda Tangan</button>
-                          </div>
-                        )}
-                        
-                        {panelShowPdfSigner && panelSignatureImage && panelDoc && (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                            <PdfSigningViewer
-                              pdfUrl={`/api/documents/${signPanelDocId}/pdf`}
-                              signatureImage={panelSignatureImage}
-                              onPositionsChange={setPanelSignaturePositions}
-                              onClose={() => setPanelShowPdfSigner(false)}
-                            />
-                            <div className={styles.consentBox}><svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>Saya menyetujui penandatanganan elektronik dokumen ini secara sah.</p></div>
-                            <button type="button" onClick={handlePanelVisualSign} disabled={signPanelProcessing || panelSignaturePositions.length === 0} className={styles.signBtn}>
-                              {signPanelProcessing ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani</>}
+                            <p style={{ fontSize: 12, color: "#64748b" }}><strong>Nama:</strong> {panelSignatureName}</p>
+                            <button type="button" onClick={handleOpenSigningPage} className={styles.signBtn}>
+                              Buka Editor Penandatanganan
+                            </button>
+                            <button type="button" onClick={() => { setPanelCanSign(false); setPanelSignatureName(""); setPanelSignatureType(null); setPanelSignatureImage(null); }} className={styles.signBtn} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>
+                              Buat Tanda Tangan Baru
                             </button>
                           </div>
                         )}

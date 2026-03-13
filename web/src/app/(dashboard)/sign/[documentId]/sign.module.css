@@ -1,0 +1,208 @@
+.container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  background: #f9fafb;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.sidebar {
+  width: 30%;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sidebarContent {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  flex: 1;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.docName {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+  margin: 0;
+  word-break: break-word;
+}
+
+.docMeta {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.docStatus {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+  padding: 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.signaturePreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+}
+
+.signaturePreview img {
+  max-width: 100%;
+  max-height: 70px;
+  object-fit: contain;
+}
+
+.instruction {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.signBtn {
+  padding: 12px 16px;
+  background: #ff6b35;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.signBtn:hover:not(:disabled) {
+  background: #e55a28;
+}
+
+.signBtn:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  padding: 12px 16px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.cancelBtn:hover {
+  background: #e5e7eb;
+}
+
+.closeBtn {
+  padding: 10px 16px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.closeBtn:hover {
+  background: #e5e7eb;
+}
+
+.pdfViewer {
+  flex: 1;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+}
+
+.draggableSignature {
+  position: absolute;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px dashed #ff6b35;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  user-select: none;
+  z-index: 100;
+  cursor: grab;
+  transition: box-shadow 0.2s ease;
+}
+
+.draggableSignature:active {
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 35%;
+  }
+
+  .pdfViewer {
+    width: 65%;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: 40%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .pdfViewer {
+    width: 100%;
+    height: 60%;
+  }
+}

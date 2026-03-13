@@ -2,10 +2,19 @@
 
 import uuid
 import logging
-from typing import Optional
-from .db import supabase
+import psycopg
+from psycopg.rows import dict_row
+
+from api.config import settings
+from api.services.supabase_auth import SupabaseServiceError
 
 logger = logging.getLogger(__name__)
+
+
+def _db_connect():
+    if not settings.supabase_db_url:
+        raise SupabaseServiceError(status_code=503, detail="Database not configured")
+    return psycopg.connect(settings.supabase_db_url, row_factory=dict_row)
 
 
 def save_user_signature(
@@ -14,97 +23,95 @@ def save_user_signature(
     display_name: str,
     content: str,
     is_default: bool = False
-) -> Optional[dict]:
-    """
-    Save a reusable signature for a user.
-    
-    Args:
-        user_id: User UUID
-        signature_type: 'text', 'drawn', or 'image'
-        display_name: Display name (e.g., "John Doe", "My Signature")
-        content: For 'text': the name; for 'drawn'/'image': base64 data
-        is_default: Whether to set as default signature
-    
-    Returns:
-        Created signature dict or None if failed
-    """
+):
+    """Save a reusable signature for a user."""
     try:
-        data = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "type": signature_type,
-            "display_name": display_name,
-            "content": content,
-            "is_default": is_default,
-        }
-        
-        result = supabase.table("user_signatures").insert(data).execute()
-        
-        if result.data:
-            logger.info(f"Saved signature '{display_name}' for user {user_id}")
-            return result.data[0]
-        else:
-            logger.error(f"Failed to save signature for user {user_id}")
-            return None
-            
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                sig_id = str(uuid.uuid4())
+                cur.execute("""
+                    INSERT INTO public.user_signatures (id, user_id, type, display_name, content, is_default)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                """, (sig_id, user_id, signature_type, display_name, content, is_default))
+                result = cur.fetchone()
+                conn.commit()
+                logger.info(f"Saved signature '{display_name}' for user {user_id}")
+                return result
     except Exception as e:
         logger.error(f"Error saving signature: {str(e)}")
         return None
 
 
-def get_user_signatures(user_id: str) -> list:
+def get_user_signatures(user_id: str):
     """Get all saved signatures for a user."""
     try:
-        result = supabase.table("user_signatures").select("*").eq("user_id", user_id).execute()
-        return result.data or []
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM public.user_signatures 
+                    WHERE user_id = %s 
+                    ORDER BY created_at DESC
+                """, (user_id,))
+                return cur.fetchall() or []
     except Exception as e:
-        logger.error(f"Error fetching signatures for user {user_id}: {str(e)}")
+        logger.error(f"Error fetching signatures: {str(e)}")
         return []
 
 
-def get_default_signature(user_id: str) -> Optional[dict]:
-    """Get the default signature for a user."""
+def get_default_signature(user_id: str):
+    """Get the user's default signature."""
     try:
-        result = (
-            supabase.table("user_signatures")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("is_default", True)
-            .limit(1)
-            .execute()
-        )
-        return result.data[0] if result.data else None
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT * FROM public.user_signatures 
+                    WHERE user_id = %s AND is_default = TRUE 
+                    LIMIT 1
+                """, (user_id,))
+                return cur.fetchone()
     except Exception as e:
-        logger.error(f"Error fetching default signature for user {user_id}: {str(e)}")
+        logger.error(f"Error fetching default signature: {str(e)}")
         return None
 
 
-def set_default_signature(signature_id: str, user_id: str) -> bool:
+def set_default_signature(signature_id: str, user_id: str):
     """Set a signature as default for a user."""
     try:
-        # First unset current default
-        supabase.table("user_signatures").update({"is_default": False}).eq(
-            "user_id", user_id
-        ).execute()
-        
-        # Set new default
-        result = supabase.table("user_signatures").update({"is_default": True}).eq(
-            "id", signature_id
-        ).eq("user_id", user_id).execute()
-        
-        return bool(result.data)
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                # Unset current default
+                cur.execute("""
+                    UPDATE public.user_signatures 
+                    SET is_default = FALSE 
+                    WHERE user_id = %s
+                """, (user_id,))
+                
+                # Set new default
+                cur.execute("""
+                    UPDATE public.user_signatures 
+                    SET is_default = TRUE 
+                    WHERE id = %s AND user_id = %s
+                """, (signature_id, user_id))
+                
+                conn.commit()
+                return True
     except Exception as e:
         logger.error(f"Error setting default signature: {str(e)}")
         return False
 
 
-def delete_user_signature(signature_id: str, user_id: str) -> bool:
+def delete_user_signature(signature_id: str, user_id: str):
     """Delete a signature."""
     try:
-        result = supabase.table("user_signatures").delete().eq("id", signature_id).eq(
-            "user_id", user_id
-        ).execute()
-        return True
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    DELETE FROM public.user_signatures 
+                    WHERE id = %s AND user_id = %s
+                """, (signature_id, user_id))
+                conn.commit()
+                return True
     except Exception as e:
         logger.error(f"Error deleting signature: {str(e)}")
         return False
@@ -113,42 +120,26 @@ def delete_user_signature(signature_id: str, user_id: str) -> bool:
 def save_document_signature(
     document_id: str,
     signer_name: str,
-    user_signature_id: str,
-    signature_type: str,
-    signature_image: Optional[bytes] = None
-) -> Optional[dict]:
-    """
-    Save a signature placed on a document.
-    
-    Args:
-        document_id: Document UUID
-        signer_name: Name of the signer
-        user_signature_id: Reference to user's saved signature
-        signature_type: 'text', 'drawn', or 'image'
-        signature_image: Optional binary image data
-    
-    Returns:
-        Created signature record or None
-    """
+    user_signature_id: str = None,
+    signature_type: str = None,
+    signature_image: bytes = None
+):
+    """Save a signature placed on a document."""
     try:
-        data = {
-            "id": str(uuid.uuid4()),
-            "document_id": document_id,
-            "signer_name": signer_name,
-            "user_signature_id": user_signature_id,
-            "signature_type": signature_type,
-            "signature_image": signature_image,
-        }
-        
-        result = supabase.table("signatures").insert(data).execute()
-        
-        if result.data:
-            logger.info(f"Saved signature for document {document_id}")
-            return result.data[0]
-        else:
-            logger.error(f"Failed to save signature for document {document_id}")
-            return None
-            
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                sig_id = str(uuid.uuid4())
+                cur.execute("""
+                    INSERT INTO public.signatures 
+                    (id, document_id, signer_name, user_signature_id, signature_type, signature_image)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                """, (sig_id, document_id, signer_name, user_signature_id, signature_type, signature_image))
+                result = cur.fetchone()
+                conn.commit()
+                logger.info(f"Saved signature for document {document_id}")
+                return result
     except Exception as e:
         logger.error(f"Error saving document signature: {str(e)}")
         return None
+
