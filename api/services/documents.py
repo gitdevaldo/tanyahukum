@@ -312,7 +312,7 @@ def list_user_documents(user_id: str, email: str, limit: int = 100) -> dict:
                 "owner_id": str(row["owner_id"]),
                 "owner_email": row["owner_email"],
                 "is_owner": is_owner,
-                "my_signer_role": row["my_signer_role"],
+                "my_signer_role": "sender" if is_owner else row["my_signer_role"],
                 "my_signer_status": row["my_signer_status"],
                 "signers_total": int(row["signers_total"] or 0),
                 "signers_pending": int(row["signers_pending"] or 0),
