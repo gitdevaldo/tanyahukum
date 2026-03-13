@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 
 from api.config import settings
 from api.services.supabase_auth import SupabaseServiceError
@@ -34,6 +35,33 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _append_event(
+    cur,
+    document_id: str,
+    event_type: str,
+    actor_user_id: str | None,
+    actor_email: str | None,
+    request_id: str | None,
+    metadata: dict | None = None,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO public.document_events (
+            id, document_id, actor_user_id, actor_email, event_type, request_id, metadata
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s);
+        """,
+        (
+            str(uuid.uuid4()),
+            document_id,
+            actor_user_id,
+            actor_email,
+            event_type,
+            request_id,
+            Json(metadata or {}),
+        ),
+    )
+
+
 def create_document_share(
     owner_id: str,
     owner_email: str,
@@ -43,6 +71,7 @@ def create_document_share(
     signer_emails: list[str],
     company_pays_analysis: bool,
     expires_at: str | None,
+    request_id: str | None = None,
 ) -> dict:
     owner_email = owner_email.strip().lower()
     recipient_emails: list[str] = []
@@ -91,6 +120,21 @@ def create_document_share(
                     """,
                     (str(uuid.uuid4()), document_id, email, None, "recipient", "pending"),
                 )
+
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="shared",
+                actor_user_id=owner_id,
+                actor_email=owner_email,
+                request_id=request_id,
+                metadata={
+                    "analysis_id": analysis_id,
+                    "filename": filename,
+                    "company_pays_analysis": company_pays_analysis,
+                    "signers_count": 1 + len(recipient_emails),
+                },
+            )
 
             conn.commit()
     except SupabaseServiceError:
@@ -168,6 +212,42 @@ def list_document_signers(document_id: str, user_id: str, email: str) -> dict:
     }
 
 
+def list_document_events(document_id: str, user_id: str, email: str, limit: int = 100) -> dict:
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            _load_document_with_access(cur, document_id, user_id, email)
+            cur.execute(
+                """
+                SELECT id, event_type, actor_email, request_id, metadata, created_at
+                FROM public.document_events
+                WHERE document_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s;
+                """,
+                (document_id, limit),
+            )
+            events = cur.fetchall()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal mengambil audit trail dokumen: {e}")
+
+    return {
+        "document_id": document_id,
+        "events": [
+            {
+                "id": e["id"],
+                "event_type": e["event_type"],
+                "actor_email": e["actor_email"],
+                "request_id": e["request_id"],
+                "metadata": e["metadata"] or {},
+                "created_at": e["created_at"].isoformat(),
+            }
+            for e in events
+        ],
+    }
+
+
 def _reset_owner_esign_if_due(cur, owner_id: str) -> None:
     cur.execute(
         """
@@ -216,6 +296,7 @@ def sign_document(
     document_hash: str,
     ip_address: str | None,
     user_agent: str | None,
+    request_id: str | None = None,
 ) -> dict:
     signer_email = signer_email.strip().lower()
     now = _now_utc()
@@ -224,6 +305,7 @@ def sign_document(
     try:
         with _db_connect() as conn, conn.cursor() as cur:
             doc = _load_document_with_access(cur, document_id, signer_user_id, signer_email)
+            previous_status = doc["status"]
             if doc["status"] in ("completed", "rejected"):
                 raise SupabaseServiceError(status_code=409, detail=f"Dokumen sudah berstatus {doc['status']}.")
             if doc["expires_at"] and doc["expires_at"] <= now:
@@ -236,7 +318,7 @@ def sign_document(
 
             cur.execute(
                 """
-                SELECT id, status
+                SELECT id, status, role
                 FROM public.document_signers
                 WHERE document_id = %s AND lower(email) = lower(%s)
                 FOR UPDATE;
@@ -307,6 +389,31 @@ def sign_document(
                 "UPDATE public.documents SET status=%s, updated_at=NOW() WHERE id=%s;",
                 (new_status, document_id),
             )
+
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="signed",
+                actor_user_id=signer_user_id,
+                actor_email=signer_email,
+                request_id=request_id,
+                metadata={
+                    "signature_id": signature_id,
+                    "signer_role": signer["role"],
+                    "status_after": new_status,
+                    "esign_remaining_owner": esign_remaining,
+                },
+            )
+            if previous_status != new_status:
+                _append_event(
+                    cur,
+                    document_id=document_id,
+                    event_type="status_changed",
+                    actor_user_id=signer_user_id,
+                    actor_email=signer_email,
+                    request_id=request_id,
+                    metadata={"from": previous_status, "to": new_status},
+                )
             conn.commit()
     except SupabaseServiceError:
         raise
@@ -327,6 +434,7 @@ def reject_document(
     signer_user_id: str,
     signer_email: str,
     reason: str | None,
+    request_id: str | None = None,
 ) -> dict:
     signer_email = signer_email.strip().lower()
     now = _now_utc()
@@ -334,12 +442,13 @@ def reject_document(
     try:
         with _db_connect() as conn, conn.cursor() as cur:
             doc = _load_document_with_access(cur, document_id, signer_user_id, signer_email)
+            previous_status = doc["status"]
             if doc["status"] == "completed":
                 raise SupabaseServiceError(status_code=409, detail="Dokumen sudah completed dan tidak bisa ditolak.")
 
             cur.execute(
                 """
-                SELECT id, status
+                SELECT id, status, role
                 FROM public.document_signers
                 WHERE document_id=%s AND lower(email)=lower(%s)
                 FOR UPDATE;
@@ -366,6 +475,28 @@ def reject_document(
                 "UPDATE public.documents SET status='rejected', updated_at=NOW() WHERE id=%s;",
                 (document_id,),
             )
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="rejected",
+                actor_user_id=signer_user_id,
+                actor_email=signer_email,
+                request_id=request_id,
+                metadata={
+                    "reason": reason.strip() if reason else None,
+                    "signer_role": signer["role"],
+                },
+            )
+            if previous_status != "rejected":
+                _append_event(
+                    cur,
+                    document_id=document_id,
+                    event_type="status_changed",
+                    actor_user_id=signer_user_id,
+                    actor_email=signer_email,
+                    request_id=request_id,
+                    metadata={"from": previous_status, "to": "rejected"},
+                )
             conn.commit()
     except SupabaseServiceError:
         raise
@@ -380,7 +511,12 @@ def reject_document(
     }
 
 
-def get_document_certificate(document_id: str, user_id: str, email: str) -> dict:
+def get_document_certificate(
+    document_id: str,
+    user_id: str,
+    email: str,
+    request_id: str | None = None,
+) -> dict:
     try:
         with _db_connect() as conn, conn.cursor() as cur:
             doc = _load_document_with_access(cur, document_id, user_id, email)
@@ -398,6 +534,16 @@ def get_document_certificate(document_id: str, user_id: str, email: str) -> dict
             )
             signatures = cur.fetchall()
             completed_at = signatures[-1]["signed_at"].isoformat() if signatures else None
+            _append_event(
+                cur,
+                document_id=document_id,
+                event_type="certificate_viewed",
+                actor_user_id=user_id,
+                actor_email=email,
+                request_id=request_id,
+                metadata={"signatures_count": len(signatures)},
+            )
+            conn.commit()
     except SupabaseServiceError:
         raise
     except Exception as e:

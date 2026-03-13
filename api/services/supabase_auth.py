@@ -187,8 +187,26 @@ def ensure_supabase_schema() -> bool:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.document_events (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+                actor_user_id UUID NULL,
+                actor_email TEXT NULL,
+                event_type TEXT NOT NULL,
+                request_id TEXT NULL,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT document_events_type_check CHECK (
+                    event_type IN ('shared', 'signed', 'rejected', 'status_changed', 'certificate_viewed')
+                )
+            );
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner_id ON public.documents(owner_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_document_signers_document_id ON public.document_signers(document_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_document_events_document_id_created_at ON public.document_events(document_id, created_at DESC);")
         conn.commit()
     return True
 

@@ -10,6 +10,7 @@ from api.models.schemas import (
     ShareDocumentRequest,
     ShareDocumentResponse,
     DocumentSignersResponse,
+    DocumentEventsResponse,
     SignDocumentRequest,
     RejectDocumentRequest,
     DocumentActionResponse,
@@ -23,6 +24,7 @@ from api.services.supabase_auth import (
 from api.services.documents import (
     create_document_share,
     list_document_signers,
+    list_document_events,
     sign_document,
     reject_document,
     get_document_certificate,
@@ -68,6 +70,7 @@ async def share_document(
             [str(e) for e in req.signer_emails],
             req.company_pays_analysis,
             req.expires_at,
+            getattr(request.state, "request_id", None),
         )
         return ShareDocumentResponse(**result)
     except SupabaseServiceError as e:
@@ -87,6 +90,21 @@ async def get_signers(
         return DocumentSignersResponse(**result)
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal mengambil signer dokumen.")
+
+
+@router.get("/documents/{document_id}/events", response_model=DocumentEventsResponse)
+@limiter.limit("120/minute")
+async def get_events(
+    request: Request,
+    document_id: str,
+    access_token: str = Depends(verify_bearer_token),
+):
+    try:
+        user_id, email, _, _ = await _resolve_user(access_token)
+        result = await asyncio.to_thread(list_document_events, document_id, user_id, email)
+        return DocumentEventsResponse(**result)
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal mengambil audit trail dokumen.")
 
 
 @router.post("/documents/{document_id}/sign", response_model=DocumentActionResponse)
@@ -109,6 +127,7 @@ async def sign_doc(
             req.document_hash,
             request.client.host if request.client else None,
             request.headers.get("User-Agent"),
+            getattr(request.state, "request_id", None),
         )
         return DocumentActionResponse(
             success=result["success"],
@@ -130,7 +149,14 @@ async def reject_doc(
 ):
     try:
         user_id, email, _, _ = await _resolve_user(access_token)
-        result = await asyncio.to_thread(reject_document, document_id, user_id, email, req.reason)
+        result = await asyncio.to_thread(
+            reject_document,
+            document_id,
+            user_id,
+            email,
+            req.reason,
+            getattr(request.state, "request_id", None),
+        )
         return DocumentActionResponse(
             success=result["success"],
             document_id=result["document_id"],
@@ -150,7 +176,13 @@ async def get_certificate(
 ):
     try:
         user_id, email, _, _ = await _resolve_user(access_token)
-        result = await asyncio.to_thread(get_document_certificate, document_id, user_id, email)
+        result = await asyncio.to_thread(
+            get_document_certificate,
+            document_id,
+            user_id,
+            email,
+            getattr(request.state, "request_id", None),
+        )
         return CertificateResponse(**result)
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal mengambil sertifikat dokumen.")

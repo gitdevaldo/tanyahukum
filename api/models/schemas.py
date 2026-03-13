@@ -222,3 +222,17 @@ class CertificateResponse(BaseModel):
     status: str
     completed_at: str | None = None
     signatures: list[SignatureRecord]
+
+
+class DocumentEventInfo(BaseModel):
+    id: str
+    event_type: str
+    actor_email: str | None = None
+    request_id: str | None = None
+    metadata: dict
+    created_at: str
+
+
+class DocumentEventsResponse(BaseModel):
+    document_id: str
+    events: list[DocumentEventInfo]
