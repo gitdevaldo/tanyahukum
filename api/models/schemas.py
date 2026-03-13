@@ -163,6 +163,33 @@ class QuotaResponse(BaseModel):
     quota: QuotaInfo
 
 
+class DashboardDocumentItem(BaseModel):
+    document_id: str
+    filename: str
+    status: str
+    analysis_id: str | None = None
+    company_pays_analysis: bool
+    expires_at: str | None = None
+    created_at: str
+    updated_at: str
+    owner_id: str
+    owner_email: str | None = None
+    is_owner: bool
+    my_signer_role: str | None = None
+    my_signer_status: str | None = None
+    signers_total: int
+    signers_pending: int
+    signers_signed: int
+    signers_rejected: int
+
+
+class DocumentListResponse(BaseModel):
+    total: int
+    owned_total: int
+    pending_my_action: int
+    documents: list[DashboardDocumentItem]
+
+
 class ShareDocumentRequest(BaseModel):
     analysis_id: str | None = None
     filename: str = Field(min_length=1, max_length=255)

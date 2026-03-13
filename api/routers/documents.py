@@ -7,6 +7,7 @@ from slowapi.util import get_remote_address
 
 from api.dependencies import verify_bearer_token
 from api.models.schemas import (
+    DocumentListResponse,
     ShareDocumentRequest,
     ShareDocumentResponse,
     DocumentSignersResponse,
@@ -24,6 +25,7 @@ from api.services.supabase_auth import (
     upsert_user_profile_and_quota,
 )
 from api.services.documents import (
+    list_user_documents,
     create_document_share,
     list_document_signers,
     get_document_analysis,
@@ -61,6 +63,21 @@ async def _resolve_user(access_token: str) -> tuple[str, str, str, str | None]:
         account_type,
     )
     return user_id, email, name, plan
+
+
+@router.get("/documents", response_model=DocumentListResponse)
+@limiter.limit("120/minute")
+async def list_documents(
+    request: Request,
+    limit: int = 100,
+    access_token: str = Depends(verify_bearer_token),
+):
+    try:
+        user_id, email, _, _ = await _resolve_user(access_token)
+        result = await asyncio.to_thread(list_user_documents, user_id, email, limit)
+        return DocumentListResponse(**result)
+    except SupabaseServiceError as e:
+        _raise_document_error(e, "Gagal mengambil daftar dokumen.")
 
 
 @router.post("/documents/share", response_model=ShareDocumentResponse)

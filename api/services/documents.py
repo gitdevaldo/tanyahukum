@@ -226,6 +226,109 @@ def _load_document_with_access(cur, document_id: str, user_id: str, email: str) 
     return doc
 
 
+def list_user_documents(user_id: str, email: str, limit: int = 100) -> dict:
+    safe_limit = max(1, min(limit, 200))
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    d.id AS document_id,
+                    d.filename,
+                    d.status,
+                    d.analysis_id,
+                    d.company_pays_analysis,
+                    d.expires_at,
+                    d.created_at,
+                    d.updated_at,
+                    d.owner_id,
+                    owner.email AS owner_email,
+                    me.role AS my_signer_role,
+                    me.status AS my_signer_status,
+                    COALESCE(stats.total_count, 0) AS signers_total,
+                    COALESCE(stats.pending_count, 0) AS signers_pending,
+                    COALESCE(stats.signed_count, 0) AS signers_signed,
+                    COALESCE(stats.rejected_count, 0) AS signers_rejected
+                FROM public.documents d
+                LEFT JOIN public.user_profiles owner
+                    ON owner.user_id = d.owner_id
+                LEFT JOIN LATERAL (
+                    SELECT s.role, s.status
+                    FROM public.document_signers s
+                    WHERE s.document_id = d.id AND lower(s.email) = lower(%s)
+                    LIMIT 1
+                ) me ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT
+                        COUNT(*) AS total_count,
+                        COUNT(*) FILTER (WHERE status = 'pending') AS pending_count,
+                        COUNT(*) FILTER (WHERE status = 'signed') AS signed_count,
+                        COUNT(*) FILTER (WHERE status = 'rejected') AS rejected_count
+                    FROM public.document_signers s2
+                    WHERE s2.document_id = d.id
+                ) stats ON TRUE
+                WHERE d.owner_id = %s OR me.status IS NOT NULL
+                ORDER BY d.updated_at DESC
+                LIMIT %s;
+                """,
+                (email.strip().lower(), user_id, safe_limit),
+            )
+            rows = cur.fetchall()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal mengambil daftar dokumen: {e}")
+
+    now = _now_utc()
+    documents: list[dict] = []
+    pending_my_action = 0
+    owned_total = 0
+
+    for row in rows:
+        is_owner = str(row["owner_id"]) == user_id
+        effective_status = row["status"]
+        if (
+            effective_status not in ("completed", "expired", "rejected")
+            and row["expires_at"]
+            and row["expires_at"] <= now
+        ):
+            effective_status = "expired"
+
+        if is_owner:
+            owned_total += 1
+        if row["my_signer_status"] == "pending":
+            pending_my_action += 1
+
+        documents.append(
+            {
+                "document_id": row["document_id"],
+                "filename": row["filename"],
+                "status": effective_status,
+                "analysis_id": row["analysis_id"],
+                "company_pays_analysis": bool(row["company_pays_analysis"]),
+                "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
+                "created_at": row["created_at"].isoformat(),
+                "updated_at": row["updated_at"].isoformat(),
+                "owner_id": str(row["owner_id"]),
+                "owner_email": row["owner_email"],
+                "is_owner": is_owner,
+                "my_signer_role": row["my_signer_role"],
+                "my_signer_status": row["my_signer_status"],
+                "signers_total": int(row["signers_total"] or 0),
+                "signers_pending": int(row["signers_pending"] or 0),
+                "signers_signed": int(row["signers_signed"] or 0),
+                "signers_rejected": int(row["signers_rejected"] or 0),
+            }
+        )
+
+    return {
+        "total": len(documents),
+        "owned_total": owned_total,
+        "pending_my_action": pending_my_action,
+        "documents": documents,
+    }
+
+
 def list_document_signers(document_id: str, user_id: str, email: str) -> dict:
     try:
         with _db_connect() as conn, conn.cursor() as cur:
