@@ -475,6 +475,35 @@ def login_user(email: str, password: str) -> dict:
     return payload
 
 
+def refresh_session(refresh_token: str) -> dict:
+    """Refresh access token using Supabase refresh token."""
+    headers = _auth_headers()
+    url = f"{settings.supabase_url}/auth/v1/token?grant_type=refresh_token"
+
+    with httpx.Client(timeout=20.0) as client:
+        response = client.post(url, headers=headers, json={"refresh_token": refresh_token})
+
+    if response.status_code >= 400:
+        raise SupabaseServiceError(response.status_code, _extract_supabase_error(response))
+
+    payload = response.json()
+    if not payload.get("access_token"):
+        raise SupabaseServiceError(status_code=502, detail="Token refresh tidak ditemukan.")
+    return payload
+
+
+def logout_session(access_token: str) -> None:
+    """Invalidate Supabase session for current access token."""
+    headers = _auth_headers(token=access_token)
+    url = f"{settings.supabase_url}/auth/v1/logout"
+
+    with httpx.Client(timeout=20.0) as client:
+        response = client.post(url, headers=headers)
+
+    if response.status_code >= 400:
+        raise SupabaseServiceError(response.status_code, _extract_supabase_error(response))
+
+
 def get_auth_user(access_token: str) -> dict:
     """Resolve current user from Supabase access token."""
     headers = _auth_headers(token=access_token)

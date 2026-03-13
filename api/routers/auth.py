@@ -13,12 +13,17 @@ from api.models.schemas import (
     LoginRequest,
     LoginResponse,
     LoginUser,
+    RefreshRequest,
+    RefreshResponse,
+    LogoutResponse,
     AuthMeResponse,
 )
 from api.services.supabase_auth import (
     SupabaseServiceError,
     register_user,
     login_user,
+    refresh_session,
+    logout_session,
     get_auth_user,
     upsert_user_profile_and_quota,
     get_user_profile_and_quota,
@@ -69,6 +74,35 @@ async def login(request: Request, req: LoginRequest):
         )
     except SupabaseServiceError as e:
         _raise_auth_error(e, "Login gagal. Silakan coba lagi.")
+
+
+@router.post("/auth/refresh", response_model=RefreshResponse)
+@limiter.limit("60/hour")
+async def refresh(request: Request, req: RefreshRequest):
+    """Refresh auth session using Supabase refresh token."""
+    try:
+        result = await asyncio.to_thread(refresh_session, req.refresh_token)
+        user = result.get("user") or {}
+        return RefreshResponse(
+            access_token=result["access_token"],
+            refresh_token=result.get("refresh_token", ""),
+            token_type=result.get("token_type", "bearer"),
+            expires_in=result.get("expires_in", 0),
+            user=LoginUser(user_id=user.get("id", ""), email=user.get("email", "")),
+        )
+    except SupabaseServiceError as e:
+        _raise_auth_error(e, "Refresh session gagal. Silakan login ulang.")
+
+
+@router.post("/auth/logout", response_model=LogoutResponse)
+@limiter.limit("120/hour")
+async def logout(request: Request, access_token: str = Depends(verify_bearer_token)):
+    """Logout current auth session."""
+    try:
+        await asyncio.to_thread(logout_session, access_token)
+        return LogoutResponse(success=True, message="Logout berhasil.")
+    except SupabaseServiceError as e:
+        _raise_auth_error(e, "Logout gagal. Silakan coba lagi.")
 
 
 @router.get("/auth/me", response_model=AuthMeResponse)
