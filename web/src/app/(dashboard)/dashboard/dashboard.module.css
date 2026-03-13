@@ -33,6 +33,21 @@
   white-space: nowrap;
 }
 
+.logoMark {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1a56e8 0%, #4f8ef7 100%);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .sidebarBrand {
   min-width: 0;
   display: flex;
@@ -76,6 +91,17 @@
   color: #1a56e8;
 }
 
+.sidebarToggle svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.22s ease;
+}
+
 .nav {
   flex: 1;
   padding: 12px 10px;
@@ -111,20 +137,32 @@
   transition: all 0.18s ease;
   position: relative;
   text-align: left;
-}
-
-.navItem::before {
-  content: attr(data-short);
-  display: none;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  text-decoration: none;
 }
 
 .navItem:hover {
   background: #f3f6fc;
   border-color: #dbe6f9;
   color: #111827;
+}
+
+.navIcon {
+  min-width: 20px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.navIcon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .navItemActive {
@@ -253,6 +291,7 @@
 .searchBox {
   display: flex;
   align-items: center;
+  gap: 8px;
   width: 220px;
   height: 36px;
   padding: 0 12px;
@@ -265,6 +304,16 @@
 .searchBox:focus-within {
   border-color: #1a56e8;
   background: #ffffff;
+}
+
+.searchBox svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #9ca3af;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .searchBox input {
@@ -303,27 +352,79 @@
   background: #f5f8ff;
 }
 
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4b5563;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-decoration: none;
+}
+
+.iconBtn:hover {
+  background: #f7f8fa;
+  color: #111827;
+}
+
+.iconBtn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notifDot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #ffffff;
+}
+
 .primaryBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   height: 34px;
-  padding: 0 12px;
-  border: 1px solid #ff6b35;
+  padding: 8px 16px;
+  border: none;
   border-radius: 8px;
-  background: #ff6b35;
+  background: #1a56e8;
   color: #ffffff;
   text-decoration: none;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.18s ease;
 }
 
 .primaryBtn:hover {
-  background: #f4602b;
-  border-color: #f4602b;
+  background: #3b6ff0;
+}
+
+.primaryBtn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .content {
@@ -401,6 +502,17 @@
   letter-spacing: 0.04em;
 }
 
+.statIconWrap svg,
+.quickIcon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .iconBlue {
   background: #e8effe;
   color: #1a56e8;
@@ -419,6 +531,11 @@
 .iconOrange {
   background: #fff1eb;
   color: #ff6b35;
+}
+
+.iconPurple {
+  background: #f0f0ff;
+  color: #7c3aed;
 }
 
 .statValue {
@@ -450,6 +567,10 @@
   color: #f59e0b;
 }
 
+.changeDown {
+  color: #ef4444;
+}
+
 .statMeta {
   margin-top: 8px;
   font-size: 12px;
@@ -461,6 +582,12 @@
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.stackCol {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .threeCol {
@@ -501,6 +628,23 @@
   padding: 16px 20px;
 }
 
+.cardBodyCompact {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.cardLink {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #1a56e8;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cardLink:hover {
+  text-decoration: underline;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -533,6 +677,112 @@
   background: #f7f8fa;
 }
 
+.docName {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.docMeta {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+.docSigner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docAvatar {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.docAvatarGreen {
+  background: linear-gradient(135deg, #10b981, #06d6a0);
+}
+
+.docAvatarAmber {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.docAvatarBlue {
+  background: linear-gradient(135deg, #1a56e8, #60a5fa);
+}
+
+.docSignerName {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.docDate {
+  font-size: 12.5px;
+  color: #9ca3af;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.badge::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.badgeSigned {
+  background: #e6faf1;
+  color: #059652;
+}
+
+.badgeSigned::before {
+  background: #0fc56a;
+}
+
+.badgePending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.badgePending::before {
+  background: #f59e0b;
+}
+
+.badgeDraft {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.badgeDraft::before {
+  background: #9ca3af;
+}
+
+.badgeRejected {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.badgeRejected::before {
+  background: #ef4444;
+}
+
 .tableAction {
   border: none;
   background: transparent;
@@ -554,6 +804,10 @@
 }
 
 .quickBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #f7f8fa;
@@ -568,6 +822,35 @@
   background: #eaf2ff;
 }
 
+.quickIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quickIconBlue {
+  background: #e8effe;
+  color: #1a56e8;
+}
+
+.quickIconGreen {
+  background: #e6faf1;
+  color: #0fc56a;
+}
+
+.quickIconAmber {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.quickIconPurple {
+  background: #f0f0ff;
+  color: #7c3aed;
+}
+
 .quickName {
   font-size: 12.5px;
   font-weight: 600;
@@ -580,6 +863,21 @@
   color: #9ca3af;
 }
 
+.planPill {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1a56e8;
+  background: #e8effe;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.quotaWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .quotaItem + .quotaItem {
   margin-top: 14px;
 }
@@ -588,8 +886,17 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
+}
+
+.quotaName {
+  font-size: 13px;
+  font-weight: 500;
   color: #4b5563;
+}
+
+.quotaVal {
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 .quotaBar {
@@ -603,11 +910,18 @@
 .quotaFill {
   height: 6px;
   border-radius: 999px;
+}
+
+.quotaFillBlue {
   background: linear-gradient(90deg, #1a56e8, #60a5fa);
 }
 
 .quotaFillGreen {
   background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.quotaFillAmber {
+  background: linear-gradient(90deg, #f59e0b, #fcd34d);
 }
 
 .activityList {
@@ -676,6 +990,10 @@
   color: #111827;
 }
 
+.activityText b {
+  font-weight: 600;
+}
+
 .activityTime {
   margin-top: 3px;
   font-size: 11.5px;
@@ -704,6 +1022,67 @@
   margin-top: 2px;
   font-size: 11px;
   color: #9ca3af;
+}
+
+.pendingPill {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.signerList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.signerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.signerRow:last-child {
+  border-bottom: none;
+}
+
+.signerInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.signerName {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signerEmail {
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+.signerAction {
+  border: none;
+  background: #fef3c7;
+}
+
+.signerAction svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: #b45309;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .chartArea {
@@ -746,29 +1125,22 @@
 
 .sidebarCollapsed .logoText {
   opacity: 0;
-  width: 0;
   pointer-events: none;
 }
 
 .sidebarCollapsed .navLabel {
   opacity: 0;
-  padding: 0;
-  height: 0;
-  overflow: hidden;
 }
 
 .sidebarCollapsed .navItem {
-  justify-content: center;
-  padding: 9px 8px;
-}
-
-.sidebarCollapsed .navItem::before {
-  display: block;
+  gap: 0;
+  justify-content: flex-start;
 }
 
 .sidebarCollapsed .navItemLabel,
 .sidebarCollapsed .navBadge {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sidebarCollapsed .sidebarFooter {
@@ -776,13 +1148,17 @@
 }
 
 .sidebarCollapsed .userCard {
-  justify-content: center;
-  padding: 8px 0;
+  padding: 8px 10px;
 }
 
 .sidebarCollapsed .userInfo,
 .sidebarCollapsed .sidebarMeta {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebarCollapsed .sidebarToggle svg {
+  transform: rotate(180deg);
 }
 
 @media (max-width: 1200px) {

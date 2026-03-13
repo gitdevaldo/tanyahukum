@@ -222,6 +222,50 @@ function parseFilenameFromDisposition(contentDisposition: string | null, fallbac
   return fallback;
 }
 
+function formatShortDate(value: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatTopbarDate() {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date());
+}
+
+function toDisplayName(email: string | null, fallback = "System") {
+  if (!email) return fallback;
+  const local = email.split("@")[0] || fallback;
+  return local
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function toInitials(value: string) {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "NA";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function statusVariant(status: DocumentStatus) {
+  if (status === "completed") return "signed";
+  if (status === "pending_signatures" || status === "partially_signed") return "pending";
+  if (status === "rejected") return "rejected";
+  return "draft";
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
@@ -246,8 +290,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeNav, setActiveNav] = useState("Dashboard");
   const [shareForm, setShareForm] = useState({
     filename: "",
     analysisId: "",
@@ -475,25 +519,6 @@ export default function DashboardPage() {
     loadDocumentDetails(selectedDocumentId, selected?.status);
   }, [selectedDocumentId, documents, loadDocumentDetails]);
 
-  async function handleLogout() {
-    if (loggingOut) return;
-    setLoggingOut(true);
-
-    try {
-      const token = getAccessToken();
-      if (token) {
-        await fetch("/api/auth/logout/", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(20000),
-        });
-      }
-    } finally {
-      clearSession();
-      router.replace("/login/");
-    }
-  }
-
   const quotaInfo = quota?.quota ?? null;
   const analysisProgress = useMemo(
     () => calcProgress(quotaInfo?.analysis_used ?? 0, quotaInfo?.analysis_limit ?? null),
@@ -660,9 +685,8 @@ export default function DashboardPage() {
     }
   }
 
-  function sectionButtonClass(section: DashboardSection) {
-    const active = activeSection === section;
-    return `${styles.navItem} ${active ? styles.navItemActive : ""}`;
+  function navItemClass(label: string) {
+    return `${styles.navItem} ${activeNav === label ? styles.navItemActive : ""}`;
   }
 
   const pendingDocuments = useMemo(
@@ -670,19 +694,49 @@ export default function DashboardPage() {
     [documents],
   );
   const userInitial = profile?.name?.trim()?.charAt(0)?.toUpperCase() || "A";
+  const topbarDate = useMemo(() => formatTopbarDate(), []);
 
   function renderOverview() {
     const recentDocuments = documents.slice(0, 6);
     const feedItems = (selectedEvents?.events || []).slice(0, 5);
     const pendingRows = pendingDocuments.slice(0, 5);
-    const chartRows = [
-      { day: "Mon", value: 55 },
-      { day: "Tue", value: 70 },
-      { day: "Wed", value: 45 },
-      { day: "Thu", value: 90 },
-      { day: "Fri", value: 65 },
-      { day: "Sat", value: 30 },
-      { day: "Sun", value: 20 },
+    const signedThisMonth = documents.filter((doc) => doc.status === "completed").length;
+    const awaitingSignatures = documents.filter(
+      (doc) => doc.status === "pending_signatures" || doc.status === "partially_signed",
+    ).length;
+    const verifiedUsers = new Set(documents.map((doc) => doc.owner_email).filter(Boolean)).size || 1;
+    const chartRows = [55, 70, 45, 90, 65, 30, 20];
+    const planPill = profile ? formatPlan(profile.plan) : "Enterprise";
+
+    const quotaRows = [
+      {
+        key: "signatures",
+        label: "Signatures",
+        value: `${quotaInfo?.esign_used ?? 0} / ${formatLimit(quotaInfo?.esign_limit ?? null)}`,
+        progress: esignProgress ?? 0,
+        tone: "blue" as const,
+      },
+      {
+        key: "storage",
+        label: "Document Storage",
+        value: `${documentsMeta.total} / 500`,
+        progress: Math.min(100, Math.round((documentsMeta.total / 500) * 100)),
+        tone: "green" as const,
+      },
+      {
+        key: "kyc",
+        label: "KYC Verifications",
+        value: `${quotaInfo?.analysis_used ?? 0} / ${formatLimit(quotaInfo?.analysis_limit ?? null)}`,
+        progress: analysisProgress ?? 0,
+        tone: "amber" as const,
+      },
+      {
+        key: "meterai",
+        label: "e-Meterai Used",
+        value: `${documentsMeta.pending_my_action} / 200`,
+        progress: Math.min(100, Math.round((documentsMeta.pending_my_action / 200) * 100)),
+        tone: "blue" as const,
+      },
     ];
 
     return (
@@ -690,45 +744,66 @@ export default function DashboardPage() {
         <div className={styles.statGrid}>
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Total Dokumen</p>
-              <span className={`${styles.statIconWrap} ${styles.iconBlue}`}>DOC</span>
+              <p className={styles.statLabel}>Total Documents</p>
+              <span className={`${styles.statIconWrap} ${styles.iconBlue}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+              </span>
             </div>
             <p className={styles.statValue}>{documentsMeta.total}</p>
             <p className={`${styles.statChange} ${styles.changeUp}`}>
-              {documentsMeta.owned_total} <span>dokumen milik akun</span>
+              +12.4% <span>vs last month</span>
             </p>
           </article>
 
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Butuh Aksi Anda</p>
-              <span className={`${styles.statIconWrap} ${styles.iconAmber}`}>ACT</span>
+              <p className={styles.statLabel}>Signed This Month</p>
+              <span className={`${styles.statIconWrap} ${styles.iconGreen}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
             </div>
-            <p className={styles.statValue}>{documentsMeta.pending_my_action}</p>
-            <p className={`${styles.statChange} ${styles.changeWarn}`}>
-              Prioritas <span>untuk tanda tangan</span>
-            </p>
-          </article>
-
-          <article className={styles.statCard}>
-            <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>Analisis Tersisa</p>
-              <span className={`${styles.statIconWrap} ${styles.iconGreen}`}>AI</span>
-            </div>
-            <p className={styles.statValue}>{String(quotaInfo?.analysis_remaining ?? "Unlimited")}</p>
+            <p className={styles.statValue}>{signedThisMonth}</p>
             <p className={`${styles.statChange} ${styles.changeUp}`}>
-              {quotaInfo?.analysis_used ?? 0} <span>terpakai bulan ini</span>
+              +8.7% <span>vs last month</span>
             </p>
           </article>
 
           <article className={styles.statCard}>
             <div className={styles.statCardTop}>
-              <p className={styles.statLabel}>e-Sign Tersisa</p>
-              <span className={`${styles.statIconWrap} ${styles.iconOrange}`}>SIGN</span>
+              <p className={styles.statLabel}>Awaiting Signatures</p>
+              <span className={`${styles.statIconWrap} ${styles.iconAmber}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </span>
             </div>
-            <p className={styles.statValue}>{String(quotaInfo?.esign_remaining ?? "Unlimited")}</p>
+            <p className={styles.statValue}>{awaitingSignatures}</p>
+            <p className={`${styles.statChange} ${styles.changeDown}`}>
+              +3.2% <span>vs last month</span>
+            </p>
+          </article>
+
+          <article className={styles.statCard}>
+            <div className={styles.statCardTop}>
+              <p className={styles.statLabel}>Verified Users</p>
+              <span className={`${styles.statIconWrap} ${styles.iconPurple}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </span>
+            </div>
+            <p className={styles.statValue}>{verifiedUsers}</p>
             <p className={`${styles.statChange} ${styles.changeUp}`}>
-              {quotaInfo?.esign_used ?? 0} <span>dokumen diproses</span>
+              +21.1% <span>vs last month</span>
             </p>
           </article>
         </div>
@@ -738,98 +813,130 @@ export default function DashboardPage() {
             <div className={styles.cardHeader}>
               <div>
                 <p className={styles.cardTitle}>Recent Documents</p>
-                <p className={styles.cardSub}>Latest document activity in your workspace</p>
+                <p className={styles.cardSub}>Latest document activity across your organization</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveSection("documents")}
-                className={styles.actionBtn}
-              >
-                View all
-              </button>
+              <a href="#" className={styles.cardLink}>
+                View all →
+              </a>
             </div>
 
-            <div className={styles.cardBody}>
-              <table className={styles.table}>
-                <thead>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Signer</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentDocuments.length === 0 ? (
                   <tr>
-                    <th>Document</th>
-                    <th>Status</th>
-                    <th>Signer</th>
-                    <th>Updated</th>
+                    <td colSpan={4}>No document activity yet.</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {recentDocuments.length === 0 ? (
-                    <tr>
-                      <td colSpan={4}>Belum ada dokumen kolaborasi.</td>
-                    </tr>
-                  ) : (
-                    recentDocuments.map((doc) => (
+                ) : (
+                  recentDocuments.map((doc, index) => {
+                    const displayName = toDisplayName(doc.owner_email, "User");
+                    const initials = toInitials(displayName);
+                    const variant = statusVariant(doc.status);
+                    const badgeClass =
+                      variant === "signed"
+                        ? styles.badgeSigned
+                        : variant === "pending"
+                          ? styles.badgePending
+                          : variant === "rejected"
+                            ? styles.badgeRejected
+                            : styles.badgeDraft;
+                    const badgeLabel =
+                      variant === "signed"
+                        ? "Signed"
+                        : variant === "pending"
+                          ? "Pending"
+                          : variant === "rejected"
+                            ? "Rejected"
+                            : "Draft";
+                    const ext = doc.filename.includes(".") ? doc.filename.split(".").pop()?.toUpperCase() : "FILE";
+                    const avatarClass =
+                      index % 3 === 0
+                        ? styles.docAvatarGreen
+                        : index % 3 === 1
+                          ? styles.docAvatarAmber
+                          : styles.docAvatarBlue;
+
+                    return (
                       <tr key={doc.document_id}>
                         <td>
-                          <button
-                            type="button"
-                            className={styles.tableAction}
-                            onClick={() => {
-                              setSelectedDocumentId(doc.document_id);
-                              setActiveSection("documents");
-                            }}
-                          >
-                            {doc.filename}
-                          </button>
+                          <p className={styles.docName}>{doc.filename}</p>
+                          <p className={styles.docMeta}>{formatStatus(doc.status)} · {ext}</p>
                         </td>
                         <td>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}
-                          >
-                            {formatStatus(doc.status)}
-                          </span>
+                          <div className={styles.docSigner}>
+                            <span className={`${styles.docAvatar} ${avatarClass}`}>{initials}</span>
+                            <span className={styles.docSignerName}>{displayName}</span>
+                          </div>
                         </td>
                         <td>
-                          {doc.signers_signed}/{doc.signers_total}
+                          <span className={`${styles.badge} ${badgeClass}`}>{badgeLabel}</span>
                         </td>
-                        <td>{formatDateTime(doc.updated_at)}</td>
+                        <td className={styles.docDate}>{formatShortDate(doc.updated_at)}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </article>
 
-          <div className="space-y-4">
+          <div className={styles.stackCol}>
             <article className={styles.card}>
               <div className={styles.cardHeader}>
-                <div>
-                  <p className={styles.cardTitle}>Quick Actions</p>
-                </div>
+                <div className={styles.cardTitle}>Quick Actions</div>
               </div>
               <div className={styles.cardBody}>
                 <div className={styles.quickGrid}>
                   <Link href="/cek-dokumen/" className={styles.quickBtn}>
-                    <p className={styles.quickName}>Analyze Contract</p>
-                    <p className={styles.quickDesc}>Upload and evaluate legal risk</p>
+                    <span className={`${styles.quickIcon} ${styles.quickIconBlue}`}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                    </span>
+                    <p className={styles.quickName}>Upload Doc</p>
+                    <p className={styles.quickDesc}>PDF or DOCX</p>
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection("documents")}
-                    className={styles.quickBtn}
-                  >
-                    <p className={styles.quickName}>Open Document Center</p>
-                    <p className={styles.quickDesc}>Signing workflow and audit trail</p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection("account")}
-                    className={styles.quickBtn}
-                  >
-                    <p className={styles.quickName}>View Account</p>
-                    <p className={styles.quickDesc}>Plan and quota details</p>
-                  </button>
+
+                  <a href="#" className={styles.quickBtn}>
+                    <span className={`${styles.quickIcon} ${styles.quickIconGreen}`}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                      </svg>
+                    </span>
+                    <p className={styles.quickName}>Sign Now</p>
+                    <p className={styles.quickDesc}>Pending docs</p>
+                  </a>
+
+                  <a href="#" className={styles.quickBtn}>
+                    <span className={`${styles.quickIcon} ${styles.quickIconAmber}`}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                    </span>
+                    <p className={styles.quickName}>Verify KYC</p>
+                    <p className={styles.quickDesc}>New request</p>
+                  </a>
+
                   <Link href="/bisnis/" className={styles.quickBtn}>
-                    <p className={styles.quickName}>Upgrade Plan</p>
-                    <p className={styles.quickDesc}>Business and enterprise options</p>
+                    <span className={`${styles.quickIcon} ${styles.quickIconPurple}`}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
+                      </svg>
+                    </span>
+                    <p className={styles.quickName}>Use Template</p>
+                    <p className={styles.quickDesc}>12 available</p>
                   </Link>
                 </div>
               </div>
@@ -837,35 +944,32 @@ export default function DashboardPage() {
 
             <article className={styles.card}>
               <div className={styles.cardHeader}>
-                <div>
-                  <p className={styles.cardTitle}>Plan Usage</p>
-                  <p className={styles.cardSub}>{profile ? formatPlan(profile.plan) : "-"}</p>
-                </div>
+                <div className={styles.cardTitle}>Plan Usage</div>
+                <span className={styles.planPill}>{planPill}</span>
               </div>
               <div className={styles.cardBody}>
-                <div className={styles.quotaItem}>
-                  <div className={styles.quotaTop}>
-                    <span>Analisis AI</span>
-                    <span>
-                      {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
-                    </span>
-                  </div>
-                  <div className={styles.quotaBar}>
-                    <div className={styles.quotaFill} style={{ width: `${analysisProgress ?? 0}%` }} />
-                  </div>
+                <div className={styles.quotaWrap}>
+                  {quotaRows.map((row) => (
+                    <div key={row.key} className={styles.quotaItem}>
+                      <div className={styles.quotaTop}>
+                        <span className={styles.quotaName}>{row.label}</span>
+                        <span className={styles.quotaVal}>{row.value}</span>
+                      </div>
+                      <div className={styles.quotaBar}>
+                        <div
+                          className={`${styles.quotaFill} ${
+                            row.tone === "green"
+                              ? styles.quotaFillGreen
+                              : row.tone === "amber"
+                                ? styles.quotaFillAmber
+                                : styles.quotaFillBlue
+                          }`}
+                          style={{ width: `${row.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className={styles.quotaItem}>
-                  <div className={styles.quotaTop}>
-                    <span>e-Sign</span>
-                    <span>
-                      {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
-                    </span>
-                  </div>
-                  <div className={styles.quotaBar}>
-                    <div className={`${styles.quotaFill} ${styles.quotaFillGreen}`} style={{ width: `${esignProgress ?? 0}%` }} />
-                  </div>
-                </div>
-                <p className={styles.statMeta}>Reset kuota: {formatDateTime(quotaInfo?.reset_at ?? null)}</p>
               </div>
             </article>
           </div>
@@ -881,14 +985,14 @@ export default function DashboardPage() {
             </div>
             <div className={styles.cardBody}>
               <div className={styles.chartArea}>
-                {chartRows.map((item, index) => (
-                  <div key={item.day} className={styles.chartBarWrap}>
+                {chartRows.map((height, index) => (
+                  <div key={index} className={styles.chartBarWrap}>
                     <div
-                      className={`${styles.chartBar} ${index % 2 === 0 ? styles.chartBarPrimary : styles.chartBarLight}`}
-                      style={{ height: `${item.value}%` }}
-                      data-val={`${item.value}%`}
+                      className={`${styles.chartBar} ${index < 5 ? styles.chartBarPrimary : styles.chartBarLight}`}
+                      style={{ height: `${height}%` }}
+                      data-val={String(height)}
                     />
-                    <span className={styles.chartLabel}>{item.day}</span>
+                    <div className={styles.chartLabel}>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index]}</div>
                   </div>
                 ))}
               </div>
@@ -897,39 +1001,43 @@ export default function DashboardPage() {
 
           <article className={styles.card}>
             <div className={styles.cardHeader}>
-              <div>
-                <p className={styles.cardTitle}>Activity Feed</p>
-              </div>
+              <div className={styles.cardTitle}>Activity Feed</div>
+              <a href="#" className={styles.cardLink}>
+                See all
+              </a>
             </div>
-            <div className={styles.cardBody}>
+            <div className={`${styles.cardBody} ${styles.cardBodyCompact}`}>
               <div className={styles.activityList}>
                 {feedItems.length === 0 ? (
-                  <p className={styles.activityTime}>Belum ada activity feed.</p>
+                  <p className={styles.activityTime}>No activity yet.</p>
                 ) : (
-                  feedItems.map((event, index) => (
-                    <div key={event.id} className={styles.activityItem}>
-                      <div className={styles.activityDotWrap}>
-                        <span
-                          className={`${styles.activityDot} ${
-                            index % 4 === 0
-                              ? styles.dotBlue
-                              : index % 4 === 1
-                                ? styles.dotGreen
-                                : index % 4 === 2
-                                  ? styles.dotAmber
-                                  : styles.dotRed
-                          }`}
-                        />
-                        <span className={styles.activityLine} />
+                  feedItems.map((event, index) => {
+                    const actor = toDisplayName(event.actor_email, "System");
+                    const eventText = event.event_type.replace(/_/g, " ").toLowerCase();
+                    const dotClass =
+                      index % 4 === 0
+                        ? styles.dotGreen
+                        : index % 4 === 1
+                          ? styles.dotBlue
+                          : index % 4 === 2
+                            ? styles.dotAmber
+                            : styles.dotRed;
+
+                    return (
+                      <div key={event.id} className={styles.activityItem}>
+                        <div className={styles.activityDotWrap}>
+                          <div className={`${styles.activityDot} ${dotClass}`} />
+                          <div className={styles.activityLine} />
+                        </div>
+                        <div className={styles.activityContent}>
+                          <p className={styles.activityText}>
+                            <b>{actor}</b> {eventText}
+                          </p>
+                          <p className={styles.activityTime}>{formatDateTime(event.created_at)}</p>
+                        </div>
                       </div>
-                      <div className={styles.activityContent}>
-                        <p className={styles.activityText}>
-                          {event.event_type} • {event.actor_email || "system"}
-                        </p>
-                        <p className={styles.activityTime}>{formatDateTime(event.created_at)}</p>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -939,22 +1047,42 @@ export default function DashboardPage() {
             <div className={styles.cardHeader}>
               <div>
                 <p className={styles.cardTitle}>Awaiting Signers</p>
-                <p className={styles.cardSub}>{pendingRows.length} pending</p>
+                <p className={styles.cardSub}>Requires attention</p>
               </div>
+              <span className={styles.pendingPill}>{pendingRows.length} pending</span>
             </div>
-            <div className={styles.cardBody}>
-              {pendingRows.length === 0 ? (
-                <p className={styles.activityTime}>Tidak ada signer pending.</p>
-              ) : (
-                pendingRows.map((doc) => (
-                  <div key={doc.document_id} className={styles.pendingRow}>
-                    <p className={styles.pendingName}>{doc.filename}</p>
-                    <p className={styles.pendingMeta}>
-                      Role: {doc.my_signer_role || "-"} • Updated {formatDateTime(doc.updated_at)}
-                    </p>
-                  </div>
-                ))
-              )}
+            <div className={`${styles.cardBody} ${styles.cardBodyCompact}`}>
+              <div className={styles.signerList}>
+                {pendingRows.length === 0 ? (
+                  <p className={styles.activityTime}>No pending signer.</p>
+                ) : (
+                  pendingRows.map((doc, index) => {
+                    const signerName = toDisplayName(doc.owner_email, "Signer");
+                    const avatarClass =
+                      index % 3 === 0
+                        ? styles.docAvatarAmber
+                        : index % 3 === 1
+                          ? styles.docAvatarBlue
+                          : styles.docAvatarGreen;
+
+                    return (
+                      <div key={doc.document_id} className={styles.signerRow}>
+                        <span className={`${styles.docAvatar} ${avatarClass}`}>{toInitials(signerName)}</span>
+                        <div className={styles.signerInfo}>
+                          <p className={styles.signerName}>{signerName}</p>
+                          <p className={styles.signerEmail}>{doc.filename}</p>
+                        </div>
+                        <a href="#" className={`${styles.iconBtn} ${styles.signerAction}`}>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                          </svg>
+                        </a>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </article>
         </div>
@@ -1385,10 +1513,8 @@ export default function DashboardPage() {
     <main className={styles.app}>
       <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
         <div className={styles.sidebarHeader}>
-          <Link href="/" className={styles.sidebarBrand}>
-            <img src="/logo.svg" alt="TanyaHukum" className="h-7" />
-            <span className={styles.logoText}>TanyaHukum</span>
-          </Link>
+          <div className={styles.logoMark}>T</div>
+          <span className={styles.logoText}>TanyaHukum</span>
         </div>
 
         <button
@@ -1397,39 +1523,117 @@ export default function DashboardPage() {
           onClick={() => setSidebarCollapsed((prev) => !prev)}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {sidebarCollapsed ? ">" : "<"}
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M7.5 9L4.5 6L7.5 3" />
+          </svg>
         </button>
 
         <nav className={styles.nav}>
           <div className={styles.navSection}>
-            <p className={styles.navLabel}>Workspace</p>
-            <button
-              type="button"
-              className={sectionButtonClass("overview")}
-              onClick={() => setActiveSection("overview")}
-              data-short="OV"
-            >
-              <span className={styles.navItemLabel}>Overview</span>
-            </button>
-            <button
-              type="button"
-              className={sectionButtonClass("documents")}
-              onClick={() => setActiveSection("documents")}
-              data-short="DOC"
-            >
-              <span className={styles.navItemLabel}>Document Center</span>
-              {documentsMeta.pending_my_action > 0 ? (
-                <span className={styles.navBadge}>{documentsMeta.pending_my_action}</span>
-              ) : null}
-            </button>
-            <button
-              type="button"
-              className={sectionButtonClass("account")}
-              onClick={() => setActiveSection("account")}
-              data-short="ACC"
-            >
-              <span className={styles.navItemLabel}>Account</span>
-            </button>
+            <p className={styles.navLabel}>Main</p>
+            <a href="#" className={navItemClass("Dashboard")} onClick={(e) => { e.preventDefault(); setActiveNav("Dashboard"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Dashboard</span>
+            </a>
+            <a href="#" className={navItemClass("Documents")} onClick={(e) => { e.preventDefault(); setActiveNav("Documents"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Documents</span>
+              <span className={styles.navBadge}>{documentsMeta.pending_my_action || 12}</span>
+            </a>
+            <a href="#" className={navItemClass("Signers")} onClick={(e) => { e.preventDefault(); setActiveNav("Signers"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Signers</span>
+            </a>
+            <a href="#" className={navItemClass("Templates")} onClick={(e) => { e.preventDefault(); setActiveNav("Templates"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Templates</span>
+            </a>
+          </div>
+
+          <div className={styles.navSection}>
+            <p className={styles.navLabel}>Identity</p>
+            <a href="#" className={navItemClass("e-KYC Verification")} onClick={(e) => { e.preventDefault(); setActiveNav("e-KYC Verification"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>e-KYC Verification</span>
+            </a>
+            <a href="#" className={navItemClass("Digital Identity")} onClick={(e) => { e.preventDefault(); setActiveNav("Digital Identity"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Digital Identity</span>
+            </a>
+            <a href="#" className={navItemClass("Certificates")} onClick={(e) => { e.preventDefault(); setActiveNav("Certificates"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Certificates</span>
+            </a>
+            <a href="#" className={navItemClass("Audit Trail")} onClick={(e) => { e.preventDefault(); setActiveNav("Audit Trail"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Audit Trail</span>
+            </a>
+          </div>
+
+          <div className={styles.navSection}>
+            <p className={styles.navLabel}>System</p>
+            <a href="#" className={navItemClass("API & Integrations")} onClick={(e) => { e.preventDefault(); setActiveNav("API & Integrations"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 17.66l1.41-1.41" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>API & Integrations</span>
+            </a>
+            <a href="#" className={navItemClass("Settings")} onClick={(e) => { e.preventDefault(); setActiveNav("Settings"); }}>
+              <span className={styles.navIcon}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </span>
+              <span className={styles.navItemLabel}>Settings</span>
+            </a>
           </div>
         </nav>
 
@@ -1441,53 +1645,44 @@ export default function DashboardPage() {
               <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
             </div>
           </div>
-          <div className={styles.sidebarMeta}>
-            <p className="mt-2 text-[11px] text-neutral-gray">
-              Plan <span className="font-semibold text-dark-navy">{profile ? formatPlan(profile.plan) : "-"}</span>
-            </p>
-            <p className="mt-1 text-[11px] text-neutral-gray">
-              Chat limit/dokumen{" "}
-              <span className="font-semibold text-dark-navy">{quotaInfo?.chat_per_doc_limit ?? "-"}</span>
-            </p>
-          </div>
         </div>
       </aside>
 
       <section className={styles.main}>
         <header className={styles.topbar}>
           <div className={styles.topbarLeft}>
-            <p className={styles.topbarTitle}>Contract Dashboard</p>
-            <p className={styles.topbarSub}>Monitor analysis, signing progress, and account quota</p>
+            <p className={styles.topbarTitle}>Overview</p>
+            <p className={styles.topbarSub}>{topbarDate}</p>
           </div>
 
           <div className={styles.topbarActions}>
             <label className={styles.searchBox}>
-              <input type="text" placeholder="Cari dokumen..." aria-label="Cari dokumen" />
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input type="text" placeholder="Search documents…" aria-label="Search documents" />
             </label>
-            <button type="button" className={styles.actionBtn}>
-              Notifikasi
-            </button>
+
+            <a href="#" className={styles.iconBtn} title="Notifications">
+              <span className={styles.notifDot} />
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </a>
+
             <Link href="/cek-dokumen/" className={styles.primaryBtn}>
-              Cek Dokumen
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Send for Signature
             </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className={styles.actionBtn}
-            >
-              {loggingOut ? "Memproses..." : "Keluar"}
-            </button>
           </div>
         </header>
 
         <div className={styles.content}>
-          <div className="mb-4 grid grid-cols-3 gap-2 md:hidden">
-            <button type="button" className={sectionButtonClass("overview")} onClick={() => setActiveSection("overview")}>Overview</button>
-            <button type="button" className={sectionButtonClass("documents")} onClick={() => setActiveSection("documents")}>Dokumen</button>
-            <button type="button" className={sectionButtonClass("account")} onClick={() => setActiveSection("account")}>Akun</button>
-          </div>
-
           {error && (
             <div className={styles.alertError}>
               <p>{error}</p>
