@@ -397,7 +397,9 @@ async def sign_document_visual(
 
 
 @router.post("/documents/{document_id}/sign-visual-finalize")
+@router.post("/documents/{document_id}/sign-visual-finalize/")
 @router.post("/api/documents/{document_id}/sign-visual-finalize")
+@router.post("/api/documents/{document_id}/sign-visual-finalize/")
 @limiter.limit("30/minute")
 async def sign_visual_finalize(
     request: Request,

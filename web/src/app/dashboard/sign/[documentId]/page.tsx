@@ -63,6 +63,21 @@ export default function SigningEditorPage() {
 
   const interactionRef = useRef<SignatureInteraction | null>(null);
   const isAlreadySigned = docInfo?.my_signer_status === "signed";
+  const isReadOnlySigning =
+    isAlreadySigned || docInfo?.status === "completed" || docInfo?.status === "rejected";
+  const displayStatus = (status: string | undefined) => {
+    if (!status) return "-";
+    const map: Record<string, string> = {
+      draft: "Draft",
+      analyzed: "Sudah dianalisis",
+      pending_signatures: "Menunggu tanda tangan",
+      partially_signed: "Sebagian sudah tanda tangan",
+      completed: "Sudah ditandatangani",
+      expired: "Kedaluwarsa",
+      rejected: "Ditolak",
+    };
+    return map[status] || status;
+  };
 
   const clampPlacement = (placement: SignaturePlacement, page: RenderedPage): SignaturePlacement => {
     const maxX = Math.max(0, page.width - placement.width);
@@ -120,7 +135,7 @@ export default function SigningEditorPage() {
     mode: "move" | "resize",
     event: React.MouseEvent<HTMLDivElement>,
   ) => {
-    if (!signaturePlacement || !signatureData || isAlreadySigned) return;
+    if (!signaturePlacement || !signatureData || isReadOnlySigning) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -189,7 +204,11 @@ export default function SigningEditorPage() {
         const sigData = sessionStorage.getItem(`sig_data_${documentId}`);
         if (sigData) {
           setSignatureData(JSON.parse(sigData));
-        } else if (doc.my_signer_status !== "signed") {
+        } else if (
+          doc.my_signer_status !== "signed"
+          && doc.status !== "completed"
+          && doc.status !== "rejected"
+        ) {
           throw new Error("Signature data not found");
         }
       } catch (err) {
@@ -247,7 +266,7 @@ export default function SigningEditorPage() {
 
   const handlePageDrop = (event: React.DragEvent<HTMLDivElement>, pageNumber: number) => {
     event.preventDefault();
-    if (!signatureData || isAlreadySigned) return;
+    if (!signatureData || isReadOnlySigning) return;
 
     const page = renderedPages.find((p) => p.pageNumber === pageNumber);
     if (!page) return;
@@ -278,8 +297,8 @@ export default function SigningEditorPage() {
   };
 
   const handleSign = async () => {
-    if (isAlreadySigned) {
-      alert("Anda sudah menandatangani dokumen ini. Anda hanya dapat melihat dokumen.");
+    if (isReadOnlySigning) {
+      alert(`Dokumen sudah berstatus ${displayStatus(docInfo?.status)}. Mode saat ini hanya lihat dokumen.`);
       return;
     }
     if (!signaturePlacement || !signatureData) {
@@ -296,7 +315,7 @@ export default function SigningEditorPage() {
         return;
       }
 
-      const res = await fetch(`/api/documents/${documentId}/sign-visual-finalize`, {
+      const res = await fetch(`/api/documents/${documentId}/sign-visual-finalize/`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -322,7 +341,12 @@ export default function SigningEditorPage() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ detail: "Failed to sign document" }));
-        throw new Error(errData.detail || "Failed to sign document");
+        const detail = String(errData.detail || "Failed to sign document");
+        if (detail.includes("berstatus completed") || detail.includes("Anda sudah menandatangani")) {
+          setDocInfo((prev) => (prev ? { ...prev, status: "completed", my_signer_status: "signed" } : prev));
+          throw new Error("Dokumen ini sudah ditandatangani dan sekarang mode hanya lihat.");
+        }
+        throw new Error(detail);
       }
 
       sessionStorage.removeItem(`sig_data_${documentId}`);
@@ -365,10 +389,10 @@ export default function SigningEditorPage() {
             <h4 className={styles.sectionTitle}>Dokumen</h4>
             <p className={styles.docName}>{docInfo?.filename}</p>
             <p className={styles.docMeta}>Owner: {docInfo?.owner_email}</p>
-            <p className={styles.docStatus}>Status: {docInfo?.status}</p>
-            {isAlreadySigned && (
+            <p className={styles.docStatus}>Status: {displayStatus(docInfo?.status)}</p>
+            {isReadOnlySigning && (
               <p className={styles.alreadySignedInfo}>
-                Anda sudah menandatangani dokumen ini. Mode saat ini hanya lihat dokumen.
+                Dokumen ini sudah tidak bisa ditandatangani ulang. Mode saat ini hanya lihat dokumen.
               </p>
             )}
           </div>
@@ -378,9 +402,9 @@ export default function SigningEditorPage() {
             {signatureData ? (
               <div
                 className={styles.signaturePreview}
-                draggable={!isAlreadySigned}
+                draggable={!isReadOnlySigning}
                 onDragStart={handleDragStart}
-                style={{ cursor: isAlreadySigned ? "not-allowed" : "grab" }}
+                style={{ cursor: isReadOnlySigning ? "not-allowed" : "grab" }}
               >
                 {signatureData.type === "text" && (
                   <p style={{ fontSize: 20, fontFamily: "Segoe Print, serif", color: "#333" }}>
@@ -407,10 +431,10 @@ export default function SigningEditorPage() {
           <div className={styles.actions}>
             <button
               onClick={handleSign}
-              disabled={!signaturePlacement || !signatureData || signing || isAlreadySigned}
+              disabled={!signaturePlacement || !signatureData || signing || isReadOnlySigning}
               className={styles.signBtn}
             >
-              {isAlreadySigned ? "Sudah Ditandatangani" : signing ? "Signing..." : "Tanda Tangani"}
+              {isReadOnlySigning ? "Dokumen Selesai" : signing ? "Signing..." : "Tanda Tangani"}
             </button>
             <button onClick={() => window.close()} className={styles.cancelBtn}>
               Tutup
@@ -427,8 +451,8 @@ export default function SigningEditorPage() {
                 key={page.pageNumber}
                 className={styles.pageContainer}
                 style={{ width: page.width, height: page.height }}
-                onDragOver={isAlreadySigned ? undefined : (event) => event.preventDefault()}
-                onDrop={isAlreadySigned ? undefined : (event) => handlePageDrop(event, page.pageNumber)}
+                onDragOver={isReadOnlySigning ? undefined : (event) => event.preventDefault()}
+                onDrop={isReadOnlySigning ? undefined : (event) => handlePageDrop(event, page.pageNumber)}
               >
                 <img src={page.dataUrl} alt={`Halaman ${page.pageNumber}`} className={styles.pageImage} />
                 <div className={styles.pageLabel}>Halaman {page.pageNumber}</div>
@@ -441,9 +465,9 @@ export default function SigningEditorPage() {
                       top: signaturePlacement.y,
                       width: signaturePlacement.width,
                       height: signaturePlacement.height,
-                      cursor: isAlreadySigned ? "default" : "move",
+                      cursor: isReadOnlySigning ? "default" : "move",
                     }}
-                    onMouseDown={isAlreadySigned ? undefined : startMovePlacedSignature}
+                    onMouseDown={isReadOnlySigning ? undefined : startMovePlacedSignature}
                   >
                     <div className={styles.signatureContent}>
                       {signatureData.type === "text" && (
@@ -474,7 +498,7 @@ export default function SigningEditorPage() {
                       )}
                     </div>
 
-                    {!isAlreadySigned && (
+                    {!isReadOnlySigning && (
                       <div
                         className={styles.resizeHandle}
                         onMouseDown={startResizePlacedSignature}

@@ -650,7 +650,33 @@ def sign_document(
             )
             signer = cur.fetchone()
             if not signer:
-                raise SupabaseServiceError(status_code=403, detail="Anda bukan signer untuk dokumen ini.")
+                is_owner = str(doc["owner_id"]) == str(signer_user_id)
+                if not is_owner:
+                    raise SupabaseServiceError(status_code=403, detail="Anda bukan signer untuk dokumen ini.")
+
+                # Owner can sign analyzed docs even if signer row has not been created yet.
+                cur.execute(
+                    """
+                    INSERT INTO public.document_signers (
+                        id, document_id, email, name, role, status, signed_at, signature_id, rejection_reason
+                    )
+                    VALUES (%s, %s, %s, %s, 'sender', 'pending', NULL, NULL, NULL)
+                    ON CONFLICT (document_id, email) DO NOTHING;
+                    """,
+                    (str(uuid.uuid4()), document_id, signer_email, signer_name.strip() or None),
+                )
+                cur.execute(
+                    """
+                    SELECT id, status, role
+                    FROM public.document_signers
+                    WHERE document_id = %s AND lower(email) = lower(%s)
+                    FOR UPDATE;
+                    """,
+                    (document_id, signer_email),
+                )
+                signer = cur.fetchone()
+                if not signer:
+                    raise SupabaseServiceError(status_code=500, detail="Gagal membuat signer owner.")
             if signer["status"] == "signed":
                 raise SupabaseServiceError(status_code=409, detail="Anda sudah menandatangani dokumen ini.")
             if signer["status"] == "rejected":

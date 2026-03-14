@@ -208,7 +208,7 @@ function formatStatus(status: DocumentStatus) {
     analyzed: "Sudah dianalisis",
     pending_signatures: "Menunggu tanda tangan",
     partially_signed: "Sebagian sudah tanda tangan",
-    completed: "Selesai",
+    completed: "Sudah ditandatangani",
     expired: "Kedaluwarsa",
     rejected: "Ditolak",
   };
