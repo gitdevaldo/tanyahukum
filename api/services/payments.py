@@ -35,6 +35,9 @@ PLAN_LABELS: dict[str, str] = {
     "business": "Bisnis",
 }
 SUPPORTED_WEBHOOK_EVENTS = {"payment.received", "payment.reminder"}
+TEST_WEBHOOK_EVENTS = {"testing", "test", "webhook.testing"}
+PAID_TRANSACTION_STATUSES = {"paid", "success", "succeeded", "completed", "settlement", "settled"}
+FAILED_TRANSACTION_STATUSES = {"expired", "failed", "cancelled", "canceled"}
 
 
 def _db_connect():
@@ -538,15 +541,35 @@ def _parse_int(value: object) -> int | None:
     return None
 
 
+def _normalize_transaction_status(value: str) -> str:
+    status = (value or "").strip().lower()
+    if status in PAID_TRANSACTION_STATUSES:
+        return "paid"
+    if status in FAILED_TRANSACTION_STATUSES:
+        if status == "canceled":
+            return "cancelled"
+        return status
+    return status
+
+
 def process_mayar_webhook(payload: object) -> dict:
     parsed = _normalize_webhook_payload(payload)
-    event = str(parsed.get("event") or parsed.get("type") or "").strip().lower()
+    event = str(parsed.get("event") or parsed.get("type") or parsed.get("eventName") or "").strip().lower()
     if not event:
         raise SupabaseServiceError(status_code=422, detail="Event webhook tidak ditemukan.")
 
+    if event in TEST_WEBHOOK_EVENTS:
+        return {
+            "success": True,
+            "handled": True,
+            "event": event,
+            "payment_id": None,
+            "message": "Webhook test Mayar diterima.",
+        }
+
     data = parsed.get("data")
     if not isinstance(data, dict):
-        data = {}
+        data = parsed if isinstance(parsed, dict) else {}
 
     transaction_id = (
         str(data.get("transactionId") or data.get("paymentLinkTransactionId") or data.get("id") or "")
@@ -554,7 +577,9 @@ def process_mayar_webhook(payload: object) -> dict:
     )
     customer_email = str(data.get("customerEmail") or "").strip().lower()
     amount = _parse_int(data.get("amount"))
-    transaction_status = str(data.get("transactionStatus") or "").strip().lower()
+    transaction_status = _normalize_transaction_status(
+        str(data.get("transactionStatus") or data.get("status") or parsed.get("transactionStatus") or "")
+    )
 
     try:
         with _db_connect() as conn, conn.cursor() as cur:
@@ -619,7 +644,7 @@ def process_mayar_webhook(payload: object) -> dict:
                 (Json(updated_payload), transaction_id or None, payment_id),
             )
 
-            should_mark_paid = event == "payment.received"
+            should_mark_paid = event == "payment.received" or transaction_status == "paid"
             if should_mark_paid and row["status"] != "paid":
                 set_user_account_plan(
                     user_id=str(row["user_id"]),
@@ -646,7 +671,7 @@ def process_mayar_webhook(payload: object) -> dict:
                     "message": "Pembayaran berhasil dikonfirmasi dan paket diaktifkan.",
                 }
 
-            if event == "payment.reminder" and transaction_status in {"expired", "failed", "cancelled"}:
+            if transaction_status in {"expired", "failed", "cancelled"}:
                 cur.execute(
                     """
                     UPDATE public.payment_transactions
@@ -659,10 +684,9 @@ def process_mayar_webhook(payload: object) -> dict:
                 )
 
             conn.commit()
-            handled = event in SUPPORTED_WEBHOOK_EVENTS
             return {
                 "success": True,
-                "handled": handled,
+                "handled": True,
                 "event": event,
                 "payment_id": payment_id,
                 "message": "Webhook diproses.",
