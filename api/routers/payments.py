@@ -61,16 +61,20 @@ async def create_checkout(
             account_type,
         )
         profile = await asyncio.to_thread(get_user_profile_and_quota, user_id)
+        billing_name = (req.billing_name or profile["name"] or name or "Pengguna TanyaHukum").strip()
+        billing_email = (str(req.billing_email) if req.billing_email else profile["email"] or email).strip().lower()
+        billing_mobile = (req.billing_mobile or profile.get("phone") or "").strip() or None
 
         result = await asyncio.to_thread(
             create_mayar_checkout,
             user_id,
-            profile["name"] or name,
-            profile["email"] or email,
-            profile.get("phone"),
+            billing_name,
+            billing_email,
+            billing_mobile,
             profile["account_type"],
             profile["plan"],
             req.target_plan,
+            req.source,
         )
         return PaymentCheckoutResponse(**result)
     except SupabaseServiceError as e:

@@ -2067,6 +2067,18 @@ export default function DashboardPage() {
   }
 
   function renderAccountPanel() {
+    const canUpgradePersonalStarter =
+      profile?.account_type === "personal" && profile.plan !== "starter";
+    const canUpgradeBusinessPlus =
+      profile?.account_type === "business"
+      && profile.plan !== "plus"
+      && profile.plan !== "business"
+      && profile.plan !== "enterprise";
+    const canUpgradeBusinessPlan =
+      profile?.account_type === "business"
+      && profile.plan !== "business"
+      && profile.plan !== "enterprise";
+
     return (
       <section className="space-y-4">
         <article className="border-b border-border-light bg-white">
@@ -2113,6 +2125,30 @@ export default function DashboardPage() {
             >
               Analisis Dokumen Baru
             </button>
+            {canUpgradePersonalStarter ? (
+              <Link
+                href="/checkout/?account_type=personal&target_plan=starter&source=dashboard"
+                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+              >
+                Upgrade ke Starter
+              </Link>
+            ) : null}
+            {canUpgradeBusinessPlus ? (
+              <Link
+                href="/checkout/?account_type=business&target_plan=plus&source=dashboard"
+                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+              >
+                Upgrade ke Starter Bisnis
+              </Link>
+            ) : null}
+            {canUpgradeBusinessPlan ? (
+              <Link
+                href="/checkout/?account_type=business&target_plan=business&source=dashboard"
+                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+              >
+                Upgrade ke Paket Bisnis
+              </Link>
+            ) : null}
           </div>
         </article>
       </section>

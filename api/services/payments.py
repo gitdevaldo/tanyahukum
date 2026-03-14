@@ -100,13 +100,14 @@ def _resolve_target_plan_price(account_type: str, target_plan: str) -> int:
     return account_prices[target_plan]
 
 
-def _build_success_redirect_url(payment_id: str) -> str:
+def _build_success_redirect_url(payment_id: str, source: str | None = None) -> str:
     base = (settings.app_base_url or "https://tanyahukum.dev").rstrip("/")
-    dashboard_url = f"{base}/dashboard/"
-    split = urlsplit(dashboard_url)
+    checkout_url = f"{base}/checkout/"
+    split = urlsplit(checkout_url)
     params = dict(parse_qsl(split.query, keep_blank_values=True))
     params["payment_ref"] = payment_id
-    params["section"] = "Pengaturan Akun"
+    if source:
+        params["source"] = source
     return urlunsplit((split.scheme, split.netloc, split.path, urlencode(params), split.fragment))
 
 
@@ -197,10 +198,12 @@ def create_mayar_checkout(
     account_type: str,
     current_plan: str | None,
     target_plan: str,
+    source: str | None = None,
 ) -> dict:
     normalized_account_type = (account_type or "").strip().lower()
     normalized_target_plan = (target_plan or "").strip().lower()
     normalized_current_plan = (current_plan or "").strip().lower() or None
+    normalized_source = (source or "").strip().lower() or None
 
     if normalized_current_plan == normalized_target_plan:
         raise SupabaseServiceError(status_code=409, detail="Paket target sudah aktif pada akun Anda.")
@@ -215,7 +218,7 @@ def create_mayar_checkout(
     expires_at = created_now + timedelta(hours=max(1, settings.mayar_checkout_expiry_hours))
     plan_label = PLAN_LABELS.get(normalized_target_plan, normalized_target_plan.title())
     checkout_desc = f"Upgrade paket TanyaHukum ke {plan_label} (ref {payment_id})"
-    redirect_url = _build_success_redirect_url(payment_id)
+    redirect_url = _build_success_redirect_url(payment_id, normalized_source)
 
     request_payload = {
         "name": customer_name.strip() or "Pengguna TanyaHukum",
@@ -236,6 +239,7 @@ def create_mayar_checkout(
             "user_id": user_id,
             "target_plan": normalized_target_plan,
             "account_type": normalized_account_type,
+            "source": normalized_source or "checkout",
         },
     }
 

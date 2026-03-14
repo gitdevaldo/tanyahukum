@@ -105,8 +105,8 @@ export const B2B_PRICING_PLANS = [
       "Custom branding",
       "API access",
     ],
-    cta: "Coba Analisis Dokumen",
-    ctaHref: "/cek-dokumen/",
+    cta: "Pilih Starter Bisnis",
+    ctaHref: "/checkout/?account_type=business&target_plan=plus&source=bisnis",
     primary: false,
   },
   {
@@ -126,8 +126,8 @@ export const B2B_PRICING_PLANS = [
       "Bulk upload",
     ],
     excluded: ["Custom branding", "API access"],
-    cta: "Coba Analisis Dokumen",
-    ctaHref: "/cek-dokumen/",
+    cta: "Pilih Paket Bisnis",
+    ctaHref: "/checkout/?account_type=business&target_plan=business&source=bisnis",
     primary: true,
   },
   {

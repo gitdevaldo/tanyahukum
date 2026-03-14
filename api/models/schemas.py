@@ -165,6 +165,10 @@ class QuotaResponse(BaseModel):
 
 class PaymentCheckoutRequest(BaseModel):
     target_plan: str = Field(pattern="^(starter|plus|business)$")
+    billing_name: str | None = Field(default=None, min_length=2, max_length=100)
+    billing_email: EmailStr | None = None
+    billing_mobile: str | None = Field(default=None, min_length=8, max_length=32)
+    source: str | None = Field(default=None, pattern="^(landing|bisnis|dashboard|checkout)$")
 
 
 class PaymentCheckoutResponse(BaseModel):

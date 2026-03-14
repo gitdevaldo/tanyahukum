@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useMemo, useEffect, useState } from "react";
 
 import { isAuthenticated, setSession } from "@/lib/auth-session";
 
@@ -11,8 +11,29 @@ type LoginResponse = {
   refresh_token: string;
 };
 
-export default function LoginPage() {
+function resolveSafeNextPath(rawValue: string | null, fallback = "/dashboard/") {
+  if (!rawValue) return fallback;
+  const trimmed = rawValue.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
+  return trimmed;
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = useMemo(
+    () => resolveSafeNextPath(searchParams.get("next"), "/dashboard/"),
+    [searchParams],
+  );
+  const signupHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("next", nextPath);
+    const accountType = searchParams.get("account_type");
+    if (accountType === "personal" || accountType === "business") {
+      params.set("account_type", accountType);
+    }
+    return `/signup/?${params.toString()}`;
+  }, [nextPath, searchParams]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,9 +41,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated()) {
-      router.replace("/dashboard/");
+      router.replace(nextPath);
     }
-  }, [router]);
+  }, [nextPath, router]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,7 +67,7 @@ export default function LoginPage() {
 
       const auth = data as LoginResponse;
       setSession(auth.access_token, auth.refresh_token);
-      router.push("/dashboard/");
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan saat login.");
       setIsSubmitting(false);
@@ -152,7 +173,7 @@ export default function LoginPage() {
 
             <p className="mt-6 text-sm text-neutral-gray">
               Belum punya akun?{" "}
-              <Link href="/signup/" className="font-semibold text-primary-orange">
+              <Link href={signupHref} className="font-semibold text-primary-orange">
                 Daftar sekarang
               </Link>
             </p>
@@ -160,5 +181,21 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={(
+        <main className="min-h-screen bg-light-cream px-4 py-10 sm:px-6">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-border-light bg-white p-6 text-sm text-neutral-gray">
+            Memuat halaman login...
+          </div>
+        </main>
+      )}
+    >
+      <LoginPageInner />
+    </Suspense>
   );
 }

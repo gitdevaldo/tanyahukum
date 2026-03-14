@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 
 import { isAuthenticated, setSession } from "@/lib/auth-session";
 
@@ -13,20 +13,46 @@ type LoginResponse = {
   refresh_token: string;
 };
 
-export default function SignupPage() {
+function resolveSafeNextPath(rawValue: string | null, fallback = "/dashboard/") {
+  if (!rawValue) return fallback;
+  const trimmed = rawValue.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
+  return trimmed;
+}
+
+function SignupPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = useMemo(
+    () => resolveSafeNextPath(searchParams.get("next"), "/dashboard/"),
+    [searchParams],
+  );
+  const preferredAccountType = useMemo<AccountType>(() => {
+    const value = searchParams.get("account_type");
+    return value === "business" ? "business" : "personal";
+  }, [searchParams]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [accountType, setAccountType] = useState<AccountType>("personal");
+  const [accountType, setAccountType] = useState<AccountType>(preferredAccountType);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const loginHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("next", nextPath);
+    params.set("account_type", accountType);
+    return `/login/?${params.toString()}`;
+  }, [accountType, nextPath]);
 
   useEffect(() => {
     if (isAuthenticated()) {
-      router.replace("/dashboard/");
+      router.replace(nextPath);
     }
-  }, [router]);
+  }, [nextPath, router]);
+
+  useEffect(() => {
+    setAccountType(preferredAccountType);
+  }, [preferredAccountType]);
 
   async function autoLogin(nextEmail: string, nextPassword: string) {
     const loginRes = await fetch("/api/auth/login/", {
@@ -71,7 +97,7 @@ export default function SignupPage() {
       }
 
       await autoLogin(email, password);
-      router.push("/dashboard/");
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan saat registrasi.");
       setIsSubmitting(false);
@@ -209,7 +235,7 @@ export default function SignupPage() {
 
             <p className="mt-6 text-sm text-neutral-gray">
               Sudah punya akun?{" "}
-              <Link href="/login/" className="font-semibold text-primary-orange">
+              <Link href={loginHref} className="font-semibold text-primary-orange">
                 Masuk
               </Link>
             </p>
@@ -217,5 +243,21 @@ export default function SignupPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={(
+        <main className="min-h-screen bg-light-cream px-4 py-10 sm:px-6">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-border-light bg-white p-6 text-sm text-neutral-gray">
+            Memuat halaman registrasi...
+          </div>
+        </main>
+      )}
+    >
+      <SignupPageInner />
+    </Suspense>
   );
 }

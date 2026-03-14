@@ -112,10 +112,10 @@ export const PRICING_PLANS = [
       "Export ringkasan PDF",
     ],
     excluded: [],
-    cta: "Segera Hadir",
-    ctaHref: null,
+    cta: "Pilih Starter",
+    ctaHref: "/checkout/?account_type=personal&target_plan=starter&source=landing",
     primary: true,
-    disabled: true,
+    disabled: false,
   },
   {
     name: "Plus",
