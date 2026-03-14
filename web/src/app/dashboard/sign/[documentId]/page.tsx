@@ -181,24 +181,40 @@ export default function SigningEditorPage() {
         if (!doc) throw new Error("Document not found");
         setDocInfo(doc);
 
-        const pdfRes = await fetch(`/api/documents/${documentId}/pdf/`, {
-          headers: { Authorization: `Bearer ${token}` },
-          redirect: "manual",
-        });
-
-        if (pdfRes.ok) {
-          setPdfData(await pdfRes.arrayBuffer());
-        } else if (pdfRes.status === 307 || pdfRes.status === 308) {
-          const redirectUrl = pdfRes.headers.get("location");
-          if (!redirectUrl) throw new Error("Failed to resolve PDF redirect");
-          const retryRes = await fetch(redirectUrl, {
+        const fetchPdfBinary = async (path: string) => {
+          const res = await fetch(path, {
             headers: { Authorization: `Bearer ${token}` },
+            redirect: "manual",
           });
-          if (!retryRes.ok) throw new Error("Failed to fetch PDF");
-          setPdfData(await retryRes.arrayBuffer());
-        } else {
-          const errData = await pdfRes.json().catch(() => ({ detail: "Failed to fetch PDF" }));
+          if (res.ok) return await res.arrayBuffer();
+          if (res.status === 307 || res.status === 308) {
+            const redirectUrl = res.headers.get("location");
+            if (!redirectUrl) throw new Error("Failed to resolve PDF redirect");
+            const retryRes = await fetch(redirectUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!retryRes.ok) {
+              const errData = await retryRes.json().catch(() => ({ detail: "Failed to fetch PDF" }));
+              throw new Error(errData.detail || "Failed to fetch PDF");
+            }
+            return await retryRes.arrayBuffer();
+          }
+          const errData = await res.json().catch(() => ({ detail: "Failed to fetch PDF" }));
           throw new Error(errData.detail || "Failed to fetch PDF");
+        };
+
+        const shouldLoadSignedPdf = doc.status === "completed" || doc.my_signer_status === "signed";
+        try {
+          const preferredPath = shouldLoadSignedPdf
+            ? `/api/documents/${documentId}/signed-pdf/`
+            : `/api/documents/${documentId}/pdf/`;
+          setPdfData(await fetchPdfBinary(preferredPath));
+        } catch (preferredError) {
+          if (shouldLoadSignedPdf) {
+            setPdfData(await fetchPdfBinary(`/api/documents/${documentId}/pdf/`));
+          } else {
+            throw preferredError;
+          }
         }
 
         const sigData = sessionStorage.getItem(`sig_data_${documentId}`);

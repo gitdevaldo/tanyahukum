@@ -174,10 +174,15 @@ def apply_visual_signatures(
     """
     if not original_pdf:
         raise ValueError("Original PDF is empty.")
+    if signature_type not in {"text", "drawn", "image"}:
+        raise ValueError("Unsupported signature type.")
 
     reader = PdfReader(BytesIO(original_pdf))
     writer = PdfWriter()
     image_bytes = _decode_data_url(signature_image)
+    if signature_type in {"drawn", "image"} and not image_bytes:
+        raise ValueError("Signature image is required for drawn/image signatures.")
+    applied_count = 0
 
     for page_index, page in enumerate(reader.pages, start=1):
         page_positions = [p for p in positions if int(p.get("page", 1)) == page_index]
@@ -206,6 +211,7 @@ def apply_visual_signatures(
             if signature_type == "text":
                 overlay_canvas.setFont("Helvetica-Oblique", max(12, min(28, int(height * 0.45))))
                 overlay_canvas.drawString(x + 4, y + max(8, height * 0.32), signer_name or "Signer")
+                applied_count += 1
                 continue
 
             if image_bytes:
@@ -219,12 +225,16 @@ def apply_visual_signatures(
                     mask="auto",
                     anchor="sw",
                 )
+                applied_count += 1
 
         overlay_canvas.save()
         overlay_stream.seek(0)
         overlay_pdf = PdfReader(overlay_stream)
         page.merge_page(overlay_pdf.pages[0])
         writer.add_page(page)
+
+    if applied_count == 0:
+        raise ValueError("No valid signature placement was applied to the PDF.")
 
     output = BytesIO()
     writer.write(output)

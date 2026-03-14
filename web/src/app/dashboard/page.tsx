@@ -717,15 +717,19 @@ export default function DashboardPage() {
 
   // Listen for signing completion from new tab
   useEffect(() => {
-    const handleSigningComplete = (event: MessageEvent) => {
+    const handleSigningComplete = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === "SIGNATURE_COMPLETE") {
         const docId = event.data.documentId;
-        // Refresh document list
-        loadDocuments();
-        // Show success message
+        await loadDocuments({ preferredDocumentId: docId, preserveSelection: true });
+        if (docId) {
+          try {
+            await loadDocumentDetails(docId);
+          } catch {
+            // details refresh failure should not block list refresh notice
+          }
+        }
         setNotice("✓ Dokumen berhasil ditandatangani");
-        // Clear signing panel state
         setPanelCanSign(false);
         setPanelSignatureName("");
         setPanelSignatureType(null);
@@ -735,7 +739,7 @@ export default function DashboardPage() {
 
     window.addEventListener("message", handleSigningComplete);
     return () => window.removeEventListener("message", handleSigningComplete);
-  }, [loadDocuments]);
+  }, [loadDocuments, loadDocumentDetails]);
 
   const quotaInfo = quota?.quota ?? null;
   const analysisProgress = useMemo(

@@ -1176,16 +1176,62 @@ def finalize_visual_signature(
     """Finalize visual signing: sign workflow + immutable signed PDF version."""
     if not positions:
         raise SupabaseServiceError(status_code=400, detail="Posisi tanda tangan wajib diisi.")
+    if signature_type not in {"text", "drawn", "image"}:
+        raise SupabaseServiceError(status_code=422, detail="Tipe tanda tangan tidak valid.")
+    if signature_type in {"drawn", "image"} and not signature_image:
+        raise SupabaseServiceError(
+            status_code=422,
+            detail="Gambar tanda tangan wajib untuk tipe drawn/image.",
+        )
+
+    normalized_positions: list[dict] = []
+    for raw in positions:
+        try:
+            page = int(raw.get("page"))
+            x = float(raw.get("x"))
+            y = float(raw.get("y"))
+            width = float(raw.get("width"))
+            height = float(raw.get("height"))
+            page_width = float(raw.get("page_width") or raw.get("pageWidth"))
+            page_height = float(raw.get("page_height") or raw.get("pageHeight"))
+        except Exception:
+            raise SupabaseServiceError(status_code=422, detail="Format posisi tanda tangan tidak valid.")
+
+        if page < 1:
+            raise SupabaseServiceError(status_code=422, detail="Nomor halaman tanda tangan tidak valid.")
+        if page_width <= 0 or page_height <= 0:
+            raise SupabaseServiceError(status_code=422, detail="Ukuran halaman tanda tangan tidak valid.")
+        if width < 24 or height < 16:
+            raise SupabaseServiceError(status_code=422, detail="Ukuran tanda tangan terlalu kecil.")
+        if x < 0 or y < 0 or x > page_width or y > page_height:
+            raise SupabaseServiceError(status_code=422, detail="Posisi tanda tangan di luar area halaman.")
+
+        normalized_positions.append(
+            {
+                "page": page,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "page_width": page_width,
+                "page_height": page_height,
+            }
+        )
 
     source = get_document_pdf_for_signing(document_id, signer_user_id, signer_email, request_id)
     original_pdf = source["pdf_bytes"]
-    visual_signed_pdf = apply_visual_signatures(
-        original_pdf=original_pdf,
-        positions=positions,
-        signature_type=signature_type,
-        signer_name=signer_name,
-        signature_image=signature_image,
-    )
+    try:
+        visual_signed_pdf = apply_visual_signatures(
+            original_pdf=original_pdf,
+            positions=normalized_positions,
+            signature_type=signature_type,
+            signer_name=signer_name,
+            signature_image=signature_image,
+        )
+    except ValueError as e:
+        raise SupabaseServiceError(status_code=422, detail=str(e))
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menempel tanda tangan ke PDF: {e}")
     document_hash = hashlib.sha256(visual_signed_pdf).hexdigest()
 
     sign_result = sign_document(
@@ -1207,14 +1253,14 @@ def finalize_visual_signature(
         original_pdf=original_pdf,
         signed_pdf=visual_signed_pdf,
         signature_type=signature_type,
-        positions=positions,
+        positions=normalized_positions,
         request_id=request_id,
     )
 
     return {
         **sign_result,
         "signature_type": signature_type,
-        "positions_count": len(positions),
+        "positions_count": len(normalized_positions),
         "pdf_version": version_result,
     }
 
