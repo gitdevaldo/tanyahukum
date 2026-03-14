@@ -22,6 +22,8 @@ type AgentState =
   | "collect_wa"     // collecting WhatsApp
   | "done";          // flow complete
 
+type ConsultationTrigger = "quota" | "keyword";
+
 function buildAnalysisContext(result: AnalysisResponse): string {
   const lines: string[] = [];
   lines.push(`Dokumen: ${result.filename}`);
@@ -115,6 +117,14 @@ const DONE_MESSAGE = `Sempurna! Data Anda sudah kami catat:
 • **WhatsApp:** {wa}
 
 Tim konsultan hukum kami akan menghubungi Anda dalam **1x24 jam** untuk menjadwalkan konsultasi. Terima kasih telah mempercayakan TanyaHukum!`;
+const KEYWORD_DONE_FOLLOWUP = "Terima kasih! Konsultasi Anda telah dijadwalkan. Silakan lanjutkan bertanya jika ada hal lain.";
+const CONSULTATION_KEYWORDS = ["konsultasi", "berkonsultasi", "konsultasi hukum", "jadwalkan konsultasi"];
+
+function isConsultationIntent(text: string): boolean {
+  const normalized = text.toLowerCase();
+  if (normalized.includes("tidak")) return false;
+  return CONSULTATION_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
 
 export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initialRemainingChats }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -127,6 +137,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
   );
   const [contactInfo, setContactInfo] = useState({ name: "", email: "", wa: "" });
   const offerShown = useRef(false);
+  const consultationTrigger = useRef<ConsultationTrigger>("quota");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -137,6 +148,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
   useEffect(() => {
     if (limitReached && !offerShown.current) {
       offerShown.current = true;
+      consultationTrigger.current = "quota";
       setAgentState("offered");
       setMessages((prev) => [
         ...prev,
@@ -177,10 +189,16 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
     } else if (agentState === "collect_wa") {
       const info = { ...contactInfo, wa: userText };
       setContactInfo(info);
-      setAgentState("done");
-      setTimeout(() => addBotMessage(
-        DONE_MESSAGE.replace("{name}", info.name).replace("{email}", info.email).replace("{wa}", info.wa)
-      ), 400);
+      const completedMessage = DONE_MESSAGE.replace("{name}", info.name)
+        .replace("{email}", info.email)
+        .replace("{wa}", info.wa);
+      if (consultationTrigger.current === "keyword") {
+        setAgentState("chat");
+        setTimeout(() => addBotMessage(`${completedMessage}\n\n${KEYWORD_DONE_FOLLOWUP}`), 400);
+      } else {
+        setAgentState("done");
+        setTimeout(() => addBotMessage(completedMessage), 400);
+      }
 
       // Send consultation booking to backend
       fetch("/api/consultation/", {
@@ -201,6 +219,15 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
     const text = directText || input.trim();
     if (!text || loading) return;
     if (!directText) setInput("");
+
+    if (agentState === "chat" && isConsultationIntent(text)) {
+      consultationTrigger.current = "keyword";
+      addUserMessage(text);
+      setContactInfo({ name: "", email: "", wa: "" });
+      setAgentState("collect_name");
+      setTimeout(() => addBotMessage(ASK_NAME), 250);
+      return;
+    }
 
     // If in agent flow (post-limit), handle locally
     if (agentState !== "chat") {
@@ -263,7 +290,7 @@ export function ChatPanel({ analysisId, analysisResult, isOpen, onToggle, initia
     }
   };
 
-  const isInputDisabled = agentState === "done" || (agentState === "offered");
+  const isInputDisabled = agentState === "offered" || (agentState === "done" && consultationTrigger.current === "quota");
 
   if (!isOpen) {
     return (

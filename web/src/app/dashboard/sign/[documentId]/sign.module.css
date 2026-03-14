@@ -3,7 +3,10 @@
   width: 100vw;
   height: 100vh;
   background: #f9fafb;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.containerReadOnly {
+  display: block;
 }
 
 .sidebar {
@@ -160,12 +163,38 @@
 }
 
 .pdfViewer {
+  position: relative;
   flex: 1;
   background: #f5f5f5;
   display: block;
   overflow: auto;
   border: 1px solid #e5e7eb;
   padding: 24px;
+}
+
+.pdfViewerReadOnly {
+  border: none;
+  padding-top: 72px;
+}
+
+.viewerCloseBtn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.viewerCloseBtn:hover {
+  background: #e5e7eb;
 }
 
 .pagesStack {

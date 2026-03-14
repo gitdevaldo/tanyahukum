@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { clearSession, getAccessToken, getValidAccessToken, refreshAccessToken, setSession } from "@/lib/auth-session";
+import { clearSession, getValidAccessToken, refreshAccessToken } from "@/lib/auth-session";
 import { AnalysisResults } from "@/components/cek-dokumen/AnalysisResults";
 import { ChatPanel } from "@/components/cek-dokumen/ChatPanel";
 import type { AnalysisResponse } from "@/components/cek-dokumen/types";
+import { DocumentDetailSidebar } from "@/components/dashboard/DocumentDetailSidebar";
 import styles from "./dashboard.module.css";
 
 const PdfViewer = dynamic(() => import("@/components/cek-dokumen/PdfViewer"), {
@@ -18,14 +19,6 @@ const PdfViewer = dynamic(() => import("@/components/cek-dokumen/PdfViewer"), {
       <div className="animate-spin w-8 h-8 border-2 border-primary-orange border-t-transparent rounded-full" />
     </div>
   ),
-});
-
-const SignaturePad = dynamic(() => import("@/components/cek-dokumen/SignaturePad"), {
-  ssr: false,
-});
-
-const PdfSigningViewer = dynamic(() => import("@/components/cek-dokumen/PdfSigningViewer"), {
-  ssr: false,
 });
 
 const SignatureCreator = dynamic(() => import("@/components/cek-dokumen/SignatureCreator").then(m => ({ default: m.SignatureCreator })), {
@@ -314,9 +307,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshingDocuments, setRefreshingDocuments] = useState(false);
   const [loadingDocumentDetails, setLoadingDocumentDetails] = useState(false);
-  const [processingShare, setProcessingShare] = useState(false);
-  const [processingSign, setProcessingSign] = useState(false);
-  const [processingReject, setProcessingReject] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -372,19 +362,6 @@ export default function DashboardPage() {
     }
   };
 
-  const [shareForm, setShareForm] = useState({
-    filename: "",
-    analysisId: "",
-    signerEmails: "",
-    companyPaysAnalysis: false,
-    expiresAt: "",
-  });
-  const [signForm, setSignForm] = useState({
-    signerName: "",
-    consentText: "Saya menyetujui penandatanganan elektronik dokumen ini.",
-    documentHash: "",
-  });
-  const [rejectReason, setRejectReason] = useState("");
   const [consultForm, setConsultForm] = useState({
     name: "",
     email: "",
@@ -393,36 +370,17 @@ export default function DashboardPage() {
   });
   const [consultSubmitting, setConsultSubmitting] = useState(false);
 
-  // Quick sign state
-  const [signFile, setSignFile] = useState<File | null>(null);
-  const [signQuickName, setSignQuickName] = useState("");
-  const [signingInProgress, setSigningInProgress] = useState(false);
-  const [signResult, setSignResult] = useState<{ url: string; filename: string; documentId: string } | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [signActiveTab, setSignActiveTab] = useState<"list" | "quick" | "share">("list");
-  const [signPanelDocId, setSignPanelDocId] = useState<string | null>(null);
-  const [signPanelSigners, setSignPanelSigners] = useState<DocumentSignersResponse | null>(null);
-  const [signPanelEvents, setSignPanelEvents] = useState<DocumentEventsResponse | null>(null);
-  const [signPanelLoading, setSignPanelLoading] = useState(false);
-  const [signPanelForm, setSignPanelForm] = useState({ signerName: "", consentText: "Saya menyetujui penandatanganan elektronik dokumen ini.", documentHash: "" });
   const [signPanelRejectReason, setSignPanelRejectReason] = useState("");
   const [signPanelProcessing, setSignPanelProcessing] = useState(false);
-  const [signShareForm, setSignShareForm] = useState({ selectedDocId: "", filename: "", signerEmails: "", companyPaysAnalysis: false, expiresAt: "" });
-  const [signShareProcessing, setSignShareProcessing] = useState(false);
+  const [detailShareForm, setDetailShareForm] = useState({
+    signerEmails: "",
+    companyPaysAnalysis: false,
+    expiresAt: "",
+  });
+  const [detailShareProcessing, setDetailShareProcessing] = useState(false);
 
-  // Signature pad and visual signing state
-  const [signatureImage, setSignatureImage] = useState<string | null>(null);
-  const [showPdfSigner, setShowPdfSigner] = useState(false);
-  const [signaturePositions, setSignaturePositions] = useState<
-    Array<{ id: string; x: number; y: number; width: number; height: number }>
-  >([]);
-
-  // Panel signature state (for Detail & Aksi panel signing - NEW FLOW)
+  // Panel signature state
   const [panelSignatureImage, setPanelSignatureImage] = useState<string | null>(null);
-  const [panelShowPdfSigner, setPanelShowPdfSigner] = useState(false);
-  const [panelSignaturePositions, setPanelSignaturePositions] = useState<
-    Array<{ id: string; x: number; y: number; width: number; height: number }>
-  >([]);
   const [panelSignatureName, setPanelSignatureName] = useState<string>("");
   const [panelSignatureType, setPanelSignatureType] = useState<"text" | "drawn" | "image" | null>(null);
   const [panelCanSign, setPanelCanSign] = useState(false);
@@ -569,9 +527,7 @@ export default function DashboardPage() {
           if (options?.preserveSelection !== false && prev && payload.documents.some((d) => d.document_id === prev)) {
             return prev;
           }
-          const pendingMine = payload.documents.find((doc) => doc.my_signer_status === "pending");
-          if (pendingMine) return pendingMine.document_id;
-          return payload.documents[0]?.document_id ?? null;
+          return null;
         });
       } finally {
         setRefreshingDocuments(false);
@@ -655,19 +611,13 @@ export default function DashboardPage() {
         owned_total: docsData.owned_total,
         pending_my_action: docsData.pending_my_action,
       });
-      setSignForm((prev) => ({
-        ...prev,
-        signerName: meData.name || prev.signerName,
-      }));
       setConsultForm((prev) => ({
         ...prev,
         name: prev.name || meData.name || "",
         email: prev.email || meData.email || "",
       }));
 
-      const pendingMine = docsData.documents.find((doc) => doc.my_signer_status === "pending");
-      const defaultDocId = pendingMine?.document_id ?? docsData.documents[0]?.document_id ?? null;
-      setSelectedDocumentId(defaultDocId);
+      setSelectedDocumentId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan saat memuat dashboard.");
     } finally {
@@ -707,6 +657,19 @@ export default function DashboardPage() {
     const selected = documents.find((doc) => doc.document_id === selectedDocumentId) ?? null;
     loadDocumentDetails(selectedDocumentId, selected?.status);
   }, [selectedDocumentId, documents, loadDocumentDetails]);
+
+  useEffect(() => {
+    setPanelCanSign(false);
+    setPanelSignatureName("");
+    setPanelSignatureType(null);
+    setPanelSignatureImage(null);
+    setSignPanelRejectReason("");
+    setDetailShareForm({
+      signerEmails: "",
+      companyPaysAnalysis: false,
+      expiresAt: "",
+    });
+  }, [selectedDocumentId]);
 
   useEffect(() => {
     if (error) {
@@ -756,7 +719,11 @@ export default function DashboardPage() {
       const res = await requestWithAuth(path, { method: "GET", timeoutMs: 30000 });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(parseApiError(errData, "Gagal mengunduh file."));
+        const detail = parseApiError(errData, "Gagal mengunduh file.");
+        if (detail.toLowerCase().includes("bearer token")) {
+          throw new Error("Unduhan hanya tersedia untuk pengguna yang sedang login melalui dashboard.");
+        }
+        throw new Error(detail);
       }
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -779,112 +746,14 @@ export default function DashboardPage() {
     }
   }
 
-  async function submitShare(e: FormEvent<HTMLFormElement>) {
+  async function handlePanelReject(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (processingShare) return;
-
-    const emails = shareForm.signerEmails
-      .split(/[,\n;]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    if (!shareForm.filename.trim()) {
-      setError("Nama dokumen wajib diisi.");
-      setNotice(null);
-      return;
-    }
-    if (emails.length === 0) {
-      setError("Masukkan minimal satu email penerima.");
-      setNotice(null);
-      return;
-    }
-
-    setProcessingShare(true);
-    setError(null);
-    try {
-      const expiresAtIso = shareForm.expiresAt ? new Date(shareForm.expiresAt).toISOString() : null;
-      const payload = {
-        analysis_id: shareForm.analysisId.trim() || null,
-        filename: shareForm.filename.trim(),
-        signer_emails: emails,
-        company_pays_analysis: shareForm.companyPaysAnalysis,
-        expires_at: expiresAtIso,
-      };
-
-      const result = await requestJson<ShareDocumentResponse>("/api/documents/share/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        fallbackError: "Gagal membagikan dokumen.",
-      });
-
-      setShareForm({
-        filename: "",
-        analysisId: "",
-        signerEmails: "",
-        companyPaysAnalysis: false,
-        expiresAt: "",
-      });
-      setNotice(result.message);
-      await loadDocuments({
-        preferredDocumentId: result.document_id,
-        preserveSelection: false,
-      });
-      setActiveSection("documents");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal membagikan dokumen.");
-      setNotice(null);
-    } finally {
-      setProcessingShare(false);
-    }
-  }
-
-  async function submitSign(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!selectedDocumentId || processingSign) return;
-    if (!signForm.signerName.trim() || !signForm.documentHash.trim() || !signForm.consentText.trim()) {
-      setError("Nama signer, consent, dan document hash wajib diisi.");
-      setNotice(null);
-      return;
-    }
-
-    setProcessingSign(true);
+    if (!selectedDocumentId || signPanelProcessing) return;
+    setSignPanelProcessing(true);
     setError(null);
     try {
       const payload = {
-        signer_name: signForm.signerName.trim(),
-        consent_text: signForm.consentText.trim(),
-        document_hash: signForm.documentHash.trim(),
-      };
-      const result = await requestJson<DocumentActionResponse>(
-        `/api/documents/${selectedDocumentId}/sign/`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          fallbackError: "Gagal menandatangani dokumen.",
-        },
-      );
-      setNotice(result.message);
-      await loadDocuments({ preferredDocumentId: selectedDocumentId });
-      await loadDocumentDetails(selectedDocumentId, result.status);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menandatangani dokumen.");
-      setNotice(null);
-    } finally {
-      setProcessingSign(false);
-    }
-  }
-
-  async function submitReject(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!selectedDocumentId || processingReject) return;
-
-    setProcessingReject(true);
-    setError(null);
-    try {
-      const payload = {
-        reason: rejectReason.trim() || null,
+        reason: signPanelRejectReason.trim() || null,
       };
       const result = await requestJson<DocumentActionResponse>(
         `/api/documents/${selectedDocumentId}/reject/`,
@@ -896,14 +765,72 @@ export default function DashboardPage() {
         },
       );
       setNotice(result.message);
-      setRejectReason("");
+      setSignPanelRejectReason("");
       await loadDocuments({ preferredDocumentId: selectedDocumentId });
       await loadDocumentDetails(selectedDocumentId, result.status);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menolak dokumen.");
       setNotice(null);
     } finally {
-      setProcessingReject(false);
+      setSignPanelProcessing(false);
+    }
+  }
+
+  function handleOpenSigningPage() {
+    if (!selectedDocumentId || !panelSignatureName || !panelCanSign) return;
+    const sigData = {
+      name: panelSignatureName,
+      type: panelSignatureType,
+      content: panelSignatureImage,
+    };
+    sessionStorage.setItem(`sig_data_${selectedDocumentId}`, JSON.stringify(sigData));
+    window.open(`/dashboard/sign/${selectedDocumentId}`, "_blank");
+  }
+
+  async function handleDetailShareSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!selectedDocument || detailShareProcessing) return;
+    const emails = detailShareForm.signerEmails
+      .split(/[,\n;]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      setError("Masukkan minimal satu email penerima.");
+      setNotice(null);
+      return;
+    }
+
+    setDetailShareProcessing(true);
+    setError(null);
+    try {
+      const expiresAtIso = detailShareForm.expiresAt
+        ? new Date(detailShareForm.expiresAt).toISOString()
+        : null;
+      const result = await requestJson<ShareDocumentResponse>("/api/documents/share/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selectedDocument.filename,
+          analysis_id: selectedDocument.analysis_id,
+          signer_emails: emails,
+          company_pays_analysis: detailShareForm.companyPaysAnalysis,
+          expires_at: expiresAtIso,
+        }),
+        fallbackError: "Gagal membagikan dokumen.",
+      });
+      setNotice(result.message);
+      setDetailShareForm({
+        signerEmails: "",
+        companyPaysAnalysis: false,
+        expiresAt: "",
+      });
+      await loadDocuments({ preferredDocumentId: selectedDocument.document_id });
+      await loadDocumentDetails(selectedDocument.document_id, selectedDocument.status);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal membagikan dokumen.");
+      setNotice(null);
+    } finally {
+      setDetailShareProcessing(false);
     }
   }
 
@@ -954,6 +881,10 @@ export default function DashboardPage() {
 
   const pendingDocuments = useMemo(
     () => documents.filter((doc) => doc.my_signer_status === "pending").slice(0, 8),
+    [documents],
+  );
+  const pendingActionCount = useMemo(
+    () => documents.filter((doc) => doc.my_signer_status === "pending").length,
     [documents],
   );
   const userInitial = toInitials(profile?.name || "Akun");
@@ -1102,7 +1033,7 @@ export default function DashboardPage() {
                 </svg>
               </span>
             </div>
-            <p className={styles.statValue}>{formatNumber(documentsMeta.pending_my_action)}</p>
+            <p className={styles.statValue}>{formatNumber(pendingActionCount)}</p>
             <p className={styles.statMeta}>
               Dokumen menunggu Anda
             </p>
@@ -1641,455 +1572,197 @@ export default function DashboardPage() {
   }
 
   function renderSignPanel() {
-    // --- Helpers ---
-    const handleFileDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f && f.type === "application/pdf") { setSignFile(f); setSignResult(null); setError(null); } else { setError("Hanya file PDF yang didukung."); } };
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) { setSignFile(f); setSignResult(null); setError(null); } };
-    const formatFileSize = (b: number) => b < 1024 ? `${b} B` : b < 1024*1024 ? `${(b/1024).toFixed(1)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
-
-    const handleQuickSign = async () => {
-      if (!signFile || !signatureImage || signaturePositions.length === 0) return;
-      const name = signQuickName.trim() || profile?.name || "";
-      if (!name) { setError("Nama penandatangan wajib diisi."); return; }
-      setSigningInProgress(true); setError(null); setSignResult(null);
-      try {
-        const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
-        
-        // Create FormData with PDF, signature image, and positions
-        const fd = new FormData();
-        fd.append("pdf_file", signFile);
-        fd.append("signature_image", await fetch(signatureImage).then(r => r.blob()), "signature.png");
-        fd.append("positions_json", JSON.stringify(signaturePositions));
-        fd.append("signer_name", name);
-        
-        const res = await fetch("/api/signatures/apply", { 
-          method: "POST", 
-          headers: { Authorization: `Bearer ${token}` }, 
-          body: fd 
-        });
-        
-        if (!res.ok) { 
-          const err = await res.json().catch(() => ({ detail: "Gagal menandatangani." })); 
-          throw new Error(parseApiError(err, "Gagal menandatangani dokumen."));
-        }
-        
-        const result = await res.json();
-        
-        // Convert base64 to blob and download
-        const binaryString = atob(result.signed_pdf);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
-        const blob = new Blob([bytes], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        
-        setSignResult({ url, filename: result.filename, documentId: "" });
-        setNotice("Dokumen berhasil ditandatangani!"); 
-        loadDocuments();
-      } catch (err) { 
-        setError(err instanceof Error ? err.message : "Terjadi kesalahan."); 
-      } finally { 
-        setSigningInProgress(false); 
-      }
-    };
-
-    const loadSignPanelDoc = async (docId: string) => {
-      setSignPanelDocId(docId); setSignPanelLoading(true); setSignPanelSigners(null); setSignPanelEvents(null);
-      try {
-        const [signers, events] = await Promise.all([
-          requestJson<DocumentSignersResponse>(`/api/documents/${docId}/signers`, { fallbackError: "Gagal memuat signer." }),
-          requestJson<DocumentEventsResponse>(`/api/documents/${docId}/events`, { fallbackError: "Gagal memuat events." }),
-        ]);
-        setSignPanelSigners(signers); setSignPanelEvents(events);
-        setSignPanelForm((prev) => ({ ...prev, signerName: profile?.name || "" }));
-      } catch { /* ignore */ } finally { setSignPanelLoading(false); }
-    };
-
-    const handlePanelSign = async (e: FormEvent) => {
-      e.preventDefault(); if (!signPanelDocId) return;
-      setSignPanelProcessing(true);
-      try {
-        await requestJson<DocumentActionResponse>(`/api/documents/${signPanelDocId}/sign`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signer_name: signPanelForm.signerName, consent_text: signPanelForm.consentText, document_hash: signPanelForm.documentHash || "consent-only" }),
-          fallbackError: "Gagal menandatangani.",
-        });
-        setNotice("Berhasil menandatangani!"); loadDocuments(); loadSignPanelDoc(signPanelDocId);
-      } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignPanelProcessing(false); }
-    };
-
-    const handlePanelReject = async (e: FormEvent) => {
-      e.preventDefault(); if (!signPanelDocId) return;
-      setSignPanelProcessing(true);
-      try {
-        await requestJson<DocumentActionResponse>(`/api/documents/${signPanelDocId}/reject`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: signPanelRejectReason || null }),
-          fallbackError: "Gagal menolak.",
-        });
-        setNotice("Dokumen berhasil ditolak."); loadDocuments(); loadSignPanelDoc(signPanelDocId);
-      } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignPanelProcessing(false); }
-    };
-
-    const handlePanelVisualSign = async () => {
-      if (!signPanelDocId || !panelSignatureImage || panelSignaturePositions.length === 0 || !panelDoc) return;
-      const name = signPanelForm.signerName.trim() || profile?.name || "";
-      if (!name) { setError("Nama penandatangan wajib diisi."); return; }
-      setSignPanelProcessing(true); setError(null);
-      try {
-        const token = await getValidAccessToken(); if (!token) { clearSession(); router.replace("/login/"); return; }
-        
-        // Fetch PDF from document
-        const pdfRes = await fetch(`/api/documents/${signPanelDocId}/pdf`, { 
-          headers: { Authorization: `Bearer ${token}` } 
-        });
-        if (!pdfRes.ok) throw new Error("Gagal memuat dokumen PDF.");
-        const pdfBlob = await pdfRes.blob();
-        
-        // Create FormData with PDF, signature, and positions
-        const fd = new FormData();
-        fd.append("pdf_file", pdfBlob, "document.pdf");
-        fd.append("signature_image", await fetch(panelSignatureImage).then(r => r.blob()), "signature.png");
-        fd.append("positions_json", JSON.stringify(panelSignaturePositions));
-        fd.append("signer_name", name);
-        
-        const res = await fetch("/api/signatures/apply", { 
-          method: "POST", 
-          headers: { Authorization: `Bearer ${token}` }, 
-          body: fd 
-        });
-        
-        if (!res.ok) { 
-          const err = await res.json().catch(() => ({ detail: "Gagal menandatangani." })); 
-          throw new Error(parseApiError(err, "Gagal menandatangani dokumen."));
-        }
-        
-        const result = await res.json();
-        
-        // Save the signed PDF back to the document
-        const signedFd = new FormData();
-        const binaryString = atob(result.signed_pdf);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
-        const signedBlob = new Blob([bytes], { type: "application/pdf" });
-        signedFd.append("signed_pdf", signedBlob, result.filename);
-        signedFd.append("signer_name", name);
-        
-        await fetch(`/api/documents/${signPanelDocId}/sign-visual`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: signedFd
-        });
-        
-        setNotice("Dokumen berhasil ditandatangani!"); 
-        setPanelSignatureImage(null);
-        setPanelSignaturePositions([]);
-        setPanelShowPdfSigner(false);
-        loadDocuments(); 
-        loadSignPanelDoc(signPanelDocId);
-      } catch (err) { 
-        setError(err instanceof Error ? err.message : "Terjadi kesalahan."); 
-      } finally { 
-        setSignPanelProcessing(false); 
-      }
-    };
-
-    const handleOpenSigningPage = () => {
-      if (!signPanelDocId || !panelSignatureName || !panelCanSign) return;
-      // Store signature data in sessionStorage for new tab
-      const sigData = {
-        name: panelSignatureName,
-        type: panelSignatureType,
-        content: panelSignatureImage,
-      };
-      sessionStorage.setItem(`sig_data_${signPanelDocId}`, JSON.stringify(sigData));
-      // Open new tab for full-screen signing
-      window.open(`/dashboard/sign/${signPanelDocId}`, '_blank');
-    };
-
-    const handleShareSubmit = async (e: FormEvent) => {
-      e.preventDefault(); setSignShareProcessing(true);
-      try {
-        const selectedDoc = documents.find((d) => d.document_id === signShareForm.selectedDocId);
-        await requestJson<ShareDocumentResponse>("/api/documents/share", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: selectedDoc?.filename || signShareForm.filename, analysis_id: selectedDoc?.analysis_id || null,
-            signer_emails: signShareForm.signerEmails.split(",").map((s) => s.trim()).filter(Boolean),
-            company_pays_analysis: signShareForm.companyPaysAnalysis, expires_at: signShareForm.expiresAt || null,
-          }),
-          fallbackError: "Gagal membagikan dokumen.",
-        });
-        setNotice("Dokumen berhasil dikirim untuk ditandatangani!"); loadDocuments();
-        setSignShareForm({ selectedDocId: "", filename: "", signerEmails: "", companyPaysAnalysis: false, expiresAt: "" });
-        setSignActiveTab("list");
-      } catch (err) { setError(err instanceof Error ? err.message : "Gagal."); } finally { setSignShareProcessing(false); }
-    };
-
-    const panelDoc = signPanelDocId ? documents.find((d) => d.document_id === signPanelDocId) : null;
-    const canSign = panelDoc && (
-      (panelDoc.status === "analyzed" && panelDoc.my_signer_role === "sender") ||
-      panelDoc.my_signer_status === "pending"
+    const canSign = selectedDocument && (
+      (selectedDocument.status === "analyzed" && selectedDocument.my_signer_role === "sender")
+      || selectedDocument.my_signer_status === "pending"
     );
-    const canReject = panelDoc && panelDoc.my_signer_status === "pending";
-    const isCompleted = panelDoc?.status === "completed";
+    const canReject = selectedDocument?.my_signer_status === "pending";
+    const canShare = selectedDocument
+      && selectedDocument.my_signer_role === "sender"
+      && selectedDocument.status !== "completed"
+      && selectedDocument.status !== "rejected";
 
-    const tabClass = (t: string) => `${styles.signTab} ${signActiveTab === t ? styles.signTabActive : ""}`;
-
-    return (
-      <section>
-        {/* Tab Navigation */}
-        <div className={styles.signTabs}>
-          <button type="button" className={tabClass("list")} onClick={() => setSignActiveTab("list")}>
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Dokumen Saya
-          </button>
-          <button type="button" className={tabClass("quick")} onClick={() => setSignActiveTab("quick")}>
-            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Tanda Tangan Cepat
-          </button>
-          <button type="button" className={tabClass("share")} onClick={() => setSignActiveTab("share")}>
-            <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            Bagikan Dokumen
-          </button>
-        </div>
-
-        {/* Tab 1: Dokumen Saya */}
-        {signActiveTab === "list" && (
-          <div className={styles.twoCol}>
-            <article className={styles.card}>
-              <div className={styles.cardHeader}>
-                <div><p className={styles.cardTitle}>Daftar Dokumen</p><p className={styles.cardSub}>Semua dokumen — tanda tangani, lacak status, dan unduh.</p></div>
-                <button type="button" onClick={() => loadDocuments()} className={styles.actionBtn}>Muat Ulang</button>
-              </div>
-              <div className={styles.cardBody} style={{ padding: 0 }}>
-                {documents.length === 0 ? (
-                  <div className="flex w-full min-h-[200px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Belum ada dokumen. Gunakan &quot;Tanda Tangan Cepat&quot; atau &quot;Bagikan Dokumen&quot; untuk memulai.</div>
-                ) : (
-                  <table className={styles.table}>
-                    <thead><tr><th>Dokumen</th><th>Status</th><th>Peran</th><th>Progress</th><th>Updated</th></tr></thead>
-                    <tbody>
-                      {documents.map((doc) => (
-                        <tr key={doc.document_id} onClick={() => loadSignPanelDoc(doc.document_id)} style={{ cursor: "pointer", background: signPanelDocId === doc.document_id ? "#f8fafc" : undefined }}>
-                          <td><span className={styles.docName}>{doc.filename}</span></td>
-                          <td><span className={`${styles.badge} ${styles[`badge${statusVariant(doc.status).charAt(0).toUpperCase() + statusVariant(doc.status).slice(1)}` as keyof typeof styles] || ""}`}>{formatStatus(doc.status)}</span></td>
-                          <td style={{ fontSize: 12, color: "#64748b" }}>{doc.my_signer_role === "sender" ? "Pemilik" : "Penandatangan"}</td>
-                          <td style={{ fontSize: 12, color: "#64748b" }}>{doc.signers_signed}/{doc.signers_total} ditandatangani</td>
-                          <td style={{ fontSize: 12, color: "#94a3b8" }}>{formatShortDate(doc.updated_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </article>
-
-            {/* Detail Panel */}
-            <article className={styles.card}>
-              <div className={styles.cardHeader}><div><p className={styles.cardTitle}>Detail &amp; Aksi</p></div></div>
-              <div className={styles.cardBody}>
-                {!panelDoc ? (
-                  <div className="flex w-full min-h-[250px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Pilih dokumen untuk melihat detail.</div>
-                ) : signPanelLoading ? (
-                  <p style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: 24 }}>Memuat...</p>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    {/* Doc info */}
-                    <div style={{ padding: "12px 0", borderBottom: "1px solid #f0f0f0" }}>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{panelDoc.filename}</p>
-                      <p style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Status: {formatStatus(panelDoc.status)} - {panelDoc.signers_signed}/{panelDoc.signers_total} tanda tangan</p>
-                    </div>
-
-                    {/* Signers list */}
-                    {signPanelSigners && (
-                      <div>
-                        <p className={styles.signLabel} style={{ marginBottom: 8 }}>Penandatangan</p>
-                        <div className={styles.signerList}>
-                          {signPanelSigners.signers.map((s) => (
-                            <div key={s.email} className={styles.signerRow}>
-                              <span className={`${styles.docAvatar} ${s.status === "signed" ? styles.docAvatarGreen : s.status === "rejected" ? styles.docAvatarAmber : styles.docAvatarBlue}`}>{toInitials(s.name || s.email)}</span>
-                              <div className={styles.signerInfo}><p className={styles.signerName}>{s.name || s.email}</p><p className={styles.signerEmail}>{s.email} - {s.role === "sender" ? "Pemilik" : "Penandatangan"}</p></div>
-                              <span className={`${styles.badge} ${s.status === "signed" ? styles.badgeSigned : s.status === "rejected" ? styles.badgeRejected : styles.badgePending}`}>{s.status === "signed" ? "Telah TTD" : s.status === "rejected" ? "Ditolak" : "Tertunda"}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Sign form - NEW Signature Creator Flow */}
-                    {canSign && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
-                        {!panelCanSign ? (
-                          <>
-                            <SignatureCreator 
-                              onSignatureCreated={(sig) => {
-                                setPanelSignatureName(sig.displayName);
-                                setPanelSignatureType(sig.type);
-                                setPanelSignatureImage(sig.content);
-                              }}
-                              onCanSignChange={setPanelCanSign}
-                            />
-                          </>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                            <div style={{ padding: "12px", background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0", fontSize: 13, color: "#166534" }}>✓ Tanda tangan siap</div>
-                            <p style={{ fontSize: 12, color: "#64748b" }}><strong>Nama:</strong> {panelSignatureName}</p>
-                            <div style={{ display: "flex", gap: 12 }}>
-                              <button type="button" onClick={() => { setPanelCanSign(false); setPanelSignatureName(""); setPanelSignatureType(null); setPanelSignatureImage(null); }} className={styles.signBtn} style={{ flex: 1, background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>
-                                Ulangi
-                              </button>
-                              <button type="button" onClick={handleOpenSigningPage} className={styles.signBtn} style={{ flex: 1 }}>
-                                Tanda Tangani
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Reject form */}
-                    {canReject && (
-                      <form onSubmit={handlePanelReject} style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
-                        <p className={styles.signLabel} style={{ color: "#dc2626" }}>Tolak Dokumen</p>
-                        <input type="text" placeholder="Alasan penolakan (opsional)" value={signPanelRejectReason} onChange={(e) => setSignPanelRejectReason(e.target.value)} className={styles.signInput} />
-                        <button type="submit" disabled={signPanelProcessing} className={styles.signBtn} style={{ background: "#dc2626", boxShadow: "0 2px 8px rgba(220,38,38,0.2)", alignSelf: "flex-start" }}>
-                          {signPanelProcessing ? "Menolak..." : "Tolak Dokumen"}
-                        </button>
-                      </form>
-                    )}
-
-                    {/* Download buttons for completed */}
-                    {isCompleted && (
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        <a href={`/api/documents/${panelDoc.document_id}/certificate/pdf`} target="_blank" rel="noopener" className={styles.downloadBtn}>Sertifikat</a>
-                        <a href={`/api/documents/${panelDoc.document_id}/signed-pdf`} target="_blank" rel="noopener" className={styles.downloadBtn} style={{ background: "#1a56e8" }}>PDF Hasil TTD</a>
-                      </div>
-                    )}
-
-                    {/* Audit trail */}
-                    {signPanelEvents && signPanelEvents.events.length > 0 && (
-                      <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
-                        <p className={styles.signLabel}>Audit Trail</p>
-                        <div className={styles.activityList}>
-                          {signPanelEvents.events.slice(0, 8).map((ev) => (
-                            <div key={ev.id} className={styles.activityItem}>
-                              <div className={styles.activityDotWrap}><div className={`${styles.activityDot} ${ev.event_type === "signed" || ev.event_type === "quick_signed" ? styles.dotGreen : ev.event_type === "rejected" ? styles.dotRed : styles.dotBlue}`}/><div className={styles.activityLine}/></div>
-                              <div className={styles.activityContent}><p className={styles.activityText}><b>{ev.event_type.replace(/_/g, " ")}</b> oleh {toDisplayName(ev.actor_email)}</p><p className={styles.activityTime}>{formatDateTime(ev.created_at)}</p></div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </article>
-          </div>
-        )}
-
-        {/* Tab 2: Tanda Tangan Cepat */}
-        {signActiveTab === "quick" && (
-          <article className={styles.card}>
-            <div className={styles.cardHeader}>
-              <div><p className={styles.cardTitle}>Tanda Tangan Cepat</p><p className={styles.cardSub}>Unggah PDF dan tanda tangani langsung dengan sertifikat digital.</p></div>
-            </div>
-            <div className={styles.cardBody}>
-              {!signFile && !signResult && (
-                <div className={`${styles.uploadZone} ${dragOver ? styles.uploadZoneActive : ""}`} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleFileDrop} onClick={() => document.getElementById("sign-file-input")?.click()}>
-                  <input id="sign-file-input" type="file" accept=".pdf" onChange={handleFileSelect} style={{ display: "none" }} />
-                  <div className={styles.uploadIcon}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-                  <p className={styles.uploadTitle}>Tarik &amp; lepas PDF atau klik untuk unggah</p>
-                  <p className={styles.uploadHint}>Maksimal 20MB - Hanya file PDF</p>
-                </div>
-              )}
-              {signFile && !showPdfSigner && !signResult && (
-                <div className={styles.signFormWrap}>
-                  <div className={styles.filePreview}>
-                    <div className={styles.fileIcon}><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-                    <div className={styles.fileInfo}><p className={styles.fileName}>{signFile.name}</p><p className={styles.fileMeta}>{formatFileSize(signFile.size)} - PDF</p></div>
-                    <button type="button" className={styles.fileRemove} onClick={() => { setSignFile(null); setSignatureImage(null); setSignaturePositions([]); setError(null); }}>&times;</button>
-                  </div>
-                  <div className={styles.signFields}>
-                    <div><label className={styles.signLabel}>Nama Penandatangan</label><input type="text" value={signQuickName} onChange={(e) => setSignQuickName(e.target.value)} placeholder={profile?.name || "Nama lengkap"} className={styles.signInput} /></div>
-                    {!signatureImage && <SignaturePad onSignatureChange={setSignatureImage} />}
-                    {signatureImage && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        <div style={{ padding: "12px", background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0", fontSize: 13, color: "#166534" }}>✓ Tanda tangan siap</div>
-                        <button type="button" onClick={() => setShowPdfSigner(true)} className={styles.signBtn}>Lanjut ke Pemosisian</button>
-                        <button type="button" onClick={() => { setSignatureImage(null); setSignaturePositions([]); }} className={styles.signBtn} style={{ background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db" }}>Ganti Tanda Tangan</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {signFile && showPdfSigner && signatureImage && !signResult && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "600px" }}>
-                  <PdfSigningViewer
-                    pdfUrl={URL.createObjectURL(signFile)}
-                    signatureImage={signatureImage}
-                    onPositionsChange={setSignaturePositions}
-                    onClose={() => setShowPdfSigner(false)}
-                  />
-                  <div className={styles.consentBox}><svg viewBox="0 0 24 24" className={styles.consentIcon}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><p>Saya menyetujui penandatanganan elektronik dokumen ini secara sah.</p></div>
-                  <button type="button" onClick={handleQuickSign} disabled={signingInProgress || signaturePositions.length === 0} className={styles.signBtn}>
-                    {signingInProgress ? <><span className={styles.spinner}/>Menandatangani...</> : <>Tanda Tangani Sekarang</>}
+    const detailActionContent = selectedDocument ? (
+      <div className="space-y-4">
+        {canSign ? (
+          <div className="space-y-3 border-t border-border-light pt-3">
+            {!panelCanSign ? (
+              <SignatureCreator
+                onSignatureCreated={(sig) => {
+                  setPanelSignatureName(sig.displayName);
+                  setPanelSignatureType(sig.type);
+                  setPanelSignatureImage(sig.content);
+                }}
+                onCanSignChange={setPanelCanSign}
+              />
+            ) : (
+              <div className="space-y-2 rounded-md border border-green-200 bg-green-50 p-3">
+                <p className="text-xs text-green-800">Tanda tangan siap digunakan.</p>
+                <p className="text-xs text-neutral-gray"><strong>Nama:</strong> {panelSignatureName}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPanelCanSign(false);
+                      setPanelSignatureName("");
+                      setPanelSignatureType(null);
+                      setPanelSignatureImage(null);
+                    }}
+                    className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
+                  >
+                    Ulangi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenSigningPage}
+                    className="rounded-md bg-dark-navy px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                  >
+                    Tanda Tangani
                   </button>
                 </div>
-              )}
-              {signResult && (
-                <div className={styles.signSuccess}>
-                  <div className={styles.successIcon}><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
-                  <p className={styles.successTitle}>Dokumen Berhasil Ditandatangani!</p>
-                  <p className={styles.successSub}>Sertifikat digital telah ditambahkan ke dalam PDF Anda.</p>
-                  <div className={styles.successActions}>
-                    <a href={signResult.url} download={signResult.filename} className={styles.downloadBtn}><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Unduh</a>
-                    <button type="button" className={styles.signAgainBtn} onClick={() => { setSignFile(null); setSignResult(null); setError(null); setSignQuickName(""); setSignatureImage(null); setSignaturePositions([]); setShowPdfSigner(false); }}>Tanda Tangani Lagi</button>
-                  </div>
-                </div>
-              )}
+              </div>
+            )}
+          </div>
+        ) : null}
 
-            </div>
-          </article>
-        )}
+        {canReject ? (
+          <form onSubmit={handlePanelReject} className="space-y-2 border-t border-border-light pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Tolak</p>
+            <textarea
+              value={signPanelRejectReason}
+              onChange={(e) => setSignPanelRejectReason(e.target.value)}
+              className="h-16 w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
+              placeholder="Alasan penolakan (opsional)"
+            />
+            <button
+              type="submit"
+              disabled={signPanelProcessing}
+              className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {signPanelProcessing ? "Memproses..." : "Tolak Dokumen"}
+            </button>
+          </form>
+        ) : null}
 
-        {/* Tab 3: Bagikan Dokumen */}
-        {signActiveTab === "share" && (
+        {canShare ? (
+          <form onSubmit={handleDetailShareSubmit} className="space-y-2 border-t border-border-light pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Bagikan Dokumen</p>
+            <input
+              type="text"
+              value={detailShareForm.signerEmails}
+              onChange={(e) => setDetailShareForm((prev) => ({ ...prev, signerEmails: e.target.value }))}
+              className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+              placeholder="email1@contoh.com, email2@contoh.com"
+              required
+            />
+            <input
+              type="datetime-local"
+              value={detailShareForm.expiresAt}
+              onChange={(e) => setDetailShareForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
+              className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+            />
+            <label className="flex items-center gap-2 text-xs text-neutral-gray">
+              <input
+                type="checkbox"
+                checked={detailShareForm.companyPaysAnalysis}
+                onChange={(e) => setDetailShareForm((prev) => ({ ...prev, companyPaysAnalysis: e.target.checked }))}
+              />
+              Perusahaan tanggung biaya analisis
+            </label>
+            <button
+              type="submit"
+              disabled={detailShareProcessing}
+              className="rounded-md bg-dark-navy px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {detailShareProcessing ? "Mengirim..." : "Kirim untuk Ditandatangani"}
+            </button>
+          </form>
+        ) : null}
+      </div>
+    ) : null;
+
+    return (
+      <section className="space-y-4">
+        <div className={selectedDocument ? styles.twoCol : undefined}>
           <article className={styles.card}>
             <div className={styles.cardHeader}>
-              <div><p className={styles.cardTitle}>Bagikan Dokumen untuk Ditandatangani</p><p className={styles.cardSub}>Pilih dokumen, tambahkan penerima, dan kirim untuk co-sign.</p></div>
+              <div>
+                <p className={styles.cardTitle}>Daftar Dokumen</p>
+                <p className={styles.cardSub}>Pilih dokumen untuk menandatangani atau melihat detail.</p>
+              </div>
+              <button type="button" onClick={() => loadDocuments()} className={styles.actionBtn}>
+                Muat Ulang
+              </button>
             </div>
-            <div className={styles.cardBody}>
-              <form onSubmit={handleShareSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <label className={styles.signLabel}>Pilih Dokumen</label>
-                  <select value={signShareForm.selectedDocId} onChange={(e) => { const doc = documents.find((d) => d.document_id === e.target.value); setSignShareForm((f) => ({ ...f, selectedDocId: e.target.value, filename: doc?.filename || "" })); }} className={styles.signInput} style={{ appearance: "auto" }} required>
-                    <option value="">-- Pilih dokumen yang akan dibagikan --</option>
-                    {documents.filter((d) => d.my_signer_role === "sender").map((doc) => (
-                      <option key={doc.document_id} value={doc.document_id}>{doc.filename} {doc.analysis_id ? "(sudah dianalisis)" : ""}</option>
-                    ))}
-                  </select>
-                  {!documents.some((d) => d.my_signer_role === "sender") && (
-                    <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>Belum ada dokumen milik Anda. Gunakan &quot;Tanda Tangan Cepat&quot; untuk membuat dokumen terlebih dahulu.</p>
-                  )}
+            <div className={styles.cardBody} style={{ padding: 0 }}>
+              {documents.length === 0 ? (
+                <div className="flex w-full min-h-[200px] items-center justify-center p-6 text-sm text-neutral-gray text-center">
+                  Belum ada dokumen.
                 </div>
-                {(() => { const sd = documents.find((d) => d.document_id === signShareForm.selectedDocId); return sd ? (
-                  <div style={{ padding: "10px 14px", background: "#f8fafc", borderRadius: 10, border: "1px solid #f0f0f0", fontSize: 12, color: "#475569" }}>
-                    <p><strong>Dokumen:</strong> {sd.filename}</p>
-                    <p><strong>Status:</strong> {formatStatus(sd.status)} - {sd.signers_signed}/{sd.signers_total} ditandatangani</p>
-                    {sd.analysis_id && <p style={{ color: "#059669" }}>Analisis AI terdeteksi otomatis</p>}
-                  </div>
-                ) : null; })()}
-                <div><label className={styles.signLabel}>Email Penerima</label><input type="text" value={signShareForm.signerEmails} onChange={(e) => setSignShareForm((f) => ({ ...f, signerEmails: e.target.value }))} placeholder="nama@email.com, nama2@email.com" className={styles.signInput} required /><p style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Pisahkan beberapa email dengan koma</p></div>
-                <div><label className={styles.signLabel}>Batas Waktu (opsional)</label><input type="datetime-local" value={signShareForm.expiresAt} onChange={(e) => setSignShareForm((f) => ({ ...f, expiresAt: e.target.value }))} className={styles.signInput} /></div>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", cursor: "pointer" }}>
-                  <input type="checkbox" checked={signShareForm.companyPaysAnalysis} onChange={(e) => setSignShareForm((f) => ({ ...f, companyPaysAnalysis: e.target.checked }))} />
-                  Dibayar Perusahaan -- tanggung biaya analisis AI untuk penerima
-                </label>
-                <button type="submit" disabled={signShareProcessing || !signShareForm.selectedDocId} className={styles.signBtn}>
-                  {signShareProcessing ? <><span className={styles.spinner}/>Mengirim...</> : <>Kirim untuk Ditandatangani</>}
-                </button>
-              </form>
+              ) : (
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Dokumen</th>
+                      <th>Status</th>
+                      <th>Peran</th>
+                      <th>Progress</th>
+                      <th>Diperbarui</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => (
+                      <tr
+                        key={doc.document_id}
+                        onClick={() => setSelectedDocumentId((prev) => (prev === doc.document_id ? null : doc.document_id))}
+                        style={{ cursor: "pointer", background: selectedDocumentId === doc.document_id ? "#f8fafc" : undefined }}
+                      >
+                        <td><span className={styles.docName}>{doc.filename}</span></td>
+                        <td>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(doc.status)}`}>
+                            {formatStatus(doc.status)}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: "#64748b" }}>
+                          {doc.my_signer_role === "sender" ? "Pemilik" : doc.my_signer_role === "recipient" ? "Penandatangan" : "-"}
+                        </td>
+                        <td style={{ fontSize: 12, color: "#64748b" }}>
+                          {doc.signers_signed}/{doc.signers_total} ditandatangani
+                        </td>
+                        <td style={{ fontSize: 12, color: "#94a3b8" }}>{formatShortDate(doc.updated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </article>
-        )}
+
+          {selectedDocument ? (
+            <DocumentDetailSidebar
+              className={styles.card}
+              selectedDocument={selectedDocument}
+              selectedSigners={selectedSigners}
+              selectedEvents={selectedEvents}
+              selectedCertificate={selectedCertificate}
+              loadingDocumentDetails={loadingDocumentDetails}
+              signedCount={signedCount}
+              totalSignerCount={totalSignerCount}
+              statusBadgeClass={statusBadgeClass}
+              formatStatus={formatStatus}
+              formatDateTime={formatDateTime}
+              onRefreshDetails={loadDocumentDetails}
+              onOpenAnalysis={(analysisId) => {
+                setActiveSection("analysis");
+                setActiveNav("Analisis Dokumen");
+                if (analysisId) setViewingAnalysisId(analysisId);
+              }}
+              onDownloadCertificate={(docId) => handleDownloadPdf(`/api/documents/${docId}/certificate/pdf/`, "certificate.pdf")}
+              onDownloadSignedPdf={(docId) => handleDownloadPdf(`/api/documents/${docId}/signed-pdf/`, "signed-document.pdf")}
+              actionContent={detailActionContent}
+            />
+          ) : null}
+        </div>
       </section>
     );
   }
@@ -2177,6 +1850,115 @@ export default function DashboardPage() {
   }
 
   function renderDocumentsPanel() {
+    const canSign = selectedDocument && (
+      (selectedDocument.status === "analyzed" && selectedDocument.my_signer_role === "sender")
+      || selectedDocument.my_signer_status === "pending"
+    );
+    const canReject = selectedDocument?.my_signer_status === "pending";
+    const canShare = selectedDocument
+      && selectedDocument.my_signer_role === "sender"
+      && selectedDocument.status !== "completed"
+      && selectedDocument.status !== "rejected";
+
+    const detailActionContent = selectedDocument ? (
+      <div className="space-y-4">
+        {canSign ? (
+          <div className="space-y-3 border-t border-border-light pt-3">
+            {!panelCanSign ? (
+              <SignatureCreator
+                onSignatureCreated={(sig) => {
+                  setPanelSignatureName(sig.displayName);
+                  setPanelSignatureType(sig.type);
+                  setPanelSignatureImage(sig.content);
+                }}
+                onCanSignChange={setPanelCanSign}
+              />
+            ) : (
+              <div className="space-y-2 rounded-md border border-green-200 bg-green-50 p-3">
+                <p className="text-xs text-green-800">Tanda tangan siap digunakan.</p>
+                <p className="text-xs text-neutral-gray"><strong>Nama:</strong> {panelSignatureName}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPanelCanSign(false);
+                      setPanelSignatureName("");
+                      setPanelSignatureType(null);
+                      setPanelSignatureImage(null);
+                    }}
+                    className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
+                  >
+                    Ulangi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenSigningPage}
+                    className="rounded-md bg-dark-navy px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                  >
+                    Tanda Tangani
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {canReject ? (
+          <form onSubmit={handlePanelReject} className="space-y-2 border-t border-border-light pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Tolak</p>
+            <textarea
+              value={signPanelRejectReason}
+              onChange={(e) => setSignPanelRejectReason(e.target.value)}
+              className="h-16 w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
+              placeholder="Alasan penolakan (opsional)"
+            />
+            <button
+              type="submit"
+              disabled={signPanelProcessing}
+              className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {signPanelProcessing ? "Memproses..." : "Tolak Dokumen"}
+            </button>
+          </form>
+        ) : null}
+
+        {canShare ? (
+          <form onSubmit={handleDetailShareSubmit} className="space-y-2 border-t border-border-light pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Bagikan Dokumen</p>
+            <input
+              type="text"
+              value={detailShareForm.signerEmails}
+              onChange={(e) => setDetailShareForm((prev) => ({ ...prev, signerEmails: e.target.value }))}
+              className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+              placeholder="email1@contoh.com, email2@contoh.com"
+              required
+            />
+            <input
+              type="datetime-local"
+              value={detailShareForm.expiresAt}
+              onChange={(e) => setDetailShareForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
+              className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
+            />
+            <label className="flex items-center gap-2 text-xs text-neutral-gray">
+              <input
+                type="checkbox"
+                checked={detailShareForm.companyPaysAnalysis}
+                onChange={(e) => setDetailShareForm((prev) => ({ ...prev, companyPaysAnalysis: e.target.checked }))}
+              />
+              Perusahaan tanggung biaya analisis
+            </label>
+            <button
+              type="submit"
+              disabled={detailShareProcessing}
+              className="rounded-md bg-dark-navy px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {detailShareProcessing ? "Mengirim..." : "Kirim untuk Ditandatangani"}
+            </button>
+          </form>
+        ) : null}
+      </div>
+    ) : null;
+
     return (
       <section className="space-y-4">
         <article className="border-b border-border-light bg-white">
@@ -2194,77 +1976,9 @@ export default function DashboardPage() {
               {refreshingDocuments ? "Memuat..." : "Muat Ulang"}
             </button>
           </div>
-
-          <details className="px-4 py-3 sm:px-5">
-            <summary className="cursor-pointer list-none text-sm font-semibold text-dark-navy">
-              Bagikan dokumen baru
-            </summary>
-            <form className="mt-4 grid gap-3 lg:grid-cols-2" onSubmit={submitShare}>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Nama Dokumen</label>
-                <input
-                  type="text"
-                  value={shareForm.filename}
-                  onChange={(e) => setShareForm((prev) => ({ ...prev, filename: e.target.value }))}
-                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
-                  placeholder="Perjanjian Kerja Sama Vendor"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Analysis ID (Opsional)</label>
-                <input
-                  type="text"
-                  value={shareForm.analysisId}
-                  onChange={(e) => setShareForm((prev) => ({ ...prev, analysisId: e.target.value }))}
-                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
-                />
-              </div>
-
-              <div className="lg:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Email Signer</label>
-                <textarea
-                  value={shareForm.signerEmails}
-                  onChange={(e) => setShareForm((prev) => ({ ...prev, signerEmails: e.target.value }))}
-                  className="h-24 w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
-                  placeholder="email1@contoh.com, email2@contoh.com"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-neutral-gray">Batas Waktu (Opsional)</label>
-                <input
-                  type="datetime-local"
-                  value={shareForm.expiresAt}
-                  onChange={(e) => setShareForm((prev) => ({ ...prev, expiresAt: e.target.value }))}
-                  className="w-full rounded-md border border-border-light px-3 py-2 text-sm text-dark-navy outline-none focus:border-dark-navy"
-                />
-              </div>
-
-              <div className="flex items-end justify-between gap-4">
-                <label className="flex items-center gap-2 text-xs text-neutral-gray">
-                  <input
-                    type="checkbox"
-                    checked={shareForm.companyPaysAnalysis}
-                    onChange={(e) => setShareForm((prev) => ({ ...prev, companyPaysAnalysis: e.target.checked }))}
-                  />
-                  Perusahaan Tanggung Biaya Analisis
-                </label>
-                <button
-                  type="submit"
-                  disabled={processingShare}
-                  className="rounded-md bg-dark-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {processingShare ? "Memproses..." : "Bagikan"}
-                </button>
-              </div>
-            </form>
-          </details>
         </article>
 
-        <div className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
+        <div className={selectedDocument ? "grid gap-4 xl:grid-cols-[1.25fr_1fr]" : undefined}>
           <article className="bg-white">
             <div className="border-b border-border-light px-4 py-3 sm:px-5">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Daftar Dokumen</h3>
@@ -2293,7 +2007,7 @@ export default function DashboardPage() {
                       return (
                         <tr
                           key={doc.document_id}
-                          onClick={() => setSelectedDocumentId(doc.document_id)}
+                          onClick={() => setSelectedDocumentId((prev) => (prev === doc.document_id ? null : doc.document_id))}
                           className={[
                             "cursor-pointer border-b border-border-light align-top transition-colors last:border-b-0",
                             selected ? "bg-gray-50" : "hover:bg-gray-50/60",
@@ -2324,192 +2038,29 @@ export default function DashboardPage() {
             </div>
           </article>
 
-          <article className="bg-white lg:border-l border-border-light">
-            <div className="border-b border-border-light px-4 py-3 sm:px-5">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Detail & Aksi</h3>
-                {selectedDocument ? (
-                  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(selectedDocument.status)}`}>
-                    {formatStatus(selectedDocument.status)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            {!selectedDocument ? (
-              <div className="flex w-full min-h-[300px] items-center justify-center p-6 text-sm text-neutral-gray text-center">Pilih dokumen untuk melihat detail.</div>
-            ) : (
-              <div className="space-y-4 px-4 py-4 sm:px-5">
-                <div className="space-y-1 border-b border-border-light pb-3">
-                  <p className="text-sm font-semibold text-dark-navy">{selectedDocument.filename}</p>
-                  <p className="text-xs text-neutral-gray">Diperbarui {formatDateTime(selectedDocument.updated_at)}</p>
-                  <p className="text-xs text-neutral-gray">
-                    {signedCount}/{totalSignerCount} penandatangan selesai
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => loadDocumentDetails(selectedDocument.document_id, selectedDocument.status)}
-                    disabled={loadingDocumentDetails}
-                    className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {loadingDocumentDetails ? "Memuat..." : "Muat Ulang Detail"}
-                  </button>
-                    <button
-                      type="button"
-                      onClick={() => { setActiveSection("analysis"); setActiveNav("Analisis Dokumen"); if (selectedDocument.analysis_id) { setViewingAnalysisId(selectedDocument.analysis_id); } }}
-                      className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
-                    >
-                      Buka Analisis
-                    </button>
-                  {selectedDocument.status === "completed" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDownloadPdf(
-                            `/api/documents/${selectedDocument.document_id}/certificate/pdf/`,
-                            "certificate.pdf",
-                          )
-                        }
-                        className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
-                      >
-                        Sertifikat PDF
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDownloadPdf(
-                            `/api/documents/${selectedDocument.document_id}/signed-pdf/`,
-                            "signed-document.pdf",
-                          )
-                        }
-                        className="rounded-md border border-border-light px-3 py-1.5 text-xs font-semibold text-dark-navy hover:border-dark-navy/40"
-                      >
-                        PDF Hasil TTD
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 border-b border-border-light pb-4">
-                  <form onSubmit={submitSign} className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Tanda Tangan</p>
-                    <input
-                      type="text"
-                      value={signForm.signerName}
-                      onChange={(e) => setSignForm((prev) => ({ ...prev, signerName: e.target.value }))}
-                      className="w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                      placeholder="Nama penandatangan"
-                      required
-                    />
-                    <textarea
-                      value={signForm.consentText}
-                      onChange={(e) => setSignForm((prev) => ({ ...prev, consentText: e.target.value }))}
-                      className="h-16 w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                      required
-                    />
-                    <input
-                      type="text"
-                      value={signForm.documentHash}
-                      onChange={(e) => setSignForm((prev) => ({ ...prev, documentHash: e.target.value }))}
-                      className="w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                      placeholder="Hash dokumen"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      disabled={processingSign}
-                      className="rounded-md bg-dark-navy px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {processingSign ? "Memproses..." : "Kirim Tanda Tangan"}
-                    </button>
-                  </form>
-
-                  <form onSubmit={submitReject} className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Aksi Tolak</p>
-                    <textarea
-                      value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value)}
-                      className="h-16 w-full rounded-md border border-border-light px-3 py-2 text-sm outline-none focus:border-dark-navy"
-                      placeholder="Alasan penolakan (opsional)"
-                    />
-                    <button
-                      type="submit"
-                      disabled={processingReject}
-                      className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {processingReject ? "Memproses..." : "Tolak Dokumen"}
-                    </button>
-                  </form>
-                </div>
-
-
-
-                <div className="grid gap-3">
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Penandatangan</p>
-                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                      {(selectedSigners?.signers || []).length === 0 ? (
-                        <div className="flex w-full min-h-[100px] items-center justify-center p-4 text-xs text-neutral-gray text-center">Belum ada data signer.</div>
-                      ) : (
-                        selectedSigners?.signers.map((signer) => (
-                          <div key={`${signer.email}-${signer.role}`} className="border-b border-border-light px-3 py-2 last:border-b-0">
-                            <p className="text-xs font-medium text-dark-navy">{signer.email}</p>
-                            <p className="text-[11px] text-neutral-gray">
-                              {signer.role === "sender" ? "Pemilik" : "Penandatangan"} &bull; {signer.status === "signed" ? "Telah TTD" : signer.status === "rejected" ? "Ditolak" : "Tertunda"}
-                              {signer.signed_at ? ` \u2022 ${formatDateTime(signer.signed_at)}` : ""}
-                            </p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Audit Trail</p>
-                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                      {(selectedEvents?.events || []).length === 0 ? (
-                        <p className="text-xs text-neutral-gray">Belum ada event.</p>
-                      ) : (
-                        selectedEvents?.events.map((event) => (
-                          <div key={event.id} className="border-b border-border-light px-3 py-2 last:border-b-0">
-                            <p className="text-xs font-medium text-dark-navy">{event.event_type}</p>
-                            <p className="text-[11px] text-neutral-gray">
-                              {event.actor_email || "sistem"} &bull; {formatDateTime(event.created_at)}
-                            </p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {selectedCertificate ? (
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Sertifikat</p>
-                      <p className="mb-2 text-[11px] text-neutral-gray">
-                        Selesai pada {formatDateTime(selectedCertificate.completed_at)}
-                      </p>
-                      <div className="max-h-32 space-y-2 overflow-y-auto pr-1">
-                        {selectedCertificate.signatures.map((signature) => (
-                          <div
-                            key={`${signature.signer_email}-${signature.signed_at}`}
-                            className="border-b border-border-light px-3 py-2 last:border-b-0"
-                          >
-                            <p className="text-xs font-medium text-dark-navy">{signature.signer_name}</p>
-                            <p className="text-[11px] text-neutral-gray">
-                              {signature.signer_email} &bull; {formatDateTime(signature.signed_at)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )}
-          </article>
+          {selectedDocument ? (
+            <DocumentDetailSidebar
+              selectedDocument={selectedDocument}
+              selectedSigners={selectedSigners}
+              selectedEvents={selectedEvents}
+              selectedCertificate={selectedCertificate}
+              loadingDocumentDetails={loadingDocumentDetails}
+              signedCount={signedCount}
+              totalSignerCount={totalSignerCount}
+              statusBadgeClass={statusBadgeClass}
+              formatStatus={formatStatus}
+              formatDateTime={formatDateTime}
+              onRefreshDetails={loadDocumentDetails}
+              onOpenAnalysis={(analysisId) => {
+                setActiveSection("analysis");
+                setActiveNav("Analisis Dokumen");
+                if (analysisId) setViewingAnalysisId(analysisId);
+              }}
+              onDownloadCertificate={(docId) => handleDownloadPdf(`/api/documents/${docId}/certificate/pdf/`, "certificate.pdf")}
+              onDownloadSignedPdf={(docId) => handleDownloadPdf(`/api/documents/${docId}/signed-pdf/`, "signed-document.pdf")}
+              actionContent={detailActionContent}
+            />
+          ) : null}
         </div>
       </section>
     );
@@ -2685,7 +2236,7 @@ export default function DashboardPage() {
                 </svg>
               </span>
               <span className={styles.navItemLabel}>Pusat Dokumen</span>
-              <span className={styles.navBadge}>{documentsMeta.pending_my_action}</span>
+              <span className={styles.navBadge}>{pendingActionCount}</span>
             </a>
             <a
               href="#"

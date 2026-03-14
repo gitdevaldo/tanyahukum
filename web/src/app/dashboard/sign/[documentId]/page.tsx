@@ -398,68 +398,70 @@ export default function SigningEditorPage() {
   }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.sidebar}>
-        <div className={styles.sidebarContent}>
-          <div className={styles.section}>
-            <h4 className={styles.sectionTitle}>Dokumen</h4>
-            <p className={styles.docName}>{docInfo?.filename}</p>
-            <p className={styles.docMeta}>Owner: {docInfo?.owner_email}</p>
-            <p className={styles.docStatus}>Status: {displayStatus(docInfo?.status)}</p>
-            {isReadOnlySigning && (
-              <p className={styles.alreadySignedInfo}>
-                Dokumen ini sudah tidak bisa ditandatangani ulang. Mode saat ini hanya lihat dokumen.
+    <div className={`${styles.container} ${isReadOnlySigning ? styles.containerReadOnly : ""}`}>
+      {!isReadOnlySigning && (
+        <div className={styles.sidebar}>
+          <div className={styles.sidebarContent}>
+            <div className={styles.section}>
+              <h4 className={styles.sectionTitle}>Dokumen</h4>
+              <p className={styles.docName}>{docInfo?.filename}</p>
+              <p className={styles.docMeta}>Owner: {docInfo?.owner_email}</p>
+              <p className={styles.docStatus}>Status: {displayStatus(docInfo?.status)}</p>
+            </div>
+
+            <div className={styles.section}>
+              <h4 className={styles.sectionTitle}>Tanda Tangan Anda</h4>
+              {signatureData ? (
+                <div
+                  className={styles.signaturePreview}
+                  draggable
+                  onDragStart={handleDragStart}
+                  style={{ cursor: "grab" }}
+                >
+                  {signatureData.type === "text" && (
+                    <p style={{ fontSize: 20, fontFamily: "Segoe Print, serif", color: "#333" }}>
+                      {signatureData.name}
+                    </p>
+                  )}
+                  {(signatureData.type === "drawn" || signatureData.type === "image") && signatureData.content && (
+                    <img
+                      src={signatureData.content}
+                      alt="Signature"
+                      style={{ maxWidth: "100%", height: "60px", objectFit: "contain" }}
+                    />
+                  )}
+                </div>
+              ) : (
+                <p className={styles.docMeta}>Tidak ada data tanda tangan pada tab ini.</p>
+              )}
+
+              <p className={styles.instruction}>
+                Tarik tanda tangan ke halaman PDF, lalu geser dan ubah ukuran sebelum menandatangani.
               </p>
-            )}
-          </div>
+            </div>
 
-          <div className={styles.section}>
-            <h4 className={styles.sectionTitle}>Tanda Tangan Anda</h4>
-            {signatureData ? (
-              <div
-                className={styles.signaturePreview}
-                draggable={!isReadOnlySigning}
-                onDragStart={handleDragStart}
-                style={{ cursor: isReadOnlySigning ? "not-allowed" : "grab" }}
+            <div className={styles.actions}>
+              <button
+                onClick={handleSign}
+                disabled={!signaturePlacement || !signatureData || signing}
+                className={styles.signBtn}
               >
-                {signatureData.type === "text" && (
-                  <p style={{ fontSize: 20, fontFamily: "Segoe Print, serif", color: "#333" }}>
-                    {signatureData.name}
-                  </p>
-                )}
-                {(signatureData.type === "drawn" || signatureData.type === "image") && signatureData.content && (
-                  <img
-                    src={signatureData.content}
-                    alt="Signature"
-                    style={{ maxWidth: "100%", height: "60px", objectFit: "contain" }}
-                  />
-                )}
-              </div>
-            ) : (
-              <p className={styles.docMeta}>Tidak ada data tanda tangan pada tab ini.</p>
-            )}
-
-            <p className={styles.instruction}>
-              Tarik tanda tangan ke halaman PDF, lalu geser dan ubah ukuran sebelum menandatangani.
-            </p>
-          </div>
-
-          <div className={styles.actions}>
-            <button
-              onClick={handleSign}
-              disabled={!signaturePlacement || !signatureData || signing || isReadOnlySigning}
-              className={styles.signBtn}
-            >
-              {isReadOnlySigning ? "Dokumen Selesai" : signing ? "Signing..." : "Tanda Tangani"}
-            </button>
-            <button onClick={() => window.close()} className={styles.cancelBtn}>
-              Tutup
-            </button>
+                {signing ? "Signing..." : "Tanda Tangani"}
+              </button>
+              <button onClick={() => window.close()} className={styles.cancelBtn}>
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className={styles.pdfViewer}>
+      <div className={`${styles.pdfViewer} ${isReadOnlySigning ? styles.pdfViewerReadOnly : ""}`}>
+        {isReadOnlySigning && (
+          <button onClick={() => window.close()} className={styles.viewerCloseBtn}>
+            Tutup
+          </button>
+        )}
         {renderedPages.length > 0 ? (
           <div className={styles.pagesStack}>
             {renderedPages.map((page) => (
@@ -473,7 +475,7 @@ export default function SigningEditorPage() {
                 <img src={page.dataUrl} alt={`Halaman ${page.pageNumber}`} className={styles.pageImage} />
                 <div className={styles.pageLabel}>Halaman {page.pageNumber}</div>
 
-                {signatureData && signaturePlacement && signaturePlacement.page === page.pageNumber && (
+                {!isReadOnlySigning && signatureData && signaturePlacement && signaturePlacement.page === page.pageNumber && (
                   <div
                     className={styles.draggableSignature}
                     style={{
@@ -481,9 +483,9 @@ export default function SigningEditorPage() {
                       top: signaturePlacement.y,
                       width: signaturePlacement.width,
                       height: signaturePlacement.height,
-                      cursor: isReadOnlySigning ? "default" : "move",
+                      cursor: "move",
                     }}
-                    onMouseDown={isReadOnlySigning ? undefined : startMovePlacedSignature}
+                    onMouseDown={startMovePlacedSignature}
                   >
                     <div className={styles.signatureContent}>
                       {signatureData.type === "text" && (
@@ -514,13 +516,11 @@ export default function SigningEditorPage() {
                       )}
                     </div>
 
-                    {!isReadOnlySigning && (
-                      <div
-                        className={styles.resizeHandle}
-                        onMouseDown={startResizePlacedSignature}
-                        title="Resize signature"
-                      />
-                    )}
+                    <div
+                      className={styles.resizeHandle}
+                      onMouseDown={startResizePlacedSignature}
+                      title="Resize signature"
+                    />
                   </div>
                 )}
               </div>
@@ -530,7 +530,9 @@ export default function SigningEditorPage() {
           <div style={{ padding: 20, textAlign: "center", color: "#999" }}>
             <p style={{ fontSize: 14, marginTop: 50 }}>PDF Viewer Area</p>
             <p style={{ fontSize: 12, color: "#bbb" }}>
-              Drag your signature from the left to place it on the document
+              {isReadOnlySigning
+                ? "Dokumen ditampilkan dalam mode baca."
+                : "Drag your signature from the left to place it on the document"}
             </p>
           </div>
         )}
