@@ -77,14 +77,7 @@ export default function CekDokumenPage() {
             <a href="/cek-dokumen/" className="text-xs sm:text-sm text-gray-400 hover:text-gray-200 transition-colors hidden sm:block">
               AI Legal Document Analysis
             </a>
-            {hasSession ? (
-              <a
-                href="/dashboard/"
-                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-white/10 transition-colors"
-              >
-                Dashboard
-              </a>
-            ) : (
+            {!hasSession && (
               <a
                 href="/login/"
                 className="rounded-lg border border-white/20 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-white/10 transition-colors"
