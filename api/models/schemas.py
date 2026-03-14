@@ -163,6 +163,51 @@ class QuotaResponse(BaseModel):
     quota: QuotaInfo
 
 
+class PaymentCheckoutRequest(BaseModel):
+    target_plan: str = Field(pattern="^(starter|plus|business)$")
+
+
+class PaymentCheckoutResponse(BaseModel):
+    payment_id: str
+    provider: str
+    account_type: str
+    current_plan: str | None = None
+    target_plan: str
+    amount: int
+    currency: str
+    status: str
+    checkout_url: str
+    expires_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    paid_at: str | None = None
+    message: str
+
+
+class PaymentStatusResponse(BaseModel):
+    payment_id: str
+    provider: str
+    account_type: str
+    current_plan: str | None = None
+    target_plan: str
+    amount: int
+    currency: str
+    status: str
+    checkout_url: str | None = None
+    expires_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    paid_at: str | None = None
+
+
+class PaymentWebhookResponse(BaseModel):
+    success: bool
+    handled: bool
+    event: str | None = None
+    payment_id: str | None = None
+    message: str
+
+
 class DashboardDocumentItem(BaseModel):
     document_id: str
     filename: str
