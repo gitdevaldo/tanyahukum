@@ -149,11 +149,18 @@ class AuthMeResponse(BaseModel):
     email: str
     name: str
     phone: str | None = None
+    billing_email: str | None = None
+    billing_mobile: str | None = None
     account_type: str
     plan: str | None = None
     company_name: str | None = None
     created_at: str | None = None
     quota: QuotaInfo
+
+
+class BillingProfileUpdateRequest(BaseModel):
+    billing_email: EmailStr
+    billing_mobile: str | None = Field(default=None, min_length=8, max_length=32)
 
 
 class QuotaResponse(BaseModel):

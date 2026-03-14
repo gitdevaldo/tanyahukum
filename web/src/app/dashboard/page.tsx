@@ -54,6 +54,9 @@ type MeResponse = {
   user_id: string;
   email: string;
   name: string;
+  phone: string | null;
+  billing_email: string | null;
+  billing_mobile: string | null;
   account_type: AccountType;
   plan: Plan;
   quota: QuotaInfo;
@@ -368,7 +371,12 @@ export default function DashboardPage() {
     whatsapp: "",
     analysisId: "",
   });
+  const [billingForm, setBillingForm] = useState({
+    billingEmail: "",
+    billingMobile: "",
+  });
   const [consultSubmitting, setConsultSubmitting] = useState(false);
+  const [billingSaving, setBillingSaving] = useState(false);
 
   const [signPanelRejectReason, setSignPanelRejectReason] = useState("");
   const [signPanelProcessing, setSignPanelProcessing] = useState(false);
@@ -428,7 +436,7 @@ export default function DashboardPage() {
     async (
       url: string,
       options?: {
-        method?: "GET" | "POST";
+        method?: "GET" | "POST" | "PUT";
         body?: string;
         headers?: Record<string, string>;
         timeoutMs?: number;
@@ -489,7 +497,7 @@ export default function DashboardPage() {
     async <T,>(
       url: string,
       options?: {
-        method?: "GET" | "POST";
+        method?: "GET" | "POST" | "PUT";
         body?: string;
         headers?: Record<string, string>;
         timeoutMs?: number;
@@ -616,6 +624,10 @@ export default function DashboardPage() {
         name: prev.name || meData.name || "",
         email: prev.email || meData.email || "",
       }));
+      setBillingForm({
+        billingEmail: meData.billing_email || meData.email || "",
+        billingMobile: meData.billing_mobile || meData.phone || "",
+      });
 
       setSelectedDocumentId(null);
     } catch (err) {
@@ -872,6 +884,52 @@ export default function DashboardPage() {
       setNotice(null);
     } finally {
       setConsultSubmitting(false);
+    }
+  }
+
+  async function handleBillingSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (billingSaving) return;
+
+    const billingEmail = billingForm.billingEmail.trim().toLowerCase();
+    const billingMobile = billingForm.billingMobile.trim();
+    if (!billingEmail) {
+      setError("Email billing wajib diisi.");
+      setNotice(null);
+      return;
+    }
+    if (billingMobile && (billingMobile.length < 8 || billingMobile.length > 32)) {
+      setError("No. HP billing harus 8-32 karakter.");
+      setNotice(null);
+      return;
+    }
+
+    setBillingSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await requestJson<MeResponse>("/api/auth/billing/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billing_email: billingEmail,
+          billing_mobile: billingMobile || null,
+        }),
+        fallbackError: "Gagal menyimpan kontak billing.",
+      });
+
+      setProfile(updated);
+      setBillingForm({
+        billingEmail: updated.billing_email || updated.email || "",
+        billingMobile: updated.billing_mobile || updated.phone || "",
+      });
+      setNotice("Kontak billing berhasil disimpan.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan kontak billing.");
+      setNotice(null);
+    } finally {
+      setBillingSaving(false);
     }
   }
 
@@ -2113,6 +2171,47 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+        </article>
+
+        <article className="border-b border-border-light bg-white p-4 sm:p-5">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Kelola Billing</h3>
+          <p className="mt-2 text-sm text-neutral-gray">
+            Kontak ini dipakai sebagai default saat membuat checkout paket.
+          </p>
+          <form className="mt-4 grid gap-3 sm:max-w-xl" onSubmit={handleBillingSave}>
+            <div>
+              <label htmlFor="billingEmail" className="mb-1 block text-sm text-neutral-gray">Email</label>
+              <input
+                id="billingEmail"
+                type="email"
+                required
+                value={billingForm.billingEmail}
+                onChange={(e) => setBillingForm((prev) => ({ ...prev, billingEmail: e.target.value }))}
+                className="w-full border border-border-light px-3 py-2 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
+              />
+            </div>
+            <div>
+              <label htmlFor="billingMobile" className="mb-1 block text-sm text-neutral-gray">No. HP</label>
+              <input
+                id="billingMobile"
+                minLength={8}
+                maxLength={32}
+                value={billingForm.billingMobile}
+                onChange={(e) => setBillingForm((prev) => ({ ...prev, billingMobile: e.target.value }))}
+                placeholder="08xxxxxxxxxx"
+                className="w-full border border-border-light px-3 py-2 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
+              />
+            </div>
+            <div>
+              <button
+                type="submit"
+                disabled={billingSaving}
+                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {billingSaving ? "Menyimpan..." : "Simpan Billing"}
+              </button>
+            </div>
+          </form>
         </article>
 
         <article className="border-b border-border-light bg-white p-4 sm:p-5">

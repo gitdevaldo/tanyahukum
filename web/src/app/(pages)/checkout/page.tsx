@@ -26,6 +26,8 @@ type AuthMeResponse = {
   email: string;
   name: string;
   phone: string | null;
+  billing_email?: string | null;
+  billing_mobile?: string | null;
   account_type: AccountType;
   plan: UserPlan;
 };
@@ -209,8 +211,8 @@ function CheckoutPageInner() {
         if (meRes.ok) {
           const me = meData as AuthMeResponse;
           setProfile(me);
-          setBillingEmail(me.email || "");
-          setBillingMobile(me.phone || "");
+          setBillingEmail(me.billing_email || me.email || "");
+          setBillingMobile(me.billing_mobile || me.phone || "");
         }
       }
       return payment;
@@ -253,8 +255,8 @@ function CheckoutPageInner() {
         if (cancelled) return;
         const me = data as AuthMeResponse;
         setProfile(me);
-        setBillingEmail(me.email || "");
-        setBillingMobile(me.phone || "");
+        setBillingEmail(me.billing_email || me.email || "");
+        setBillingMobile(me.billing_mobile || me.phone || "");
         setAuthState("authenticated");
       } catch (err) {
         if (cancelled) return;

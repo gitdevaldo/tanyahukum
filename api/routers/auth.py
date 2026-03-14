@@ -17,6 +17,7 @@ from api.models.schemas import (
     RefreshResponse,
     LogoutResponse,
     AuthMeResponse,
+    BillingProfileUpdateRequest,
 )
 from api.services.supabase_auth import (
     SupabaseServiceError,
@@ -28,6 +29,7 @@ from api.services.supabase_auth import (
     resolve_account_plan_from_user_meta,
     upsert_user_profile_and_quota,
     get_user_profile_and_quota,
+    update_user_billing_profile,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,3 +139,38 @@ async def me(request: Request, access_token: str = Depends(verify_bearer_token))
         return AuthMeResponse(**profile)
     except SupabaseServiceError as e:
         _raise_auth_error(e, "Gagal mengambil profil pengguna.")
+
+
+@router.put("/auth/billing", response_model=AuthMeResponse)
+@limiter.limit("30/minute")
+async def update_billing(
+    request: Request,
+    req: BillingProfileUpdateRequest,
+    access_token: str = Depends(verify_bearer_token),
+):
+    """Update billing contact defaults for checkout."""
+    try:
+        auth_user = await asyncio.to_thread(get_auth_user, access_token)
+        user_meta = auth_user.get("user_metadata") or {}
+        user_id = auth_user["id"]
+        email = auth_user.get("email", "")
+        name = user_meta.get("name") or email.split("@")[0] or "Pengguna"
+        account_type, plan = resolve_account_plan_from_user_meta(user_meta)
+
+        await asyncio.to_thread(
+            upsert_user_profile_and_quota,
+            user_id,
+            email,
+            name,
+            plan,
+            account_type,
+        )
+        profile = await asyncio.to_thread(
+            update_user_billing_profile,
+            user_id,
+            str(req.billing_email),
+            req.billing_mobile,
+        )
+        return AuthMeResponse(**profile)
+    except SupabaseServiceError as e:
+        _raise_auth_error(e, "Gagal menyimpan kontak billing.")

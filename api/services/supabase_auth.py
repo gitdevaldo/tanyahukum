@@ -136,8 +136,24 @@ def ensure_supabase_schema() -> bool:
             """
         )
         cur.execute("ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS account_type TEXT;")
+        cur.execute("ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS billing_email TEXT;")
+        cur.execute("ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS billing_mobile TEXT;")
         cur.execute("ALTER TABLE public.user_profiles ALTER COLUMN plan DROP NOT NULL;")
         cur.execute("ALTER TABLE public.user_profiles ALTER COLUMN plan DROP DEFAULT;")
+        cur.execute(
+            """
+            UPDATE public.user_profiles
+            SET
+                billing_email = CASE
+                    WHEN trim(COALESCE(billing_email, '')) = '' THEN lower(email)
+                    ELSE lower(billing_email)
+                END,
+                billing_mobile = CASE
+                    WHEN trim(COALESCE(billing_mobile, '')) = '' THEN NULLIF(trim(COALESCE(phone, '')), '')
+                    ELSE trim(billing_mobile)
+                END;
+            """
+        )
         cur.execute(
             """
             UPDATE public.user_profiles
@@ -484,6 +500,8 @@ def get_user_profile_and_quota(user_id: str) -> dict:
                     p.email,
                     p.name,
                     p.phone,
+                    p.billing_email,
+                    p.billing_mobile,
                     p.account_type,
                     p.plan,
                     p.company_name,
@@ -514,6 +532,8 @@ def get_user_profile_and_quota(user_id: str) -> dict:
         "email": row["email"],
         "name": row["name"],
         "phone": row["phone"],
+        "billing_email": row["billing_email"] or row["email"],
+        "billing_mobile": row["billing_mobile"] or row["phone"],
         "account_type": row["account_type"],
         "plan": row["plan"],
         "company_name": row["company_name"],
@@ -529,6 +549,41 @@ def get_user_profile_and_quota(user_id: str) -> dict:
             "reset_at": row["reset_at"].isoformat() if row["reset_at"] else None,
         },
     }
+
+
+def update_user_billing_profile(
+    user_id: str,
+    billing_email: str,
+    billing_mobile: str | None,
+) -> dict:
+    """Update billing contact defaults for checkout and return the latest profile."""
+    normalized_email = billing_email.strip().lower()
+    normalized_mobile = billing_mobile.strip() if billing_mobile else None
+
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE public.user_profiles
+                SET
+                    billing_email = %s,
+                    billing_mobile = %s,
+                    updated_at = NOW()
+                WHERE user_id = %s
+                RETURNING user_id;
+                """,
+                (normalized_email, normalized_mobile, user_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise SupabaseServiceError(status_code=404, detail="Profil pengguna tidak ditemukan.")
+            conn.commit()
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyimpan kontak billing: {e}")
+
+    return get_user_profile_and_quota(user_id)
 
 
 def _reset_quotas_if_due(cur, user_id: str) -> None:
