@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     internal_api_key: str = os.getenv("INTERNAL_API_KEY", "7s9DTtir3BH7TCGDZYGF6UKW--eulLPvEBi6gPMwvUc")
     app_base_url: str = os.getenv("APP_BASE_URL", "https://tanyahukum.dev")
 
+    # Mayar payment gateway
+    mayar_api_base_url: str = os.getenv("MAYAR_API_BASE_URL", "https://api.mayar.id")
+    mayar_api_key: str = os.getenv("MAYAR_API_KEY", "")
+    mayar_webhook_token: str = os.getenv("MAYAR_WEBHOOK_TOKEN", "")
+    mayar_checkout_expiry_hours: int = int(os.getenv("MAYAR_CHECKOUT_EXPIRY_HOURS", "24"))
+
     # Analysis settings
     max_upload_size_mb: int = 15
     rag_top_k: int = 5

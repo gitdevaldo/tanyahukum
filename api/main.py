@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.config import settings
-from api.routers import analyze, chat, health, booking, auth, quota, documents, signatures
+from api.routers import analyze, chat, health, booking, auth, quota, documents, signatures, payments
 from api.services.supabase_auth import ensure_supabase_schema
 
 logging.basicConfig(
@@ -98,6 +98,7 @@ app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(booking.router, prefix="/api", tags=["Booking"])
 app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(quota.router, prefix="/api", tags=["Quota"])
+app.include_router(payments.router, prefix="/api", tags=["Payments"])
 app.include_router(documents.router, prefix="/api", tags=["Documents"])
 app.include_router(signatures.router, tags=["Signatures"])
 app.include_router(health.router, prefix="/api", tags=["Health"])

@@ -311,10 +311,52 @@ def ensure_supabase_schema() -> bool:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.payment_transactions (
+                id TEXT PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES public.user_profiles(user_id) ON DELETE CASCADE,
+                provider TEXT NOT NULL DEFAULT 'mayar',
+                account_type TEXT NOT NULL,
+                current_plan TEXT NULL,
+                target_plan TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'IDR',
+                status TEXT NOT NULL DEFAULT 'pending',
+                customer_email TEXT NOT NULL,
+                customer_name TEXT NOT NULL,
+                provider_invoice_id TEXT NULL,
+                provider_transaction_id TEXT NULL,
+                checkout_url TEXT NULL,
+                request_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                webhook_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                expires_at TIMESTAMPTZ NULL,
+                paid_at TIMESTAMPTZ NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT payment_transactions_status_check CHECK (
+                    status IN ('pending', 'paid', 'failed', 'expired', 'cancelled')
+                ),
+                CONSTRAINT payment_transactions_provider_check CHECK (
+                    provider IN ('mayar')
+                ),
+                CONSTRAINT payment_transactions_account_type_check CHECK (
+                    account_type IN ('personal', 'business')
+                ),
+                CONSTRAINT payment_transactions_target_plan_check CHECK (
+                    target_plan IN ('starter', 'plus', 'business')
+                )
+            );
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner_id ON public.documents(owner_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_document_signers_document_id ON public.document_signers(document_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_document_pdf_versions_document_id_version_no ON public.document_pdf_versions(document_id, version_no DESC);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_document_events_document_id_created_at ON public.document_events(document_id, created_at DESC);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_payment_transactions_user_id_created_at ON public.payment_transactions(user_id, created_at DESC);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_payment_transactions_provider_tx ON public.payment_transactions(provider_transaction_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_payment_transactions_status ON public.payment_transactions(status);")
         conn.commit()
     return True
 
@@ -745,3 +787,78 @@ def get_auth_user(access_token: str) -> dict:
     if not payload.get("id"):
         raise SupabaseServiceError(status_code=401, detail="Token pengguna tidak valid.")
     return payload
+
+
+def set_user_account_plan(
+    user_id: str,
+    account_type: str,
+    plan: str | None,
+) -> dict:
+    """Persist paid plan changes to Supabase Auth metadata and app profile/quota."""
+    normalized_account_type, normalized_plan = _normalize_account_and_plan(
+        account_type,
+        plan,
+        strict=True,
+    )
+
+    if normalized_plan is None:
+        raise SupabaseServiceError(
+            status_code=422,
+            detail="Plan target harus terdefinisi untuk upgrade paket berbayar.",
+        )
+
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT email, name FROM public.user_profiles WHERE user_id = %s LIMIT 1;",
+                (user_id,),
+            )
+            row = cur.fetchone()
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal membaca profil user untuk update plan: {e}")
+
+    if not row:
+        raise SupabaseServiceError(status_code=404, detail="Profil pengguna tidak ditemukan.")
+
+    admin_headers = _service_headers()
+    admin_user_url = f"{settings.supabase_url}/auth/v1/admin/users/{user_id}"
+
+    with httpx.Client(timeout=20.0) as client:
+        get_resp = client.get(admin_user_url, headers=admin_headers)
+        if get_resp.status_code >= 400:
+            raise SupabaseServiceError(get_resp.status_code, _extract_supabase_error(get_resp))
+
+        raw = get_resp.json()
+        auth_user = raw.get("user") if isinstance(raw, dict) and raw.get("user") else raw
+        user_meta = auth_user.get("user_metadata") if isinstance(auth_user, dict) else {}
+        if not isinstance(user_meta, dict):
+            user_meta = {}
+
+        user_meta.update(
+            {
+                "account_type": normalized_account_type,
+                "plan": normalized_plan,
+            }
+        )
+
+        patch_resp = client.put(
+            admin_user_url,
+            headers=admin_headers,
+            json={"user_metadata": user_meta},
+        )
+        if patch_resp.status_code >= 400:
+            raise SupabaseServiceError(patch_resp.status_code, _extract_supabase_error(patch_resp))
+
+    upsert_user_profile_and_quota(
+        user_id=user_id,
+        email=row["email"],
+        name=row["name"],
+        plan=normalized_plan,
+        account_type=normalized_account_type,
+    )
+
+    return {
+        "user_id": user_id,
+        "account_type": normalized_account_type,
+        "plan": normalized_plan,
+    }

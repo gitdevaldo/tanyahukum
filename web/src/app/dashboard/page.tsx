@@ -162,6 +162,41 @@ type DocumentActionResponse = {
   message: string;
 };
 
+type PaymentPlan = "starter" | "plus" | "business";
+
+type PaymentCheckoutResponse = {
+  payment_id: string;
+  provider: string;
+  account_type: AccountType;
+  current_plan: Plan;
+  target_plan: PaymentPlan;
+  amount: number;
+  currency: string;
+  status: "pending" | "paid" | "failed" | "expired" | "cancelled";
+  checkout_url: string;
+  expires_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  paid_at: string | null;
+  message: string;
+};
+
+type PaymentStatusResponse = {
+  payment_id: string;
+  provider: string;
+  account_type: AccountType;
+  current_plan: Plan;
+  target_plan: PaymentPlan;
+  amount: number;
+  currency: string;
+  status: "pending" | "paid" | "failed" | "expired" | "cancelled";
+  checkout_url: string | null;
+  expires_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  paid_at: string | null;
+};
+
 function formatAccountType(value: AccountType) {
   return value === "business" ? "Bisnis" : "Personal";
 }
@@ -317,6 +352,7 @@ export default function DashboardPage() {
   const [processingShare, setProcessingShare] = useState(false);
   const [processingSign, setProcessingSign] = useState(false);
   const [processingReject, setProcessingReject] = useState(false);
+  const [processingUpgradePlan, setProcessingUpgradePlan] = useState<PaymentPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -680,6 +716,51 @@ export default function DashboardPage() {
   }, [loadData]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const paymentRef = url.searchParams.get("payment_ref");
+    if (!paymentRef) return;
+
+    let isCancelled = false;
+    const handlePaymentReturn = async () => {
+      try {
+        const status = await requestJson<PaymentStatusResponse>(
+          `/api/payments/${encodeURIComponent(paymentRef)}/`,
+          {
+            fallbackError: "Gagal memverifikasi status pembayaran.",
+          },
+        );
+        if (isCancelled) return;
+
+        if (status.status === "paid") {
+          setNotice(`Pembayaran berhasil. Paket ${formatPlan(status.target_plan as Plan)} sudah aktif.`);
+          await loadData();
+          setActiveNav("Pengaturan Akun");
+          setActiveSection("account");
+        } else if (status.status === "pending") {
+          setNotice("Pembayaran sedang diproses. Paket akan aktif otomatis setelah konfirmasi.");
+        } else {
+          setError("Pembayaran belum berhasil diproses. Silakan ulangi pembayaran.");
+          setNotice(null);
+        }
+      } catch (err) {
+        if (isCancelled) return;
+        setError(err instanceof Error ? err.message : "Gagal memverifikasi status pembayaran.");
+        setNotice(null);
+      } finally {
+        url.searchParams.delete("payment_ref");
+        const nextSearch = url.searchParams.toString();
+        window.history.replaceState({}, "", `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
+      }
+    };
+
+    void handlePaymentReturn();
+    return () => {
+      isCancelled = true;
+    };
+  }, [loadData, requestJson]);
+
+  useEffect(() => {
     const persisted = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
     if (persisted === "1") {
       setSidebarCollapsed(true);
@@ -776,6 +857,29 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengunduh file.");
       setNotice(null);
+    }
+  }
+
+  async function handlePlanUpgrade(targetPlan: PaymentPlan) {
+    if (processingUpgradePlan) return;
+
+    setProcessingUpgradePlan(targetPlan);
+    setError(null);
+    setNotice(null);
+    try {
+      const checkout = await requestJson<PaymentCheckoutResponse>("/api/payments/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_plan: targetPlan }),
+        fallbackError: "Gagal membuat link pembayaran.",
+      });
+
+      setNotice("Mengalihkan ke halaman pembayaran Mayar...");
+      window.location.href = checkout.checkout_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal memproses upgrade paket.");
+      setNotice(null);
+      setProcessingUpgradePlan(null);
     }
   }
 
@@ -2516,6 +2620,31 @@ export default function DashboardPage() {
   }
 
   function renderAccountPanel() {
+    const upgradeOptions =
+      profile?.account_type === "business"
+        ? [
+            {
+              plan: "plus" as const,
+              label: "Plus",
+              price: "Rp 499.000 / bulan",
+              description: "250 analisis AI per bulan, tanda tangan digital unlimited.",
+            },
+            {
+              plan: "business" as const,
+              label: "Bisnis",
+              price: "Rp 1.500.000 / bulan",
+              description: "1.000 analisis AI per bulan, dashboard dan audit trail lanjutan.",
+            },
+          ]
+        : [
+            {
+              plan: "starter" as const,
+              label: "Starter",
+              price: "Rp 29.000 / bulan",
+              description: "10 analisis AI per bulan, tanda tangan digital unlimited.",
+            },
+          ];
+
     return (
       <section className="space-y-4">
         <article className="border-b border-border-light bg-white">
@@ -2550,6 +2679,49 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+        </article>
+
+        <article className="border-b border-border-light bg-white p-4 sm:p-5">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Upgrade Paket</h3>
+          <p className="mt-2 text-sm text-neutral-gray">
+            Pembayaran diproses melalui Mayar. Paket aktif otomatis setelah webhook konfirmasi pembayaran.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {upgradeOptions.map((option) => {
+              const isCurrent = profile?.plan === option.plan;
+              const isLoading = processingUpgradePlan === option.plan;
+              return (
+                <div key={option.plan} className="rounded-lg border border-border-light p-3">
+                  <p className="text-sm font-semibold text-dark-navy">{option.label}</p>
+                  <p className="mt-1 text-sm font-medium text-primary-orange">{option.price}</p>
+                  <p className="mt-1 text-xs text-neutral-gray">{option.description}</p>
+                  <button
+                    type="button"
+                    onClick={() => handlePlanUpgrade(option.plan)}
+                    disabled={isCurrent || Boolean(processingUpgradePlan)}
+                    className="mt-3 w-full rounded-md border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCurrent
+                      ? "Paket Aktif"
+                      : isLoading
+                        ? "Memproses..."
+                        : `Pilih ${option.label}`}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {profile?.account_type === "business" ? (
+            <p className="mt-3 text-xs text-neutral-gray">
+              Untuk paket Enterprise, silakan{" "}
+              <a className="font-semibold text-primary-orange" href="mailto:hello@tanyahukum.dev">
+                hubungi tim kami
+              </a>
+              .
+            </p>
+          ) : null}
         </article>
 
         <article className="border-b border-border-light bg-white p-4 sm:p-5">
