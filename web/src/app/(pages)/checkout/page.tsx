@@ -132,7 +132,6 @@ function CheckoutPageInner() {
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<AuthMeResponse | null>(null);
-  const [billingName, setBillingName] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
   const [billingMobile, setBillingMobile] = useState("");
   const [statusData, setStatusData] = useState<PaymentStatusResponse | null>(null);
@@ -218,7 +217,6 @@ function CheckoutPageInner() {
         if (cancelled) return;
         const me = data as AuthMeResponse;
         setProfile(me);
-        setBillingName(me.name || "");
         setBillingEmail(me.email || "");
         setBillingMobile(me.phone || "");
         setAuthState("authenticated");
@@ -273,7 +271,6 @@ function CheckoutPageInner() {
         },
         body: JSON.stringify({
           target_plan: selectedPlan.targetPlan,
-          billing_name: billingName.trim(),
           billing_email: billingEmail.trim().toLowerCase(),
           billing_mobile: billingMobile.trim() || null,
           source,
@@ -338,7 +335,7 @@ function CheckoutPageInner() {
 
         <h1 className="mt-6 text-2xl font-bold text-dark-navy">Checkout Paket</h1>
         <p className="mt-2 text-sm text-neutral-gray">
-          Pastikan data billing benar sebelum lanjut ke pembayaran Mayar.
+          Pastikan data kontak benar sebelum lanjut ke pembayaran Mayar.
         </p>
 
         <div className="mt-6 rounded-xl border border-border-light bg-gray-50/60 p-4">
@@ -408,24 +405,10 @@ function CheckoutPageInner() {
 
             {!paymentIsPaid ? (
               <form onSubmit={handleCreateCheckout} className="space-y-4 rounded-xl border border-border-light p-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Data Billing</h2>
-                <div>
-                  <label htmlFor="billingName" className="mb-1 block text-sm font-medium text-dark-navy">
-                    Nama Penagihan
-                  </label>
-                  <input
-                    id="billingName"
-                    required
-                    minLength={2}
-                    maxLength={100}
-                    value={billingName}
-                    onChange={(e) => setBillingName(e.target.value)}
-                    className="w-full rounded-lg border border-border-light px-4 py-3 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
-                  />
-                </div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Kontak Pembayaran</h2>
                 <div>
                   <label htmlFor="billingEmail" className="mb-1 block text-sm font-medium text-dark-navy">
-                    Email Billing
+                    Email
                   </label>
                   <input
                     id="billingEmail"
@@ -438,7 +421,7 @@ function CheckoutPageInner() {
                 </div>
                 <div>
                   <label htmlFor="billingMobile" className="mb-1 block text-sm font-medium text-dark-navy">
-                    Nomor HP Billing
+                    No. HP
                   </label>
                   <input
                     id="billingMobile"

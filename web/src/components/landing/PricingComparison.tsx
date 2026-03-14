@@ -25,8 +25,8 @@ export default function PricingComparison() {
               </p>
             </div>
             <div>
-              <Button href="/cek-dokumen/" size="lg" fullWidth>
-                Mulai Gratis
+              <Button href="/checkout/?account_type=personal&target_plan=starter&source=landing" size="lg" fullWidth>
+                Pilih Starter
               </Button>
             </div>
           </div>

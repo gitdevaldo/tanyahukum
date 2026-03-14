@@ -130,10 +130,10 @@ export const PRICING_PLANS = [
       "Export ringkasan PDF",
     ],
     excluded: [],
-    cta: "Segera Hadir",
-    ctaHref: null,
+    cta: "Pilih Plus Bisnis",
+    ctaHref: "/checkout/?account_type=business&target_plan=plus&source=landing",
     primary: false,
-    disabled: true,
+    disabled: false,
   },
 ] as const;
 

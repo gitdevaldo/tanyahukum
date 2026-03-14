@@ -5,8 +5,8 @@ export const B2B_HERO = {
   highlight: "TanyaHukum Bisnis",
   description:
     "Kirim kontrak ke karyawan, mitra, atau klien — lengkap dengan analisis AI yang membantu mereka memahami setiap klausa sebelum menandatangani. Bukti informed consent yang melindungi kedua belah pihak.",
-  cta: "Coba Analisis Dokumen",
-  ctaHref: "/cek-dokumen/",
+  cta: "Mulai Checkout Bisnis",
+  ctaHref: "/checkout/?account_type=business&target_plan=plus&source=bisnis",
 } as const;
 
 export const B2B_PROBLEMS = [

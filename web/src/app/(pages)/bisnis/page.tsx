@@ -143,8 +143,8 @@ function HowItWorks() {
             Dari upload hingga tanda tangan, seluruh proses dirancang agar tim
             Anda bisa bekerja lebih cepat tanpa mengorbankan kepatuhan hukum.
           </p>
-          <Button href="/cek-dokumen/" variant="secondary">
-            Coba Sekarang
+          <Button href="/checkout/?account_type=business&target_plan=plus&source=bisnis" variant="secondary">
+            Lanjut ke Checkout
           </Button>
         </div>
 
@@ -346,13 +346,12 @@ function FinalCTA() {
           Siap Mengelola Kontrak Perusahaan dengan Lebih Cerdas?
         </h2>
         <p className="mx-auto mb-8 max-w-[700px] text-neutral-gray">
-          Mulai dengan mencoba analisis dokumen — lihat sendiri bagaimana AI
-          kami membantu tim legal bekerja lebih efisien. Tidak perlu registrasi
-          untuk demo pertama.
+          Pilih paket bisnis yang sesuai, lanjutkan checkout, lalu aktifkan
+          akun tim Anda untuk mulai mengelola kontrak secara kolaboratif.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button href="/cek-dokumen/" size="lg">
-            Coba Analisis Dokumen
+          <Button href="/checkout/?account_type=business&target_plan=plus&source=bisnis" size="lg">
+            Mulai Checkout Bisnis
           </Button>
           <Button href="mailto:hello@tanyahukum.dev" variant="secondary" size="lg">
             Jadwalkan Demo
