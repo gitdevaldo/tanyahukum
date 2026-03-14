@@ -158,6 +158,16 @@ type DocumentActionResponse = {
   message: string;
 };
 
+type AuditEventPresentation = {
+  title: string;
+  detail: string | null;
+};
+
+type AuditEventInput = {
+  event_type: string;
+  metadata: Record<string, unknown>;
+};
+
 function formatAccountType(value: AccountType) {
   return value === "business" ? "Bisnis" : "Personal";
 }
@@ -290,6 +300,124 @@ function statusVariant(status: DocumentStatus) {
   if (status === "rejected") return "rejected";
   if (status === "analyzed") return "analyzed";
   return "draft";
+}
+
+function normalizeEventSlug(value: string) {
+  return value.replace(/_/g, " ").toLowerCase();
+}
+
+function auditStatusLabel(value: string | null) {
+  if (!value) return null;
+  const map: Record<string, string> = {
+    draft: "draft",
+    analyzed: "sudah dianalisis",
+    pending_signatures: "menunggu tanda tangan",
+    partially_signed: "sebagian sudah tanda tangan",
+    completed: "selesai ditandatangani",
+    expired: "kedaluwarsa",
+    rejected: "ditolak",
+  };
+  return map[value] || normalizeEventSlug(value);
+}
+
+function readAuditString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readAuditNumber(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
+function formatAuditEvent(event: AuditEventInput): AuditEventPresentation {
+  const metadata = event.metadata || {};
+
+  if (event.event_type === "shared") {
+    const signersCount = readAuditNumber(metadata, "signers_count");
+    return {
+      title: "Dokumen dibagikan",
+      detail: signersCount
+        ? `Dokumen dikirim ke ${formatNumber(signersCount)} pihak untuk ditandatangani.`
+        : "Dokumen siap untuk proses tanda tangan bersama.",
+    };
+  }
+
+  if (event.event_type === "analyzed") {
+    return {
+      title: "Analisis dokumen selesai",
+      detail: "Hasil analisis sudah tersedia untuk ditinjau.",
+    };
+  }
+
+  if (event.event_type === "signed") {
+    const signerRole = readAuditString(metadata, "signer_role");
+    const statusAfter = auditStatusLabel(readAuditString(metadata, "status_after"));
+    const roleText = signerRole === "sender" ? "pemilik dokumen" : signerRole === "recipient" ? "penandatangan" : "pengguna";
+    return {
+      title: "Dokumen ditandatangani",
+      detail: statusAfter
+        ? `Tindakan oleh ${roleText}. Status dokumen sekarang ${statusAfter}.`
+        : `Tindakan oleh ${roleText}.`,
+    };
+  }
+
+  if (event.event_type === "quick_signed") {
+    return {
+      title: "Tanda tangan cepat berhasil",
+      detail: "Dokumen selesai ditandatangani dalam mode cepat.",
+    };
+  }
+
+  if (event.event_type === "visual_signed") {
+    return {
+      title: "Tanda tangan visual ditambahkan",
+      detail: "Posisi tanda tangan visual telah disimpan pada dokumen.",
+    };
+  }
+
+  if (event.event_type === "rejected") {
+    const reason = readAuditString(metadata, "reason");
+    return {
+      title: "Dokumen ditolak",
+      detail: reason ? `Alasan penolakan: ${reason}` : "Salah satu penandatangan menolak dokumen ini.",
+    };
+  }
+
+  if (event.event_type === "status_changed") {
+    const fromStatus = auditStatusLabel(readAuditString(metadata, "from"));
+    const toStatus = auditStatusLabel(readAuditString(metadata, "to"));
+    return {
+      title: "Status dokumen berubah",
+      detail: fromStatus && toStatus ? `Status berubah dari ${fromStatus} menjadi ${toStatus}.` : "Status dokumen telah diperbarui.",
+    };
+  }
+
+  if (event.event_type === "certificate_viewed") {
+    const action = readAuditString(metadata, "action");
+    if (action === "certificate_pdf_downloaded") {
+      return {
+        title: "Sertifikat PDF diunduh",
+        detail: "File sertifikat dokumen berhasil diunduh.",
+      };
+    }
+    if (action === "signed_pdf_downloaded") {
+      return {
+        title: "PDF final diunduh",
+        detail: "Dokumen final bertanda tangan berhasil diunduh.",
+      };
+    }
+    return {
+      title: "Sertifikat dibuka",
+      detail: "Sertifikat dokumen telah diakses.",
+    };
+  }
+
+  return {
+    title: "Aktivitas dokumen",
+    detail: `Jenis aktivitas: ${normalizeEventSlug(event.event_type)}.`,
+  };
 }
 
 export default function DashboardPage() {
@@ -894,12 +1022,12 @@ export default function DashboardPage() {
     const billingEmail = billingForm.billingEmail.trim().toLowerCase();
     const billingMobile = billingForm.billingMobile.trim();
     if (!billingEmail) {
-      setError("Email billing wajib diisi.");
+      setError("Email tagihan wajib diisi.");
       setNotice(null);
       return;
     }
     if (billingMobile && (billingMobile.length < 8 || billingMobile.length > 32)) {
-      setError("No. HP billing harus 8-32 karakter.");
+      setError("No. HP tagihan harus 8-32 karakter.");
       setNotice(null);
       return;
     }
@@ -916,7 +1044,7 @@ export default function DashboardPage() {
           billing_email: billingEmail,
           billing_mobile: billingMobile || null,
         }),
-        fallbackError: "Gagal menyimpan kontak billing.",
+        fallbackError: "Gagal menyimpan kontak tagihan.",
       });
 
       setProfile(updated);
@@ -924,9 +1052,9 @@ export default function DashboardPage() {
         billingEmail: updated.billing_email || updated.email || "",
         billingMobile: updated.billing_mobile || updated.phone || "",
       });
-      setNotice("Kontak billing berhasil disimpan.");
+      setNotice("Kontak tagihan berhasil disimpan.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menyimpan kontak billing.");
+      setError(err instanceof Error ? err.message : "Gagal menyimpan kontak tagihan.");
       setNotice(null);
     } finally {
       setBillingSaving(false);
@@ -1345,7 +1473,7 @@ export default function DashboardPage() {
                 ) : (
                   feedItems.map((event, index) => {
                     const actor = toDisplayName(event.actor_email, "Sistem");
-                    const eventText = event.event_type.replace(/_/g, " ").toLowerCase();
+                    const audit = formatAuditEvent(event);
                     const dotClass =
                       index % 4 === 0
                         ? styles.dotGreen
@@ -1363,8 +1491,11 @@ export default function DashboardPage() {
                         </div>
                         <div className={styles.activityContent}>
                           <p className={styles.activityText}>
-                            <b>{actor}</b> {eventText}
+                            <b>{actor}</b> - {audit.title}
                           </p>
+                          {audit.detail ? (
+                            <p className="mt-1 text-[11px] text-neutral-gray">{audit.detail}</p>
+                          ) : null}
                           <p className={styles.activityTime}>{formatDateTime(event.created_at)}</p>
                         </div>
                       </div>
@@ -1809,6 +1940,7 @@ export default function DashboardPage() {
               statusBadgeClass={statusBadgeClass}
               formatStatus={formatStatus}
               formatDateTime={formatDateTime}
+              formatAuditEvent={formatAuditEvent}
               onRefreshDetails={loadDocumentDetails}
               onOpenAnalysis={(analysisId) => {
                 setActiveSection("analysis");
@@ -2108,6 +2240,7 @@ export default function DashboardPage() {
               statusBadgeClass={statusBadgeClass}
               formatStatus={formatStatus}
               formatDateTime={formatDateTime}
+              formatAuditEvent={formatAuditEvent}
               onRefreshDetails={loadDocumentDetails}
               onOpenAnalysis={(analysisId) => {
                 setActiveSection("analysis");
@@ -2136,62 +2269,67 @@ export default function DashboardPage() {
       profile?.account_type === "business"
       && profile.plan !== "business"
       && profile.plan !== "enterprise";
+    const hasUpgradeOption = canUpgradePersonalStarter || canUpgradeBusinessPlus || canUpgradeBusinessPlan;
+    const accountTypeText = profile ? formatAccountType(profile.account_type) : "-";
+    const planText = profile ? formatPlan(profile.plan) : "-";
+    const billingEmailValue = profile?.billing_email || profile?.email || "-";
+    const billingMobileValue = profile?.billing_mobile || profile?.phone || "-";
 
     return (
-      <section className="space-y-4">
-        <article className="border-b border-border-light bg-white">
-          <div className="border-b border-border-light px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Profil Akun</h2>
+      <section className="space-y-5">
+        <article className="rounded-2xl border border-border-light bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-dark-navy">Ringkasan Akun</h2>
+              <p className="mt-1 text-sm text-neutral-gray">
+                Informasi utama akun dan paket aktif Anda.
+              </p>
+            </div>
+            <span className="rounded-full border border-border-light px-3 py-1 text-xs font-medium text-dark-navy">
+              {accountTypeText} • {planText}
+            </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
-              <tbody>
-                <tr className="border-b border-border-light">
-                  <td className="w-56 px-4 py-3 text-neutral-gray sm:px-5">Nama</td>
-                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.name || "-"}</td>
-                </tr>
-                <tr className="border-b border-border-light">
-                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Email</td>
-                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.email || "-"}</td>
-                </tr>
-                <tr className="border-b border-border-light">
-                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Tipe Akun</td>
-                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">
-                    {profile ? formatAccountType(profile.account_type) : "-"}
-                  </td>
-                </tr>
-                <tr className="border-b border-border-light">
-                  <td className="px-4 py-3 text-neutral-gray sm:px-5">Paket</td>
-                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile ? formatPlan(profile.plan) : "-"}</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-3 text-neutral-gray sm:px-5">ID Pengguna</td>
-                  <td className="px-4 py-3 font-medium text-dark-navy sm:px-5">{profile?.user_id || "-"}</td>
-                </tr>
-              </tbody>
-            </table>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-border-light p-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-gray">Nama Akun</p>
+              <p className="mt-1 text-sm font-medium text-dark-navy">{profile?.name || "-"}</p>
+            </div>
+            <div className="rounded-xl border border-border-light p-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-gray">Email Akun</p>
+              <p className="mt-1 text-sm font-medium text-dark-navy">{profile?.email || "-"}</p>
+            </div>
+            <div className="rounded-xl border border-border-light p-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-gray">Kontak Tagihan Saat Ini</p>
+              <p className="mt-1 text-sm font-medium text-dark-navy">{billingEmailValue}</p>
+              <p className="mt-1 text-xs text-neutral-gray">{billingMobileValue}</p>
+            </div>
+            <div className="rounded-xl border border-border-light p-3">
+              <p className="text-xs uppercase tracking-wide text-neutral-gray">ID Pengguna</p>
+              <p className="mt-1 break-all text-sm font-medium text-dark-navy">{profile?.user_id || "-"}</p>
+            </div>
           </div>
         </article>
 
-        <article className="border-b border-border-light bg-white p-4 sm:p-5">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Kelola Billing</h3>
+        <article className="rounded-2xl border border-border-light bg-white p-4 sm:p-5">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Kontak Tagihan</h3>
           <p className="mt-2 text-sm text-neutral-gray">
-            Kontak ini dipakai sebagai default saat membuat checkout paket.
+            Data ini digunakan sebagai nilai default saat membuat checkout paket.
           </p>
-          <form className="mt-4 grid gap-3 sm:max-w-xl" onSubmit={handleBillingSave}>
+          <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={handleBillingSave}>
             <div>
-              <label htmlFor="billingEmail" className="mb-1 block text-sm text-neutral-gray">Email</label>
+              <label htmlFor="billingEmail" className="mb-1 block text-sm text-neutral-gray">Email Tagihan</label>
               <input
                 id="billingEmail"
                 type="email"
                 required
                 value={billingForm.billingEmail}
                 onChange={(e) => setBillingForm((prev) => ({ ...prev, billingEmail: e.target.value }))}
-                className="w-full border border-border-light px-3 py-2 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
+                className="w-full rounded-lg border border-border-light px-3 py-2 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
               />
             </div>
             <div>
-              <label htmlFor="billingMobile" className="mb-1 block text-sm text-neutral-gray">No. HP</label>
+              <label htmlFor="billingMobile" className="mb-1 block text-sm text-neutral-gray">No. HP Tagihan</label>
               <input
                 id="billingMobile"
                 minLength={8}
@@ -2199,56 +2337,64 @@ export default function DashboardPage() {
                 value={billingForm.billingMobile}
                 onChange={(e) => setBillingForm((prev) => ({ ...prev, billingMobile: e.target.value }))}
                 placeholder="08xxxxxxxxxx"
-                className="w-full border border-border-light px-3 py-2 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
+                className="w-full rounded-lg border border-border-light px-3 py-2 text-sm text-dark-navy outline-none transition-colors focus:border-primary-orange"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2 flex justify-end">
               <button
                 type="submit"
                 disabled={billingSaving}
-                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-dark-navy px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {billingSaving ? "Menyimpan..." : "Simpan Billing"}
+                {billingSaving ? "Menyimpan..." : "Simpan Kontak Tagihan"}
               </button>
             </div>
           </form>
         </article>
 
-        <article className="border-b border-border-light bg-white p-4 sm:p-5">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Langkah Lanjutan</h3>
+        <article className="rounded-2xl border border-border-light bg-white p-4 sm:p-5">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Aksi Paket dan Layanan</h3>
+          <p className="mt-2 text-sm text-neutral-gray">
+            Lanjutkan penggunaan layanan atau sesuaikan paket sesuai kebutuhan akun.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => { setActiveSection("analysis"); setActiveNav("Analisis Dokumen"); }}
-              className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+              className="rounded-lg border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
             >
-              Analisis Dokumen Baru
+              Buat Analisis Baru
             </button>
             {canUpgradePersonalStarter ? (
               <Link
                 href="/checkout/?account_type=personal&target_plan=starter&source=dashboard"
-                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+                className="rounded-lg border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
               >
-                Upgrade ke Starter
+                Naik ke Starter Personal
               </Link>
             ) : null}
             {canUpgradeBusinessPlus ? (
               <Link
                 href="/checkout/?account_type=business&target_plan=plus&source=dashboard"
-                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+                className="rounded-lg border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
               >
-                Upgrade ke Starter Bisnis
+                Naik ke Starter Bisnis
               </Link>
             ) : null}
             {canUpgradeBusinessPlan ? (
               <Link
                 href="/checkout/?account_type=business&target_plan=business&source=dashboard"
-                className="border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
+                className="rounded-lg border border-border-light px-3 py-2 text-sm font-medium text-dark-navy hover:border-dark-navy/40"
               >
-                Upgrade ke Paket Bisnis
+                Naik ke Paket Bisnis
               </Link>
             ) : null}
           </div>
+          {!hasUpgradeOption ? (
+            <p className="mt-3 text-sm text-neutral-gray">
+              Paket Anda saat ini sudah berada pada tingkat yang sesuai untuk tipe akun ini.
+            </p>
+          ) : null}
         </article>
       </section>
     );

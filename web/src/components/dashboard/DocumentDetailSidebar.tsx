@@ -34,6 +34,7 @@ export interface SidebarDocumentEvent {
   id: string;
   event_type: string;
   actor_email: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
@@ -63,6 +64,7 @@ interface DocumentDetailSidebarProps {
   statusBadgeClass: (status: SidebarDocumentStatus) => string;
   formatStatus: (status: SidebarDocumentStatus) => string;
   formatDateTime: (value: string | null) => string;
+  formatAuditEvent: (event: SidebarDocumentEvent) => { title: string; detail: string | null };
   onRefreshDetails: (documentId: string, status: SidebarDocumentStatus) => void;
   onOpenAnalysis: (analysisId: string | null) => void;
   onDownloadCertificate: (documentId: string) => void;
@@ -82,6 +84,7 @@ export function DocumentDetailSidebar({
   statusBadgeClass,
   formatStatus,
   formatDateTime,
+  formatAuditEvent,
   onRefreshDetails,
   onOpenAnalysis,
   onDownloadCertificate,
@@ -184,19 +187,25 @@ export function DocumentDetailSidebar({
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Audit Trail</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-gray">Jejak Audit</p>
               <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                 {(selectedEvents?.events || []).length === 0 ? (
-                  <p className="text-xs text-neutral-gray">Belum ada event.</p>
+                  <p className="text-xs text-neutral-gray">Belum ada aktivitas audit.</p>
                 ) : (
-                  selectedEvents?.events.map((event) => (
-                    <div key={event.id} className="border-b border-border-light px-3 py-2 last:border-b-0">
-                      <p className="text-xs font-medium text-dark-navy">{event.event_type}</p>
-                      <p className="text-[11px] text-neutral-gray">
-                        {event.actor_email || "sistem"} &bull; {formatDateTime(event.created_at)}
-                      </p>
-                    </div>
-                  ))
+                  selectedEvents?.events.map((event) => {
+                    const audit = formatAuditEvent(event);
+                    return (
+                      <div key={event.id} className="border-b border-border-light px-3 py-2 last:border-b-0">
+                        <p className="text-xs font-medium text-dark-navy">{audit.title}</p>
+                        {audit.detail ? (
+                          <p className="mt-1 text-[11px] text-neutral-gray">{audit.detail}</p>
+                        ) : null}
+                        <p className="text-[11px] text-neutral-gray">
+                          {event.actor_email || "Sistem"} &bull; {formatDateTime(event.created_at)}
+                        </p>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
