@@ -277,6 +277,25 @@ def ensure_supabase_schema() -> bool:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS public.document_pdf_versions (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+                version_no INTEGER NOT NULL,
+                version_type TEXT NOT NULL,
+                pdf_bytes BYTEA NOT NULL,
+                created_by_user_id UUID NULL REFERENCES public.user_profiles(user_id) ON DELETE SET NULL,
+                created_by_email TEXT NULL,
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT document_pdf_versions_type_check CHECK (
+                    version_type IN ('original', 'signed_visual', 'signed_final')
+                ),
+                CONSTRAINT document_pdf_versions_unique_version UNIQUE (document_id, version_no)
+            );
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS public.document_events (
                 id TEXT PRIMARY KEY,
                 document_id TEXT NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
@@ -294,6 +313,7 @@ def ensure_supabase_schema() -> bool:
         )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner_id ON public.documents(owner_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_document_signers_document_id ON public.document_signers(document_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_document_pdf_versions_document_id_version_no ON public.document_pdf_versions(document_id, version_no DESC);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_document_events_document_id_created_at ON public.document_events(document_id, created_at DESC);")
         conn.commit()
     return True

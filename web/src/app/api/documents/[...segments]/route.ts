@@ -35,7 +35,7 @@ function isAllowedPostRoute(segments: string[]) {
   return (
     segments.length === 2
     && DOCUMENT_ID_RE.test(segments[0])
-    && ["sign", "reject"].includes(segments[1])
+    && ["sign", "reject", "sign-visual", "sign-visual-finalize"].includes(segments[1])
   );
 }
 

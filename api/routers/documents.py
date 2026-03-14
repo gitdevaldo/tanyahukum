@@ -35,6 +35,7 @@ from api.services.documents import (
     get_document_certificate,
     get_document_certificate_pdf,
     get_document_pdf_for_signing,
+    finalize_visual_signature,
     get_signed_document_pdf,
     quick_sign_document,
 )
@@ -395,7 +396,9 @@ async def sign_document_visual(
         _raise_document_error(e, "Gagal menyimpan tanda tangan visual.")
 
 
+@router.post("/documents/{document_id}/sign-visual-finalize")
 @router.post("/api/documents/{document_id}/sign-visual-finalize")
+@limiter.limit("30/minute")
 async def sign_visual_finalize(
     request: Request,
     document_id: str,
@@ -409,70 +412,35 @@ async def sign_visual_finalize(
     try:
         if body is None:
             body = await request.json()
-        
+
         user_id, email, name, _ = await _resolve_user(access_token)
-        signer_name = body.get("signer_name", name)
+        signer_name = (body.get("signer_name") or name or "").strip()
         signature_type = body.get("signature_type", "text")
+        signature_image = body.get("signature_image")
         positions = body.get("positions", [])
-        
+
         if not signer_name:
-            raise HTTPException(status_code=400, detail="Signer name required")
-        
+            raise HTTPException(status_code=400, detail="Nama signer wajib diisi.")
         if not positions:
-            raise HTTPException(status_code=400, detail="Signature positions required")
-        
-        # Import service to update document signer status
-        from api.services.documents import update_document_signer_status, get_document_by_id
-        from api.services.signature_manager import save_document_signature
-        
-        # Get document
-        doc = await asyncio.to_thread(get_document_by_id, document_id)
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document not found")
-        
-        # Update signer status to 'signed'
-        update_result = await asyncio.to_thread(
-            update_document_signer_status,
+            raise HTTPException(status_code=400, detail="Posisi tanda tangan wajib diisi.")
+
+        result = await asyncio.to_thread(
+            finalize_visual_signature,
             document_id,
             user_id,
             email,
-            "signed",
-        )
-        
-        # Save signature record
-        await asyncio.to_thread(
-            save_document_signature,
-            document_id,
             signer_name,
-            None,  # user_signature_id - would be set from user_signatures table
             signature_type,
-        )
-        
-        # Record event
-        from api.services.documents import record_document_event
-        await asyncio.to_thread(
-            record_document_event,
-            document_id,
-            user_id,
-            email,
-            "signed",
-            {"signature_type": signature_type, "position_count": len(positions)},
+            signature_image,
+            positions,
             request.client.host if request.client else None,
             request.headers.get("User-Agent"),
+            getattr(request.state, "request_id", None),
         )
-        
-        return {
-            "success": True,
-            "message": "Document signed successfully",
-            "document_id": document_id,
-            "status": "signed",
-        }
-        
+        return result
     except HTTPException:
         raise
     except SupabaseServiceError as e:
         _raise_document_error(e, "Gagal menandatangani dokumen.")
     except Exception as e:
-        logger.error(f"Error finalizing signature: {str(e)}")
         raise HTTPException(status_code=500, detail="Gagal menandatangani dokumen.")
-

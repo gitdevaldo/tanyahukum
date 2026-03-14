@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -16,7 +17,11 @@ from api.services.email import (
     send_signing_status_update,
     send_signing_completed_notice,
 )
-from api.services.signing_pdf import build_certificate_pdf, build_signed_document_pdf
+from api.services.signing_pdf import (
+    build_certificate_pdf,
+    build_signed_document_pdf,
+    apply_visual_signatures,
+)
 from api.services.supabase_auth import SupabaseServiceError
 from api.services.storage import get_analysis, get_analysis_pdf
 
@@ -1034,6 +1039,160 @@ def get_document_pdf_for_signing(
     }
 
 
+def _insert_pdf_version(
+    cur,
+    document_id: str,
+    version_type: str,
+    pdf_bytes: bytes,
+    created_by_user_id: str,
+    created_by_email: str,
+    metadata: dict | None = None,
+) -> dict:
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(version_no), 0) + 1 AS next_version
+        FROM public.document_pdf_versions
+        WHERE document_id = %s;
+        """,
+        (document_id,),
+    )
+    next_version = int(cur.fetchone()["next_version"])
+    version_id = str(uuid.uuid4())
+    cur.execute(
+        """
+        INSERT INTO public.document_pdf_versions (
+            id, document_id, version_no, version_type, pdf_bytes, created_by_user_id, created_by_email, metadata
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+        """,
+        (
+            version_id,
+            document_id,
+            next_version,
+            version_type,
+            pdf_bytes,
+            created_by_user_id,
+            created_by_email,
+            Json(metadata or {}),
+        ),
+    )
+    return {"id": version_id, "version_no": next_version, "version_type": version_type}
+
+
+def save_signed_pdf_version(
+    document_id: str,
+    user_id: str,
+    email: str,
+    original_pdf: bytes,
+    signed_pdf: bytes,
+    signature_type: str,
+    positions: list[dict],
+    request_id: str | None = None,
+) -> dict:
+    """Save immutable PDF versions (original + signed_visual) without overwriting source PDF."""
+    try:
+        with _db_connect() as conn, conn.cursor() as cur:
+            _load_document_with_access(cur, document_id, user_id, email)
+            cur.execute("SELECT id FROM public.documents WHERE id=%s FOR UPDATE;", (document_id,))
+
+            cur.execute(
+                """
+                SELECT 1
+                FROM public.document_pdf_versions
+                WHERE document_id = %s AND version_type = 'original'
+                LIMIT 1;
+                """,
+                (document_id,),
+            )
+            if not cur.fetchone():
+                _insert_pdf_version(
+                    cur,
+                    document_id=document_id,
+                    version_type="original",
+                    pdf_bytes=original_pdf,
+                    created_by_user_id=user_id,
+                    created_by_email=email,
+                    metadata={"request_id": request_id},
+                )
+
+            signed_version = _insert_pdf_version(
+                cur,
+                document_id=document_id,
+                version_type="signed_visual",
+                pdf_bytes=signed_pdf,
+                created_by_user_id=user_id,
+                created_by_email=email,
+                metadata={
+                    "signature_type": signature_type,
+                    "positions": positions,
+                    "request_id": request_id,
+                },
+            )
+            conn.commit()
+            return {"saved": True, **signed_version}
+    except SupabaseServiceError:
+        raise
+    except Exception as e:
+        raise SupabaseServiceError(status_code=500, detail=f"Gagal menyimpan versi PDF: {e}")
+
+
+def finalize_visual_signature(
+    document_id: str,
+    signer_user_id: str,
+    signer_email: str,
+    signer_name: str,
+    signature_type: str,
+    signature_image: str | None,
+    positions: list[dict],
+    ip_address: str | None,
+    user_agent: str | None,
+    request_id: str | None = None,
+) -> dict:
+    """Finalize visual signing: sign workflow + immutable signed PDF version."""
+    if not positions:
+        raise SupabaseServiceError(status_code=400, detail="Posisi tanda tangan wajib diisi.")
+
+    source = get_document_pdf_for_signing(document_id, signer_user_id, signer_email, request_id)
+    original_pdf = source["pdf_bytes"]
+    visual_signed_pdf = apply_visual_signatures(
+        original_pdf=original_pdf,
+        positions=positions,
+        signature_type=signature_type,
+        signer_name=signer_name,
+        signature_image=signature_image,
+    )
+    document_hash = hashlib.sha256(visual_signed_pdf).hexdigest()
+
+    sign_result = sign_document(
+        document_id=document_id,
+        signer_user_id=signer_user_id,
+        signer_email=signer_email,
+        signer_name=signer_name,
+        consent_text="Saya menyetujui penandatanganan visual dokumen ini di editor TanyaHukum.",
+        document_hash=document_hash,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
+    )
+
+    version_result = save_signed_pdf_version(
+        document_id=document_id,
+        user_id=signer_user_id,
+        email=signer_email,
+        original_pdf=original_pdf,
+        signed_pdf=visual_signed_pdf,
+        signature_type=signature_type,
+        positions=positions,
+        request_id=request_id,
+    )
+
+    return {
+        **sign_result,
+        "signature_type": signature_type,
+        "positions_count": len(positions),
+        "pdf_version": version_result,
+    }
+
+
 def get_signed_document_pdf(
     document_id: str,
     user_id: str,
@@ -1049,6 +1208,19 @@ def get_signed_document_pdf(
                     status_code=404,
                     detail="Dokumen ini belum memiliki sumber PDF analisis untuk diunduh.",
                 )
+
+            cur.execute(
+                """
+                SELECT version_no, pdf_bytes
+                FROM public.document_pdf_versions
+                WHERE document_id = %s AND version_type = 'signed_visual'
+                ORDER BY version_no DESC
+                LIMIT 1;
+                """,
+                (document_id,),
+            )
+            latest_signed_version = cur.fetchone()
+
             _append_event(
                 cur,
                 document_id=document_id,
@@ -1063,6 +1235,16 @@ def get_signed_document_pdf(
         raise
     except Exception as e:
         raise SupabaseServiceError(status_code=500, detail=f"Gagal menyiapkan dokumen final: {e}")
+
+    if latest_signed_version and latest_signed_version.get("pdf_bytes"):
+        version_bytes = latest_signed_version["pdf_bytes"]
+        if isinstance(version_bytes, memoryview):
+            version_bytes = version_bytes.tobytes()
+        return {
+            "document_id": document_id,
+            "filename": _safe_download_filename(doc["filename"], f"signed-v{latest_signed_version['version_no']}"),
+            "pdf_bytes": version_bytes,
+        }
 
     original_pdf = get_analysis_pdf(analysis_id)
     if not original_pdf:
@@ -1382,4 +1564,3 @@ def record_document_event(
     except Exception as e:
         logger.error(f"Error recording event: {str(e)}")
         return False
-
