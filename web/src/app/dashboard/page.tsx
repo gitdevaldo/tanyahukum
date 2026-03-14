@@ -62,13 +62,6 @@ type MeResponse = {
   quota: QuotaInfo;
 };
 
-type QuotaResponse = {
-  user_id: string;
-  account_type: AccountType;
-  plan: Plan;
-  quota: QuotaInfo;
-};
-
 type DashboardDocumentItem = {
   document_id: string;
   filename: string;
@@ -424,7 +417,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const [activeSection, setActiveSectionState] = useState<DashboardSection>("overview");
   const [profile, setProfile] = useState<MeResponse | null>(null);
-  const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [documents, setDocuments] = useState<DashboardDocumentItem[]>([]);
   const [documentsMeta, setDocumentsMeta] = useState({
     total: 0,
@@ -727,12 +719,9 @@ export default function DashboardPage() {
     setNotice(null);
 
     try {
-      const [meData, quotaData, docsData] = await Promise.all([
+      const [meData, docsData] = await Promise.all([
         requestJson<MeResponse>("/api/auth/me/", {
           fallbackError: "Gagal memuat profil.",
-        }),
-        requestJson<QuotaResponse>("/api/quota/", {
-          fallbackError: "Gagal memuat kuota.",
         }),
         requestJson<DocumentListResponse>("/api/documents/?limit=120", {
           fallbackError: "Gagal memuat daftar dokumen.",
@@ -740,7 +729,6 @@ export default function DashboardPage() {
       ]);
 
       setProfile(meData);
-      setQuota(quotaData);
       setDocuments(docsData.documents);
       setDocumentsMeta({
         total: docsData.total,
@@ -844,7 +832,7 @@ export default function DashboardPage() {
     return () => window.removeEventListener("message", handleSigningComplete);
   }, [loadDocuments, loadDocumentDetails]);
 
-  const quotaInfo = quota?.quota ?? null;
+  const quotaInfo = profile?.quota ?? null;
   const analysisProgress = useMemo(
     () => calcProgress(quotaInfo?.analysis_used ?? 0, quotaInfo?.analysis_limit ?? null),
     [quotaInfo],
@@ -2562,16 +2550,46 @@ export default function DashboardPage() {
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <div className={styles.userCard}>
-            <span className={styles.avatar}>{userInitial}</span>
-            <div className={styles.userInfo}>
-              <p className={styles.userName}>{profile?.name || "Akun"}</p>
-              <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
+          {!sidebarCollapsed ? (
+            <div className={styles.sidebarUsageCard}>
+              <p className={styles.sidebarUsageTitle}>Pemakaian Paket</p>
+              <div className={styles.sidebarUsageRow}>
+                <div className={styles.sidebarUsageTop}>
+                  <span className={styles.sidebarUsageName}>Analisis</span>
+                  <span className={styles.sidebarUsageValue}>
+                    {quotaInfo?.analysis_used ?? 0} / {formatLimit(quotaInfo?.analysis_limit ?? null)}
+                  </span>
+                </div>
+                <div className={styles.sidebarUsageBar}>
+                  <div className={styles.sidebarUsageFillBlue} style={{ width: `${analysisProgress ?? 100}%` }} />
+                </div>
+              </div>
+              <div className={styles.sidebarUsageRow}>
+                <div className={styles.sidebarUsageTop}>
+                  <span className={styles.sidebarUsageName}>Tanda Tangan</span>
+                  <span className={styles.sidebarUsageValue}>
+                    {quotaInfo?.esign_used ?? 0} / {formatLimit(quotaInfo?.esign_limit ?? null)}
+                  </span>
+                </div>
+                <div className={styles.sidebarUsageBar}>
+                  <div className={styles.sidebarUsageFillGreen} style={{ width: `${esignProgress ?? 100}%` }} />
+                </div>
+              </div>
             </div>
+          ) : null}
+
+          <div className={styles.userCard}>
+            {!sidebarCollapsed ? <span className={styles.avatar}>{userInitial}</span> : null}
+            {!sidebarCollapsed ? (
+              <div className={styles.userInfo}>
+                <p className={styles.userName}>{profile?.name || "Akun"}</p>
+                <p className={styles.userRole}>{profile ? formatAccountType(profile.account_type) : "Memuat akun..."}</p>
+              </div>
+            ) : null}
             <button 
               type="button" 
               onClick={handleLogout}
-              className="ml-auto p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              className={styles.sidebarLogoutButton}
               title="Keluar"
             >
               <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">

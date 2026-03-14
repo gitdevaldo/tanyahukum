@@ -273,6 +273,87 @@
   margin-top: 8px;
 }
 
+.sidebarUsageCard {
+  margin-bottom: 10px;
+  border: 1px solid #e6edf8;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px;
+}
+
+.sidebarUsageTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebarUsageRow {
+  margin-top: 8px;
+}
+
+.sidebarUsageTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebarUsageName {
+  font-size: 11px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.sidebarUsageValue {
+  font-size: 10.5px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.sidebarUsageBar {
+  margin-top: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.sidebarUsageFillBlue,
+.sidebarUsageFillGreen {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.sidebarUsageFillBlue {
+  background: linear-gradient(90deg, #1a56e8, #60a5fa);
+}
+
+.sidebarUsageFillGreen {
+  background: linear-gradient(90deg, #059669, #34d399);
+}
+
+.sidebarLogoutButton {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sidebarLogoutButton:hover {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
 /* ─── Main Content Area ─── */
 
 .main {
@@ -1659,14 +1740,26 @@
   padding: 14px 8px;
 }
 
+.sidebarCollapsed .sidebarUsageCard {
+  display: none;
+}
+
 .sidebarCollapsed .userCard {
   padding: 8px;
   justify-content: center;
 }
 
+.sidebarCollapsed .avatar {
+  display: none;
+}
+
 .sidebarCollapsed .userInfo,
 .sidebarCollapsed .sidebarMeta {
   display: none;
+}
+
+.sidebarCollapsed .sidebarLogoutButton {
+  margin-left: 0;
 }
 
 .sidebarCollapsed .sidebarToggle svg {
