@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 
-function getAuthorization(req: NextRequest) {
+function getForwardHeaders(req: NextRequest): Record<string, string> {
+  const headers: Record<string, string> = {};
+
   const authorization = req.headers.get("authorization");
-  // Authorization is optional for some routes, so we don't return error here
-  return authorization || "";
+  if (authorization) {
+    headers.Authorization = authorization;
+  }
+
+  const passthroughHeaders: Array<[string, string]> = [
+    ["x-mayar-webhook-token", "X-Mayar-Webhook-Token"],
+    ["webhook-token", "Webhook-Token"],
+    ["x-webhook-token", "X-Webhook-Token"],
+    ["x-mayar-token", "X-Mayar-Token"],
+  ];
+
+  for (const [incoming, outgoing] of passthroughHeaders) {
+    const value = req.headers.get(incoming);
+    if (value) {
+      headers[outgoing] = value;
+    }
+  }
+
+  return headers;
 }
 
 async function proxyRequest(
@@ -11,7 +30,7 @@ async function proxyRequest(
   segments: string[],
   method: string,
 ) {
-  const authorization = getAuthorization(req);
+  const forwardHeaders = getForwardHeaders(req);
   const encodedSegments = segments.map((segment) => encodeURIComponent(segment));
   const backendUrl = `http://localhost:8000/api/${encodedSegments.join("/")}`;
 
@@ -22,24 +41,14 @@ async function proxyRequest(
   try {
     const requestOptions: RequestInit = {
       method,
+      headers: forwardHeaders,
       signal: AbortSignal.timeout(25000),
     };
-
-    // Add authorization header if present
-    if (authorization) {
-      requestOptions.headers = {
-        ...requestOptions.headers,
-        Authorization: authorization,
-      };
-    }
 
     // Handle body for POST/PUT/PATCH
     if (method !== "GET" && method !== "HEAD") {
       const contentType = req.headers.get("content-type");
-      requestOptions.headers = {
-        ...requestOptions.headers,
-        "Content-Type": contentType || "application/json",
-      };
+      forwardHeaders["Content-Type"] = contentType || "application/json";
 
       if (req.body) {
         const bodyText = await req.text();
