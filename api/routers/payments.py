@@ -111,11 +111,30 @@ async def mayar_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=422, detail="Payload webhook tidak valid.")
 
+    body_token: str | None = None
+    nested_body_token: str | None = None
+    if isinstance(body, dict):
+        maybe_token = body.get("token") or body.get("webhookToken") or body.get("webhook_token")
+        if isinstance(maybe_token, str):
+            body_token = maybe_token
+        payload = body.get("data")
+        if isinstance(payload, dict):
+            nested_token = payload.get("token") or payload.get("webhookToken") or payload.get("webhook_token")
+            if isinstance(nested_token, str):
+                nested_body_token = nested_token
+
     try:
         await asyncio.to_thread(
             validate_mayar_webhook_token,
             request.headers.get("X-Mayar-Webhook-Token"),
+            request.headers.get("Webhook-Token"),
+            request.headers.get("X-Webhook-Token"),
+            request.headers.get("X-Mayar-Token"),
+            request.headers.get("Authorization"),
             request.query_params.get("token"),
+            request.query_params.get("webhook_token"),
+            body_token,
+            nested_body_token,
         )
         result = await asyncio.to_thread(process_mayar_webhook, body)
         return PaymentWebhookResponse(**result)

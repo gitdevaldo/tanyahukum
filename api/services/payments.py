@@ -499,14 +499,25 @@ def get_user_payment(payment_id: str, user_id: str) -> dict:
     }
 
 
-def validate_mayar_webhook_token(header_token: str | None, query_token: str | None) -> None:
+def _extract_token_candidate(raw_token: str | None) -> str:
+    token = (raw_token or "").strip()
+    if not token:
+        return ""
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    return token
+
+
+def validate_mayar_webhook_token(*token_candidates: str | None) -> None:
     expected = settings.mayar_webhook_token.strip()
     if not expected:
         return
-    incoming = (header_token or "").strip()
-    query = (query_token or "").strip()
-    if incoming != expected and query != expected:
-        raise SupabaseServiceError(status_code=401, detail="Token webhook Mayar tidak valid.")
+    normalized_expected = _extract_token_candidate(expected)
+    for candidate in token_candidates:
+        normalized = _extract_token_candidate(candidate)
+        if normalized and normalized == normalized_expected:
+            return
+    raise SupabaseServiceError(status_code=401, detail="Token webhook Mayar tidak valid.")
 
 
 def _normalize_webhook_payload(payload: object) -> dict:
