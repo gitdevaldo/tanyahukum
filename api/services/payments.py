@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+import base64
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -142,7 +143,38 @@ def _extract_error_detail(response: httpx.Response, fallback: str) -> str:
     return text or fallback
 
 
-def _get_existing_pending_payment(user_id: str, target_plan: str) -> dict | None:
+def _extract_checkout_slug_from_api_key(api_key: str | None) -> str | None:
+    raw = (api_key or "").strip()
+    if not raw:
+        return None
+    parts = raw.split(".")
+    if len(parts) != 3:
+        return None
+    payload_b64 = parts[1].strip()
+    if not payload_b64:
+        return None
+    padding = "=" * (-len(payload_b64) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(payload_b64 + padding).decode("utf-8")
+        payload = json.loads(decoded)
+        if not isinstance(payload, dict):
+            return None
+        slug = str(payload.get("link") or "").strip().lower()
+        return slug or None
+    except Exception:
+        return None
+
+
+def _checkout_url_matches_slug(checkout_url: str | None, expected_slug: str | None) -> bool:
+    if not expected_slug:
+        return True
+    if not checkout_url:
+        return False
+    host = urlsplit(checkout_url).netloc.lower()
+    return expected_slug in host
+
+
+def _get_existing_pending_payment(user_id: str, target_plan: str, expected_slug: str | None) -> dict | None:
     with _db_connect() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -165,29 +197,32 @@ def _get_existing_pending_payment(user_id: str, target_plan: str) -> dict | None
               AND status = 'pending'
               AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
-            LIMIT 1;
+            LIMIT 20;
             """,
             (user_id, target_plan),
         )
-        row = cur.fetchone()
-    if not row:
-        return None
-    return {
-        "payment_id": row["id"],
-        "provider": MAYAR_PROVIDER,
-        "account_type": row["account_type"],
-        "current_plan": row["current_plan"],
-        "target_plan": row["target_plan"],
-        "amount": int(row["amount"]),
-        "currency": row["currency"],
-        "status": row["status"],
-        "checkout_url": row["checkout_url"],
-        "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
-        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
-        "paid_at": row["paid_at"].isoformat() if row["paid_at"] else None,
-        "message": "Gunakan link pembayaran yang masih aktif.",
-    }
+        rows = cur.fetchall()
+
+    for row in rows:
+        if not _checkout_url_matches_slug(row["checkout_url"], expected_slug):
+            continue
+        return {
+            "payment_id": row["id"],
+            "provider": MAYAR_PROVIDER,
+            "account_type": row["account_type"],
+            "current_plan": row["current_plan"],
+            "target_plan": row["target_plan"],
+            "amount": int(row["amount"]),
+            "currency": row["currency"],
+            "status": row["status"],
+            "checkout_url": row["checkout_url"],
+            "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            "paid_at": row["paid_at"].isoformat() if row["paid_at"] else None,
+            "message": "Gunakan link pembayaran yang masih aktif.",
+        }
+    return None
 
 
 def create_mayar_checkout(
@@ -204,12 +239,13 @@ def create_mayar_checkout(
     normalized_target_plan = (target_plan or "").strip().lower()
     normalized_current_plan = (current_plan or "").strip().lower() or None
     normalized_source = (source or "").strip().lower() or None
+    expected_checkout_slug = _extract_checkout_slug_from_api_key(settings.mayar_api_key)
 
     if normalized_current_plan == normalized_target_plan:
         raise SupabaseServiceError(status_code=409, detail="Paket target sudah aktif pada akun Anda.")
 
     amount = _resolve_target_plan_price(normalized_account_type, normalized_target_plan)
-    existing = _get_existing_pending_payment(user_id, normalized_target_plan)
+    existing = _get_existing_pending_payment(user_id, normalized_target_plan, expected_checkout_slug)
     if existing and existing.get("checkout_url"):
         return existing
 
