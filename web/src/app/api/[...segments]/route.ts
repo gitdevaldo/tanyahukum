@@ -1,27 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function shouldForwardHeader(name: string): boolean {
+  const lowerName = name.toLowerCase();
+  const blockedHeaders = new Set([
+    "host",
+    "connection",
+    "content-length",
+    "transfer-encoding",
+    "accept-encoding",
+  ]);
+  if (blockedHeaders.has(lowerName)) {
+    return false;
+  }
+  if (lowerName === "authorization" || lowerName === "content-type") {
+    return true;
+  }
+  if (lowerName.startsWith("x-")) {
+    return true;
+  }
+  return (
+    lowerName.includes("token") ||
+    lowerName.includes("signature") ||
+    lowerName.includes("secret") ||
+    lowerName.includes("webhook") ||
+    lowerName.includes("mayar")
+  );
+}
+
 function getForwardHeaders(req: NextRequest): Record<string, string> {
   const headers: Record<string, string> = {};
-
-  const authorization = req.headers.get("authorization");
-  if (authorization) {
-    headers.Authorization = authorization;
-  }
-
-  const passthroughHeaders: Array<[string, string]> = [
-    ["x-mayar-webhook-token", "X-Mayar-Webhook-Token"],
-    ["webhook-token", "Webhook-Token"],
-    ["x-webhook-token", "X-Webhook-Token"],
-    ["x-mayar-token", "X-Mayar-Token"],
-  ];
-
-  for (const [incoming, outgoing] of passthroughHeaders) {
-    const value = req.headers.get(incoming);
-    if (value) {
-      headers[outgoing] = value;
+  req.headers.forEach((value, key) => {
+    if (shouldForwardHeader(key)) {
+      headers[key] = value;
     }
-  }
-
+  });
   return headers;
 }
 
@@ -48,7 +60,7 @@ async function proxyRequest(
     // Handle body for POST/PUT/PATCH
     if (method !== "GET" && method !== "HEAD") {
       const contentType = req.headers.get("content-type");
-      forwardHeaders["Content-Type"] = contentType || "application/json";
+      forwardHeaders["content-type"] = contentType || "application/json";
 
       if (req.body) {
         const bodyText = await req.text();

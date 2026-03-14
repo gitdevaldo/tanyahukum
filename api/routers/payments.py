@@ -20,6 +20,7 @@ from api.services.supabase_auth import (
     get_user_profile_and_quota,
 )
 from api.services.payments import (
+    TEST_WEBHOOK_EVENTS,
     create_mayar_checkout,
     get_user_payment,
     process_mayar_webhook,
@@ -34,6 +35,24 @@ def _raise_payment_error(e: SupabaseServiceError, fallback: str) -> None:
     if e.status_code >= 500:
         raise HTTPException(status_code=500, detail=fallback)
     raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+
+def _collect_webhook_header_token_candidates(request: Request) -> list[str]:
+    token_candidates: list[str] = []
+    for header_name, header_value in request.headers.items():
+        normalized_name = header_name.strip().lower()
+        if not normalized_name:
+            continue
+        if (
+            normalized_name == "authorization"
+            or "token" in normalized_name
+            or "signature" in normalized_name
+            or "secret" in normalized_name
+            or "webhook" in normalized_name
+            or "mayar" in normalized_name
+        ):
+            token_candidates.append(header_value)
+    return token_candidates
 
 
 @router.post("/payments/checkout", response_model=PaymentCheckoutResponse)
@@ -113,29 +132,42 @@ async def mayar_webhook(request: Request):
 
     body_token: str | None = None
     nested_body_token: str | None = None
+    event = ""
     if isinstance(body, dict):
-        maybe_token = body.get("token") or body.get("webhookToken") or body.get("webhook_token")
+        maybe_token = (
+            body.get("token")
+            or body.get("webhookToken")
+            or body.get("webhook_token")
+            or body.get("signature")
+            or body.get("secret")
+        )
         if isinstance(maybe_token, str):
             body_token = maybe_token
+        event = str(body.get("event") or body.get("type") or body.get("eventName") or "").strip().lower()
         payload = body.get("data")
         if isinstance(payload, dict):
-            nested_token = payload.get("token") or payload.get("webhookToken") or payload.get("webhook_token")
+            nested_token = (
+                payload.get("token")
+                or payload.get("webhookToken")
+                or payload.get("webhook_token")
+                or payload.get("signature")
+                or payload.get("secret")
+            )
             if isinstance(nested_token, str):
                 nested_body_token = nested_token
 
+    token_candidates: list[str | None] = [
+        *_collect_webhook_header_token_candidates(request),
+        request.query_params.get("token"),
+        request.query_params.get("webhook_token"),
+        request.query_params.get("webhookToken"),
+        body_token,
+        nested_body_token,
+    ]
+
     try:
-        await asyncio.to_thread(
-            validate_mayar_webhook_token,
-            request.headers.get("X-Mayar-Webhook-Token"),
-            request.headers.get("Webhook-Token"),
-            request.headers.get("X-Webhook-Token"),
-            request.headers.get("X-Mayar-Token"),
-            request.headers.get("Authorization"),
-            request.query_params.get("token"),
-            request.query_params.get("webhook_token"),
-            body_token,
-            nested_body_token,
-        )
+        if event not in TEST_WEBHOOK_EVENTS:
+            await asyncio.to_thread(validate_mayar_webhook_token, *token_candidates)
         result = await asyncio.to_thread(process_mayar_webhook, body)
         return PaymentWebhookResponse(**result)
     except SupabaseServiceError as e:
