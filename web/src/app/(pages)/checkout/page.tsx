@@ -39,6 +39,7 @@ type PaymentCheckoutResponse = {
 
 type PaymentStatusResponse = {
   payment_id: string;
+  account_type: AccountType;
   target_plan: TargetPlan;
   status: PaymentState;
   checkout_url: string | null;
@@ -116,6 +117,13 @@ function parseApiError(data: unknown, fallback: string) {
   return fallback;
 }
 
+function resolvePlanOption(accountType: AccountType | null, targetPlan: TargetPlan | null) {
+  if (!accountType || !targetPlan) return null;
+  return PLAN_OPTIONS.find(
+    (item) => item.accountType === accountType && item.targetPlan === targetPlan,
+  ) || null;
+}
+
 function CheckoutPageInner() {
   const searchParams = useSearchParams();
   const selectedPlan = useMemo(() => {
@@ -135,33 +143,42 @@ function CheckoutPageInner() {
   const [billingEmail, setBillingEmail] = useState("");
   const [billingMobile, setBillingMobile] = useState("");
   const [statusData, setStatusData] = useState<PaymentStatusResponse | null>(null);
+  const [resolvedPlan, setResolvedPlan] = useState<PlanOption | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const checkoutPathForAuth = useMemo(() => {
-    if (!selectedPlan) return "/checkout/";
     const params = new URLSearchParams();
-    params.set("account_type", selectedPlan.accountType);
-    params.set("target_plan", selectedPlan.targetPlan);
+    const basePlan = selectedPlan || resolvedPlan;
+    if (basePlan) {
+      params.set("account_type", basePlan.accountType);
+      params.set("target_plan", basePlan.targetPlan);
+    }
     params.set("source", source);
+    if (paymentRef) {
+      params.set("payment_ref", paymentRef);
+    }
+    if (!basePlan && !paymentRef) return "/checkout/";
     return `/checkout/?${params.toString()}`;
-  }, [selectedPlan, source]);
+  }, [paymentRef, resolvedPlan, selectedPlan, source]);
 
   const loginHref = useMemo(() => {
     const params = new URLSearchParams();
     params.set("next", checkoutPathForAuth);
-    if (selectedPlan) params.set("account_type", selectedPlan.accountType);
+    const basePlan = selectedPlan || resolvedPlan;
+    if (basePlan) params.set("account_type", basePlan.accountType);
     return `/login/?${params.toString()}`;
-  }, [checkoutPathForAuth, selectedPlan]);
+  }, [checkoutPathForAuth, resolvedPlan, selectedPlan]);
 
   const signupHref = useMemo(() => {
     const params = new URLSearchParams();
     params.set("next", checkoutPathForAuth);
-    if (selectedPlan) params.set("account_type", selectedPlan.accountType);
+    const basePlan = selectedPlan || resolvedPlan;
+    if (basePlan) params.set("account_type", basePlan.accountType);
     return `/signup/?${params.toString()}`;
-  }, [checkoutPathForAuth, selectedPlan]);
+  }, [checkoutPathForAuth, resolvedPlan, selectedPlan]);
 
   const loadPaymentStatus = useCallback(async (accessToken: string, paymentId: string) => {
     setLoadingStatus(true);
@@ -176,8 +193,27 @@ function CheckoutPageInner() {
       if (!res.ok) {
         throw new Error(parseApiError(data, "Gagal mengambil status pembayaran."));
       }
-      setStatusData(data as PaymentStatusResponse);
-      return data as PaymentStatusResponse;
+      const payment = data as PaymentStatusResponse;
+      setStatusData(payment);
+      const planFromStatus = resolvePlanOption(payment.account_type, payment.target_plan);
+      if (planFromStatus) {
+        setResolvedPlan(planFromStatus);
+      }
+
+      if (payment.status === "paid") {
+        const meRes = await fetch("/api/auth/me/", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(20000),
+        });
+        const meData = await meRes.json().catch(() => ({}));
+        if (meRes.ok) {
+          const me = meData as AuthMeResponse;
+          setProfile(me);
+          setBillingEmail(me.email || "");
+          setBillingMobile(me.phone || "");
+        }
+      }
+      return payment;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal mengambil status pembayaran.");
       return null;
@@ -295,7 +331,7 @@ function CheckoutPageInner() {
     }
   }
 
-  if (!selectedPlan) {
+  if (!selectedPlan && !paymentRef) {
     return (
       <main className="min-h-screen bg-light-cream px-4 py-10 sm:px-6">
         <section className="mx-auto max-w-3xl rounded-2xl border border-border-light bg-white p-6 sm:p-8">
@@ -316,14 +352,19 @@ function CheckoutPageInner() {
     );
   }
 
-  const accountMismatch =
-    authState === "authenticated"
+  const planForDisplay = selectedPlan || resolvedPlan;
+  const accountMismatch = Boolean(
+    selectedPlan
+    && authState === "authenticated"
     && profile !== null
-    && profile.account_type !== selectedPlan.accountType;
-  const alreadyOnPlan =
-    authState === "authenticated"
+    && profile.account_type !== selectedPlan.accountType,
+  );
+  const alreadyOnPlan = Boolean(
+    selectedPlan
+    && authState === "authenticated"
     && profile !== null
-    && profile.plan === selectedPlan.targetPlan;
+    && profile.plan === selectedPlan.targetPlan,
+  );
   const paymentIsPaid = statusData?.status === "paid";
 
   return (
@@ -338,11 +379,13 @@ function CheckoutPageInner() {
           Pastikan data kontak benar sebelum lanjut ke pembayaran Mayar.
         </p>
 
-        <div className="mt-6 rounded-xl border border-border-light bg-gray-50/60 p-4">
-          <p className="text-sm font-semibold text-dark-navy">{selectedPlan.label}</p>
-          <p className="mt-1 text-lg font-bold text-primary-orange">{selectedPlan.price}</p>
-          <p className="mt-2 text-sm text-neutral-gray">{selectedPlan.description}</p>
-        </div>
+        {planForDisplay ? (
+          <div className="mt-6 rounded-xl border border-border-light bg-gray-50/60 p-4">
+            <p className="text-sm font-semibold text-dark-navy">{planForDisplay.label}</p>
+            <p className="mt-1 text-lg font-bold text-primary-orange">{planForDisplay.price}</p>
+            <p className="mt-2 text-sm text-neutral-gray">{planForDisplay.description}</p>
+          </div>
+        ) : null}
 
         {authState === "checking" ? (
           <div className="mt-6 rounded-xl border border-border-light p-4 text-sm text-neutral-gray">
@@ -353,7 +396,9 @@ function CheckoutPageInner() {
         {authState === "guest" ? (
           <div className="mt-6 rounded-xl border border-border-light p-4">
             <p className="text-sm text-dark-navy">
-              Silakan masuk atau daftar dulu agar proses checkout bisa dilanjutkan tanpa mengulang pilihan paket.
+              {paymentRef
+                ? "Silakan masuk atau daftar untuk melihat status pembayaran Anda."
+                : "Silakan masuk atau daftar dulu agar proses checkout bisa dilanjutkan tanpa mengulang pilihan paket."}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link href={loginHref} className="rounded-lg bg-primary-orange px-4 py-2 text-sm font-semibold text-white">
@@ -403,7 +448,7 @@ function CheckoutPageInner() {
               </div>
             ) : null}
 
-            {!paymentIsPaid ? (
+            {!paymentRef && !paymentIsPaid ? (
               <form onSubmit={handleCreateCheckout} className="space-y-4 rounded-xl border border-border-light p-4">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-gray">Kontak Pembayaran</h2>
                 <div>
@@ -435,7 +480,7 @@ function CheckoutPageInner() {
                   />
                 </div>
 
-                {accountMismatch ? (
+                {accountMismatch && selectedPlan ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     Paket ini untuk akun {selectedPlan.accountType === "business" ? "bisnis" : "personal"}, sementara akun Anda saat ini {profile.account_type === "business" ? "bisnis" : "personal"}.
                   </p>
