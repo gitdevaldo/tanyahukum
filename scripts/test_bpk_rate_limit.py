@@ -79,6 +79,24 @@ def parse_delays(raw: str) -> list[float]:
     return unique
 
 
+def parse_rpms(raw: str) -> list[float]:
+    rpms: list[float] = []
+    for part in raw.split(","):
+        value = part.strip()
+        if not value:
+            continue
+        try:
+            parsed = float(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"Invalid RPM value: {value}") from exc
+        if parsed <= 0:
+            raise argparse.ArgumentTypeError("RPM must be > 0.")
+        rpms.append(parsed)
+    if not rpms:
+        raise argparse.ArgumentTypeError("At least one RPM is required.")
+    return sorted(set(rpms))
+
+
 def normalize_proxy(raw_proxy: str | None) -> str:
     proxy = (raw_proxy or "").strip()
     if not proxy:
@@ -236,9 +254,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="BPK URL or path to probe (default: /Search?tema=46&p=1).",
     )
     parser.add_argument(
+        "--rpms",
+        default=None,
+        help="Comma-separated RPM stages (recommended), e.g. 30,60,90,120.",
+    )
+    parser.add_argument(
         "--delays",
         default=",".join(str(d) for d in DEFAULT_DELAYS),
-        help="Comma-separated delay stages in seconds, tested from largest to smallest.",
+        help="Comma-separated delay stages in seconds (legacy input).",
     )
     parser.add_argument("--samples", type=int, default=16, help="Requests per stage.")
     parser.add_argument("--timeout", type=float, default=25.0, help="Request timeout in seconds.")
@@ -269,7 +292,13 @@ def main() -> None:
     if args.safety_factor <= 0:
         raise SystemExit("--safety-factor must be > 0.")
 
-    delays = parse_delays(args.delays)
+    if args.rpms:
+        rpms = parse_rpms(args.rpms)
+        delays = [60.0 / rpm for rpm in rpms]
+    else:
+        delays = parse_delays(args.delays)
+        rpms = [60.0 / delay for delay in delays]
+
     proxy_url = normalize_proxy(args.proxy)
     target_url = normalize_target_url(args.url)
     session = make_session(proxy_url)
@@ -278,7 +307,7 @@ def main() -> None:
     print(f"[{now}] BPK rate probe starting")
     print(f"Proxy: {proxy_url}")
     print(f"Target: {target_url}")
-    print(f"Stages (delay s): {', '.join(f'{d:.3f}' for d in delays)}")
+    print(f"Stages (RPM): {', '.join(f'{rpm:.1f}' for rpm in rpms)}")
     print(f"Samples per stage: {args.samples}")
     print("-" * 78)
 
@@ -323,6 +352,7 @@ def main() -> None:
             "proxy": proxy_url,
             "target": target_url,
             "samples_per_stage": args.samples,
+            "rpms_tested": rpms,
             "delays_tested": delays,
             "min_success_rate": args.min_success_rate,
             "safety_factor": args.safety_factor,
