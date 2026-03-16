@@ -3,9 +3,9 @@
 Probe BPK rate-limit behavior through a proxy and suggest a safe delay.
 
 Examples:
-  python3 scripts/test_bpk_rate_limit.py --proxy socks5h://localhost:1080
-  python3 scripts/test_bpk_rate_limit.py --proxy user:pass@host:port --samples 20
-  python3 scripts/test_bpk_rate_limit.py --proxy socks5h://localhost:1080 --delays 2,1.5,1,0.75,0.5
+  python3 scripts/crawler/test_bpk_rate_limit.py --proxy socks5h://localhost:1080
+  python3 scripts/crawler/test_bpk_rate_limit.py --proxy user:pass@host:port --samples 20
+  python3 scripts/crawler/test_bpk_rate_limit.py --proxy socks5h://localhost:1080 --delays 2,1.5,1,0.75,0.5
 """
 
 from __future__ import annotations

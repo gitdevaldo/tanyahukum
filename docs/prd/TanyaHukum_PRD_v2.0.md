@@ -509,7 +509,7 @@ User uploads PDF / receives signing link
 
 Sumber utama: peraturan.bpk.go.id — database resmi BPK yang mencakup seluruh peraturan perundang-undangan Indonesia.
 
-Crawler otomatis (`scripts/crawl_bpk_v2.py`) dengan:
+Crawler otomatis (`scripts/crawler/crawl_bpk_v2.py`) dengan:
 - Proxy Indonesia wajib (BPK blokir non-Indonesian IP via Cloudflare).
 - Hanya regulasi berstatus 'Berlaku' yang diunduh.
 - Resume-safe: progress disimpan ke `crawl_progress.json`.

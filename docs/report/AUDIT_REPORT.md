@@ -38,7 +38,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | C-04 | Critical | Race condition on chat limit allows unlimited bypass | `api/services/storage.py`, `api/routers/chat.py` | Fixed |
 | C-05 | Critical | Conversation history injection — system role allowed | `api/models/schemas.py`, `api/routers/chat.py` | Fixed |
 | C-06 | Critical | Production secrets in plaintext .env with default perms | `.env`, `web/.env.local` | Fixed |
-| ~~C-07~~ | ~~Critical~~ | ~~Hardcoded unauthenticated webhook URL dispenses API key~~ | ~~`scripts/ingest.py:46`~~ | Not a Problem |
+| ~~C-07~~ | ~~Critical~~ | ~~Hardcoded unauthenticated webhook URL dispenses API key~~ | ~~`scripts/ingest/ingest.py:46`~~ | Not a Problem |
 | C-08 | Critical | Crawl progress JSON tracked in git (secrets leak risk) | `.gitignore` | Fixed |
 | C-09 | Critical | Regulations metadata tracked in git (bloat & leak risk) | `.gitignore` | Fixed |
 | H-01 | High | No timeout on LLM API calls | `api/services/llm.py` | Fixed |
@@ -56,7 +56,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | H-13 | High | No mobile hamburger menu — nav links inaccessible | `web/src/components/landing/Header.tsx` | Fixed |
 | H-14 | High | Missing HSTS, CSP, Permissions-Policy headers | `/etc/caddy/Caddyfile` | Fixed |
 | H-15 | High | No rate limiting at Caddy reverse proxy level | `api/main.py` (slowapi) | Fixed |
-| H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawl_bpk_v2.py` | Fixed |
+| H-16 | High | Race condition in concurrent crawler file writes | `scripts/crawler/crawl_bpk_v2.py` | Fixed |
 | M-01 | Medium | `datetime.utcnow()` deprecated in Python 3.12 | `api/models/schemas.py` | Fixed |
 | M-02 | Medium | Duplicate LLM client singletons | `api/services/llm.py` | Fixed |
 | M-03 | Medium | MongoDB 16MB BSON document size limit | `api/config.py` | Fixed |
@@ -80,7 +80,7 @@ TanyaHukum is a functional hackathon MVP with a solid architecture (Next.js + Fa
 | M-21 | Medium | Missing accessibility labels on form inputs | `UploadSection.tsx`, `ChatPanel.tsx` | Fixed |
 | M-22 | Medium | PM2 has no memory restart limits | `ecosystem.config.cjs` | Fixed |
 | M-23 | Medium | PM2 logs grow unbounded — no rotation | PM2 module | Fixed |
-| M-24 | Medium | Non-atomic JSON file writes in crawler/ingest | `scripts/crawl_bpk_v2.py`, `scripts/ingest.py` | Fixed |
+| M-24 | Medium | Non-atomic JSON file writes in crawler/ingest | `scripts/crawler/crawl_bpk_v2.py`, `scripts/ingest/ingest.py` | Fixed |
 | L-01 | Low | CORS origins include hardcoded IP | `api/config.py` | Fixed |
 | L-02 | Low | Import inside function body | `api/services/analyzer.py` | Fixed |
 | L-03 | Low | Unused functions in pdf_extractor | `api/services/pdf_extractor.py` | Fixed |
@@ -260,7 +260,7 @@ chown root:root .env              # Ensure correct ownership
 
 #### ~~C-07 · Hardcoded unauthenticated webhook URL dispenses API key~~ — NOT A PROBLEM
 
-**File**: `scripts/ingest.py:46`
+**File**: `scripts/ingest/ingest.py:46`
 
 **What happens**: A hardcoded n8n webhook URL is committed to git: `MISTRAL_API_KEY_URL = "https://n8n.aldo.codes/webhook/68c51f35-..."`. This URL is used to auto-refresh the Mistral API key.
 
@@ -630,7 +630,7 @@ header {
 
 #### H-16 · Race condition in concurrent crawler file writes
 
-**File**: `scripts/crawl_bpk_v2.py:377-418`
+**File**: `scripts/crawler/crawl_bpk_v2.py:377-418`
 
 **What happens**: `_process_one()` runs in a `ThreadPoolExecutor` with 10 workers. While `save_progress` and `save_meta` use `_save_lock`, the `reg.update(dinfo)` and `meta[doc_id] = reg` mutations happen outside the lock.
 
@@ -933,7 +933,7 @@ const sanitized = { message, analysis_id, analysis_context, conversation_history
 
 #### M-24 · Non-atomic JSON file writes in crawler and ingest scripts
 
-**Files**: `scripts/crawl_bpk_v2.py:135-152`, `scripts/ingest.py`
+**Files**: `scripts/crawler/crawl_bpk_v2.py:135-152`, `scripts/ingest/ingest.py`
 
 **What happens**: State files are written with `json.dump()` directly to the target file path.
 

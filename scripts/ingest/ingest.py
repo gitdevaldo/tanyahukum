@@ -4,10 +4,10 @@ TanyaHukum — Ingestion Pipeline
 Parses regulation PDFs → chunks by pasal → embeds with Mistral → stores in Qdrant.
 
 USAGE:
-  python3 scripts/ingest.py                    # full ingestion
-  python3 scripts/ingest.py --stats            # show ingestion stats
-  python3 scripts/ingest.py --retry-errors     # retry previously failed PDFs
-  python3 scripts/ingest.py --parse-only       # parse + chunk only (no embedding)
+  python3 scripts/ingest/ingest.py             # full ingestion
+  python3 scripts/ingest/ingest.py --stats     # show ingestion stats
+  python3 scripts/ingest/ingest.py --retry-errors # retry previously failed PDFs
+  python3 scripts/ingest/ingest.py --parse-only   # parse + chunk only (no embedding)
 
 REQUIREMENTS:
   pip install pymupdf qdrant-client python-dotenv requests rich aiohttp

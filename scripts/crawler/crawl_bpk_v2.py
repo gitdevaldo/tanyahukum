@@ -24,10 +24,10 @@ FLOW:
 USAGE:
   pip install requests beautifulsoup4 rich
 
-  python3 scripts/crawl_bpk_v2.py --relevant-only --proxy socks5h://localhost:1080 --rate-profile local
-  python3 scripts/crawl_bpk_v2.py --tema 46 --proxy user:pass@host:port --rate-profile rotating
-  python3 scripts/crawl_bpk_v2.py --proxy user:pass@host:port --max-rpm 800 --workers 4
-  python3 scripts/crawl_bpk_v2.py --stats
+  python3 scripts/crawler/crawl_bpk_v2.py --relevant-only --proxy socks5h://localhost:1080 --rate-profile local
+  python3 scripts/crawler/crawl_bpk_v2.py --tema 46 --proxy user:pass@host:port --rate-profile rotating
+  python3 scripts/crawler/crawl_bpk_v2.py --proxy user:pass@host:port --max-rpm 800 --workers 4
+  python3 scripts/crawler/crawl_bpk_v2.py --stats
 
 OUTPUT:
   data/regulations/           <- PDFs (Berlaku only)
@@ -825,7 +825,7 @@ def main():
 
     console.rule("COMPLETE")
     print_stats()
-    console.print("  Next → [cyan]python scripts/ingest.py[/cyan]")
+    console.print("  Next → [cyan]python scripts/ingest/ingest.py[/cyan]")
 
 
 if __name__ == "__main__":
