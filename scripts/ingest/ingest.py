@@ -19,6 +19,7 @@ import re
 import json
 import time
 import asyncio
+import threading
 import argparse
 import requests
 import aiohttp
@@ -65,12 +66,17 @@ CHUNK_MAX_TOKENS    = 800     # split chunks larger than this
 
 def load_ingest_state() -> dict:
     if INGEST_STATE_F.exists():
-        with open(INGEST_STATE_F) as f:
-            state = json.load(f)
-        # Backfill new fields for old state files
-        state.setdefault("embed_errors", {})
-        state["stats"].setdefault("embed_errors", 0)
-        return state
+        try:
+            with open(INGEST_STATE_F) as f:
+                state = json.load(f)
+            return normalize_ingest_state(state)
+        except Exception as e:
+            console.print(f"  [yellow]State file invalid, rebuilding default state: {str(e)[:80]}[/yellow]")
+            return default_ingest_state()
+    return default_ingest_state()
+
+
+def default_ingest_state() -> dict:
     return {
         "parsed":    {},  # doc_id -> {"status": "success"|"error"|"empty", "chunks": int, "error": str|null}
         "embedded":  [],  # list of doc_ids fully embedded
@@ -87,7 +93,36 @@ def load_ingest_state() -> dict:
         "last_updated": None,
     }
 
+
+def normalize_ingest_state(state: dict) -> dict:
+    """Ensure ingest state has all required keys (for backward/partial states)."""
+    defaults = default_ingest_state()
+    if not isinstance(state, dict):
+        return defaults
+
+    state.setdefault("parsed", {})
+    state.setdefault("embedded", [])
+    state.setdefault("embed_errors", {})
+    state.setdefault("stats", {})
+    state.setdefault("last_updated", None)
+
+    if not isinstance(state["parsed"], dict):
+        state["parsed"] = {}
+    if not isinstance(state["embedded"], list):
+        state["embedded"] = []
+    if not isinstance(state["embed_errors"], dict):
+        state["embed_errors"] = {}
+    if not isinstance(state["stats"], dict):
+        state["stats"] = {}
+
+    for key, value in defaults["stats"].items():
+        state["stats"].setdefault(key, value)
+
+    return state
+
+
 def save_ingest_state(state: dict):
+    state = normalize_ingest_state(state)
     state["last_updated"] = datetime.now().isoformat()
     INGEST_STATE_F.parent.mkdir(parents=True, exist_ok=True)
     # M-24: Atomic write
@@ -549,6 +584,99 @@ def get_next_point_id(client: QdrantClient) -> int:
     return int(info.points_count or 0)
 
 
+def _scan_existing_doc_ids(client: QdrantClient, batch_size: int = 1000) -> set[str]:
+    """Scan Qdrant collection and return unique doc_id values already stored."""
+    doc_ids: set[str] = set()
+    offset = None
+
+    while True:
+        points, next_offset = client.scroll(
+            collection_name=LEGAL_COLLECTION,
+            limit=batch_size,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        if not points:
+            break
+
+        for point in points:
+            payload = point.payload or {}
+            doc_id = payload.get("doc_id")
+            if doc_id is not None:
+                text = str(doc_id).strip()
+                if text:
+                    doc_ids.add(text)
+
+        if next_offset is None:
+            break
+        offset = next_offset
+
+    return doc_ids
+
+
+def recover_state_from_qdrant_if_needed(state: dict, meta: dict):
+    """Recover missing parsed/embedded state from existing Qdrant payloads."""
+    state = normalize_ingest_state(state)
+    needs_parsed = len(state["parsed"]) == 0
+    needs_embedded = len(state["embedded"]) == 0
+
+    if not needs_parsed and not needs_embedded:
+        return
+
+    client = None
+    try:
+        client = get_qdrant_client()
+        ensure_legal_collection(client)
+        existing_doc_ids = _scan_existing_doc_ids(client)
+    except Exception as e:
+        console.print(f"  [yellow]State recovery skipped (Qdrant issue): {str(e)[:100]}[/yellow]")
+        return
+    finally:
+        try:
+            if client is not None:
+                client.close()
+        except Exception:
+            pass
+
+    if not existing_doc_ids:
+        return
+
+    recovered_embedded = 0
+    recovered_parsed = 0
+
+    if needs_embedded:
+        state["embedded"] = sorted(existing_doc_ids)
+        recovered_embedded = len(state["embedded"])
+
+    if needs_parsed:
+        for doc_id in existing_doc_ids:
+            if doc_id in state["parsed"]:
+                continue
+            doc_meta = meta.get(doc_id, {})
+            local_path = doc_meta.get("local_path", "") if isinstance(doc_meta, dict) else ""
+            file_name = Path(local_path).name if local_path else f"{doc_id}.pdf"
+            state["parsed"][doc_id] = {
+                "status": "success",
+                "chunks": 0,
+                "chars": 0,
+                "error": None,
+                "file": file_name,
+                "recovered_from_qdrant": True,
+            }
+            recovered_parsed += 1
+
+    success_count = sum(1 for v in state["parsed"].values() if isinstance(v, dict) and v.get("status") == "success")
+    state["stats"]["parsed_success"] = max(int(state["stats"].get("parsed_success", 0)), success_count)
+    state["stats"]["embed_errors"] = len(state.get("embed_errors", {}))
+    save_ingest_state(state)
+
+    console.print(
+        f"  🔁 Recovered ingest state from Qdrant: "
+        f"embedded +{recovered_embedded}, parsed +{recovered_parsed}"
+    )
+
+
 # ================================================================
 # MAIN PIPELINE
 # ================================================================
@@ -950,6 +1078,9 @@ def main():
     if args.backfill_metadata:
         backfill_existing_payload_metadata(meta, batch_size=args.backfill_batch_size)
         return
+
+    # If state is partially missing (e.g., older or interrupted formats), recover from Qdrant payloads.
+    recover_state_from_qdrant_if_needed(state, meta)
 
     console.rule("TanyaHukum Ingestion Pipeline")
 

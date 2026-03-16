@@ -13,7 +13,7 @@ from api.models.schemas import (
 from api.services.pdf_extractor import extract_text_from_pdf
 from api.services.clause_splitter import split_into_clauses
 from api.services.embeddings import embed_single, embed_texts
-from api.services.rag import vector_search
+from api.services.rag import vector_search, build_retrieval_context
 from api.services.llm import get_llm_client
 from api.services.guardrails import (
     validate_pdf_upload, validate_extracted_text, ground_citations, LEGAL_DISCLAIMER_ID
@@ -50,6 +50,9 @@ ATURAN:
 3. JANGAN mengarang pasal/regulasi yang tidak ada di konteks
 4. Jika tidak ada regulasi yang relevan dari konteks, katakan "tidak ditemukan regulasi terkait dalam database"
 5. Jawab selalu dalam Bahasa Indonesia
+6. Jika ada konflik aturan, terapkan urutan: lex superior, lalu lex specialis, lalu lex posterior.
+7. Untuk aturan sektoral instansi (mis. POJK/SE OJK/BI), perlakukan sebagai aturan khusus nasional di sektor terkait, namun tetap cek konsistensi dengan UU/PP/Perpres.
+8. Untuk aturan daerah (Perda/Perkada), jangan gunakan lintas wilayah jika konteks wilayah dokumen berbeda.
 """
 
 
@@ -70,9 +73,19 @@ def _analyze_clause_with_llm(
             pasal = chunk.get("pasal_ref", "")
             content = chunk.get("content", "")[:500]
             score = chunk.get("score", 0)
+            bentuk = chunk.get("bentuk", "")
+            tahun = chunk.get("tahun", "")
+            lokasi = chunk.get("lokasi", "")
+            tier_label = chunk.get("tier_label", "")
             rag_text += f"\n[{i}] {source}"
             if pasal:
                 rag_text += f" - {pasal}"
+            if bentuk or tahun:
+                rag_text += f" [{bentuk} {tahun}]".strip()
+            if lokasi:
+                rag_text += f" | lokasi/instansi: {lokasi}"
+            if tier_label:
+                rag_text += f" | tier: {tier_label}"
             rag_text += f" (relevansi: {score:.2f})\n{content}\n"
 
     user_prompt = f"""Analisis klausa kontrak berikut:
@@ -216,6 +229,7 @@ def _analyze_contract_sync(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
     clause_texts = [c["text"][:2000] for c in clauses]
     logger.info(f"Batch embedding {len(clause_texts)} clauses")
     embeddings = embed_texts(clause_texts)
+    retrieval_context = build_retrieval_context(text, filename=filename)
 
     # 5. Parallel RAG + LLM for each clause
     clause_results: list[ClauseAnalysis] = [None] * len(clauses)
@@ -223,7 +237,12 @@ def _analyze_contract_sync(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
     def process_clause(idx_clause):
         idx, clause = idx_clause
         try:
-            rag_results = vector_search(embeddings[idx], top_k=settings.rag_top_k)
+            rag_results = vector_search(
+                embeddings[idx],
+                top_k=settings.rag_top_k,
+                clause_text=clause["text"],
+                retrieval_context=retrieval_context,
+            )
             analysis = _analyze_clause_with_llm(
                 clause["text"],
                 rag_results,
