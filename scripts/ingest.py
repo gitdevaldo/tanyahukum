@@ -1,7 +1,7 @@
 """
 TanyaHukum — Ingestion Pipeline
 =================================
-Parses regulation PDFs → chunks by pasal → embeds with Mistral → stores in MongoDB Atlas.
+Parses regulation PDFs → chunks by pasal → embeds with Mistral → stores in Qdrant.
 
 USAGE:
   python3 scripts/ingest.py                    # full ingestion
@@ -10,7 +10,7 @@ USAGE:
   python3 scripts/ingest.py --parse-only       # parse + chunk only (no embedding)
 
 REQUIREMENTS:
-  pip install pymupdf pymongo python-dotenv requests rich
+  pip install pymupdf qdrant-client python-dotenv requests rich aiohttp
 """
 
 import os
@@ -25,8 +25,8 @@ import fitz  # PyMuPDF
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
-from pymongo import MongoClient
-from pymongo.operations import InsertOne
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 try:
     from rich.console import Console
@@ -43,8 +43,8 @@ REGULATIONS_DIR = Path("data/regulations")
 META_F          = Path("data/regulations_meta.json")
 INGEST_STATE_F  = Path("data/ingest_state.json")
 
-MONGODB_URI     = os.getenv("MONGODB_URI")
-MONGODB_DB      = os.getenv("MONGODB_DB", "tanyahukum")
+QDRANT_URL      = os.getenv("QDRANT_URL", "http://localhost:6333")
+LEGAL_COLLECTION = "legal_chunks"
 MISTRAL_API_KEY_URL = "https://n8n.aldo.codes/webhook/68c51f35-0fef-4bc0-a909-f60484c8c532"
 
 MISTRAL_EMBED_URL   = "https://api.mistral.ai/v1/embeddings"
@@ -513,36 +513,29 @@ def build_batches(chunks: list[dict]) -> list[list[int]]:
 
 
 # ================================================================
-# STEP 4: STORE IN MONGODB
+# STEP 4: STORE IN QDRANT
 # ================================================================
 
-def get_mongo_collection():
-    """Get MongoDB collection for legal chunks."""
-    client = MongoClient(MONGODB_URI)
-    db = client[MONGODB_DB]
-    return db["legal_chunks"], client
+def get_qdrant_client() -> QdrantClient:
+    """Get Qdrant client for legal chunk storage."""
+    return QdrantClient(url=QDRANT_URL, timeout=60)
 
 
-def ensure_vector_index(collection):
-    """Create vector search index if it doesn't exist."""
-    existing = list(collection.list_search_indexes())
-    if not any(idx.get("name") == "vector_index" for idx in existing):
-        collection.create_search_index({
-            "definition": {
-                "mappings": {
-                    "dynamic": True,
-                    "fields": {
-                        "embedding": {
-                            "type": "knnVector",
-                            "dimensions": 1024,
-                            "similarity": "cosine",
-                        }
-                    }
-                }
-            },
-            "name": "vector_index",
-        })
-        console.print("  ✅ Created MongoDB vector search index")
+def ensure_legal_collection(client: QdrantClient):
+    """Ensure legal_chunks collection exists with expected vector config."""
+    existing = {c.name for c in client.get_collections().collections}
+    if LEGAL_COLLECTION not in existing:
+        client.create_collection(
+            collection_name=LEGAL_COLLECTION,
+            vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+        )
+        console.print(f"  ✅ Created Qdrant collection '{LEGAL_COLLECTION}'")
+
+
+def get_next_point_id(client: QdrantClient) -> int:
+    """Compute next integer point id based on current collection size."""
+    info = client.get_collection(LEGAL_COLLECTION)
+    return int(info.points_count or 0)
 
 
 # ================================================================
@@ -637,7 +630,7 @@ def run_parse(state: dict, meta: dict, retry_errors: bool = False):
 
 
 def run_embed_and_store(chunks: list[dict], state: dict):
-    """Step 3+4: Embed chunks with Mistral (multi-key concurrent) and store in MongoDB."""
+    """Step 3+4: Embed chunks with Mistral (multi-key concurrent) and store in Qdrant."""
     if not chunks:
         console.print("[yellow]No chunks to embed.[/yellow]")
         return
@@ -665,26 +658,24 @@ def run_embed_and_store(chunks: list[dict], state: dict):
 
     console.print(f"  🚀 Running {len(keys)} keys × {CONCURRENCY_PER_KEY} conc = {len(keys) * CONCURRENCY_PER_KEY} parallel workers")
 
-    collection, client = get_mongo_collection()
-
-    # Ensure collection exists
-    db = client[MONGODB_DB]
-    if "legal_chunks" not in db.list_collection_names():
-        db.create_collection("legal_chunks")
-        console.print("  ✅ Created 'legal_chunks' collection")
-
     try:
-        ensure_vector_index(collection)
+        client = get_qdrant_client()
+        ensure_legal_collection(client)
+        next_point_id = get_next_point_id(client)
     except Exception as e:
-        console.print(f"  [yellow]Vector index note: {str(e)[:100]}[/yellow]")
+        console.print(f"  [red]Qdrant setup error: {str(e)[:120]}[/red]")
+        return
 
     # Run async embedding
     doc_ids_in_run = set()
     failed_batches = 0
     inserted = 0
+    state_lock = threading.Lock()
+    point_id_lock = threading.Lock()
+    base_total_embedded = int(state["stats"].get("total_embedded", 0))
 
     async def process_all():
-        nonlocal failed_batches, inserted, doc_ids_in_run
+        nonlocal failed_batches, inserted, doc_ids_in_run, next_point_id
 
         # Create per-key semaphores (5 concurrent per key)
         key_semaphores = {key: asyncio.Semaphore(CONCURRENCY_PER_KEY) for key in keys}
@@ -703,24 +694,30 @@ def run_embed_and_store(chunks: list[dict], state: dict):
             total = len(tasks)
 
             async def process_one(batch_chunks, key, sem):
-                nonlocal completed, failed_batches, inserted, doc_ids_in_run
+                nonlocal completed, failed_batches, inserted, doc_ids_in_run, next_point_id
                 texts = [c["content"] for c in batch_chunks]
 
                 embeddings = await _async_embed_batch_with_fallback(session, texts, key, sem)
 
                 if embeddings is None:
                     failed_doc_ids = set(c["doc_id"] for c in batch_chunks)
-                    for did in failed_doc_ids:
-                        prev = state.get("embed_errors", {}).get(did, {"attempts": 0})
-                        state.setdefault("embed_errors", {})[did] = {
-                            "error": "Mistral returned None",
-                            "attempts": prev["attempts"] + 1,
-                        }
+                    with state_lock:
+                        for did in failed_doc_ids:
+                            prev = state.get("embed_errors", {}).get(did, {"attempts": 0})
+                            state.setdefault("embed_errors", {})[did] = {
+                                "error": "Mistral returned None",
+                                "attempts": prev["attempts"] + 1,
+                            }
                     failed_batches += 1
                 else:
-                    docs_to_insert = []
+                    points_to_upsert: list[PointStruct] = []
+                    created_at = datetime.now().isoformat()
                     for chunk, embedding in zip(batch_chunks, embeddings):
-                        docs_to_insert.append({
+                        with point_id_lock:
+                            point_id = next_point_id
+                            next_point_id += 1
+
+                        payload = {
                             "doc_id":     chunk["doc_id"],
                             "pasal_ref":  chunk["pasal_ref"],
                             "content":    chunk["content"],
@@ -730,16 +727,33 @@ def run_embed_and_store(chunks: list[dict], state: dict):
                             "tahun":      chunk["tahun"],
                             "subjek":     chunk["subjek"],
                             "chunk_type": chunk["chunk_type"],
-                            "embedding":  embedding,
-                            "created_at": datetime.now().isoformat(),
-                        })
+                            "created_at": created_at,
+                        }
+                        points_to_upsert.append(
+                            PointStruct(
+                                id=point_id,
+                                vector=embedding,
+                                payload=payload,
+                            )
+                        )
                         doc_ids_in_run.add(chunk["doc_id"])
 
                     try:
-                        collection.insert_many(docs_to_insert)
-                        inserted += len(docs_to_insert)
+                        await asyncio.to_thread(
+                            client.upsert,
+                            collection_name=LEGAL_COLLECTION,
+                            points=points_to_upsert,
+                        )
+                        inserted += len(points_to_upsert)
                     except Exception as e:
-                        console.print(f"  [red]MongoDB insert error: {str(e)[:80]}[/red]")
+                        console.print(f"  [red]Qdrant upsert error: {str(e)[:100]}[/red]")
+                        with state_lock:
+                            for did in set(c["doc_id"] for c in batch_chunks):
+                                prev = state.get("embed_errors", {}).get(did, {"attempts": 0})
+                                state.setdefault("embed_errors", {})[did] = {
+                                    "error": f"Qdrant upsert failed: {str(e)[:120]}",
+                                    "attempts": prev["attempts"] + 1,
+                                }
                         failed_batches += 1
 
                 completed += 1
@@ -748,9 +762,11 @@ def run_embed_and_store(chunks: list[dict], state: dict):
 
                 # Periodic state save
                 if completed % 50 == 0:
-                    state["embedded"] = list(set(state["embedded"]) | doc_ids_in_run)
-                    state["stats"]["total_embedded"] = inserted
-                    save_ingest_state(state)
+                    with state_lock:
+                        state["embedded"] = list(set(state["embedded"]) | doc_ids_in_run)
+                        state["stats"]["total_embedded"] = base_total_embedded + inserted
+                        state["stats"]["embed_errors"] = len(state.get("embed_errors", {}))
+                        save_ingest_state(state)
 
             # Run all tasks with controlled concurrency
             await asyncio.gather(*[process_one(bc, k, s) for bc, k, s in tasks])
@@ -759,11 +775,14 @@ def run_embed_and_store(chunks: list[dict], state: dict):
 
     # Final state save
     state["embedded"] = list(set(state["embedded"]) | doc_ids_in_run)
-    state["stats"]["total_embedded"] += inserted
+    state["stats"]["total_embedded"] = base_total_embedded + inserted
     state["stats"]["embed_errors"] = len(state.get("embed_errors", {}))
     save_ingest_state(state)
 
-    client.close()
+    try:
+        client.close()
+    except Exception:
+        pass
 
     console.print(
         f"\n  ✅ Embedded & stored: {inserted} chunks | "
@@ -813,8 +832,8 @@ def main():
         print_stats()
         return
 
-    if not MONGODB_URI:
-        console.print("[red]Error: MONGODB_URI not set in .env[/red]")
+    if not QDRANT_URL:
+        console.print("[red]Error: QDRANT_URL not set in .env[/red]")
         return
 
     state = load_ingest_state()

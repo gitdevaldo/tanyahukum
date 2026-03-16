@@ -6,6 +6,7 @@ This folder contains operational scripts for TanyaHukum data pipelines.
 
 - `crawl_bpk_v2.py` is the crawler used for scraping BPK regulation pages and downloading PDFs.
 - `crawl_bpk.py` (Firecrawl-based) has been removed.
+- `ingest.py` parses downloaded PDFs, builds legal chunks, embeds with Mistral, and writes vectors to Qdrant (`legal_chunks`).
 
 ## Why rate controls matter
 
