@@ -39,3 +39,9 @@ Parse/chunk only (skip embeddings):
 ```bash
 python3 scripts/ingest/ingest.py --parse-only
 ```
+
+Backfill all metadata fields into already-stored Qdrant chunks:
+
+```bash
+python3 scripts/ingest/ingest.py --backfill-metadata
+```

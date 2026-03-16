@@ -57,11 +57,13 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────
 BASE_URL            = "https://peraturan.bpk.go.id"
-OUT_DIR             = Path("data/regulations")
-PROGRESS_F          = Path("data/crawl_progress.json")
-META_F              = Path("data/regulations_meta.json")
+PROJECT_ROOT        = Path(__file__).resolve().parents[2]
+DATA_DIR            = PROJECT_ROOT / "data"
+OUT_DIR             = DATA_DIR / "regulations"
+PROGRESS_F          = DATA_DIR / "crawl_progress.json"
+META_F              = DATA_DIR / "regulations_meta.json"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-Path("data").mkdir(exist_ok=True)
+DATA_DIR.mkdir(exist_ok=True)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

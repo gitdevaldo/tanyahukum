@@ -8,6 +8,7 @@ USAGE:
   python3 scripts/ingest/ingest.py --stats     # show ingestion stats
   python3 scripts/ingest/ingest.py --retry-errors # retry previously failed PDFs
   python3 scripts/ingest/ingest.py --parse-only   # parse + chunk only (no embedding)
+  python3 scripts/ingest/ingest.py --backfill-metadata  # patch existing Qdrant payloads
 
 REQUIREMENTS:
   pip install pymupdf qdrant-client python-dotenv requests rich aiohttp
@@ -36,12 +37,14 @@ except ImportError:
     print("ERROR: pip install rich")
     exit(1)
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 # ── Config ────────────────────────────────────────────────────────
-REGULATIONS_DIR = Path("data/regulations")
-META_F          = Path("data/regulations_meta.json")
-INGEST_STATE_F  = Path("data/ingest_state.json")
+DATA_DIR        = PROJECT_ROOT / "data"
+REGULATIONS_DIR = DATA_DIR / "regulations"
+META_F          = DATA_DIR / "regulations_meta.json"
+INGEST_STATE_F  = DATA_DIR / "ingest_state.json"
 
 QDRANT_URL      = os.getenv("QDRANT_URL", "http://localhost:6333")
 LEGAL_COLLECTION = "legal_chunks"
@@ -86,6 +89,7 @@ def load_ingest_state() -> dict:
 
 def save_ingest_state(state: dict):
     state["last_updated"] = datetime.now().isoformat()
+    INGEST_STATE_F.parent.mkdir(parents=True, exist_ok=True)
     # M-24: Atomic write
     tmp = INGEST_STATE_F.with_suffix(".tmp")
     with open(tmp, "w") as f:
@@ -200,6 +204,7 @@ def chunk_by_pasal(text: str, doc_id: str, meta: dict) -> list[dict]:
     nomor = meta.get("nomor", "")
     tahun = meta.get("tahun", "")
     subjek = meta.get("subjek", "")
+    lokasi = meta.get("lokasi", "")
 
     if not splits:
         # No pasal structure found — chunk by fixed size
@@ -217,6 +222,7 @@ def chunk_by_pasal(text: str, doc_id: str, meta: dict) -> list[dict]:
             "nomor":      nomor,
             "tahun":      tahun,
             "subjek":     subjek,
+            "lokasi":     lokasi,
             "chunk_type": "preamble",
         })
 
@@ -245,6 +251,7 @@ def chunk_by_pasal(text: str, doc_id: str, meta: dict) -> list[dict]:
                     "nomor":      nomor,
                     "tahun":      tahun,
                     "subjek":     subjek,
+                    "lokasi":     lokasi,
                     "chunk_type": "pasal_part",
                 })
         else:
@@ -257,6 +264,7 @@ def chunk_by_pasal(text: str, doc_id: str, meta: dict) -> list[dict]:
                 "nomor":      nomor,
                 "tahun":      tahun,
                 "subjek":     subjek,
+                "lokasi":     lokasi,
                 "chunk_type": "pasal",
             })
 
@@ -311,6 +319,7 @@ def chunk_by_size(text: str, doc_id: str, meta: dict) -> list[dict]:
     nomor = meta.get("nomor", "")
     tahun = meta.get("tahun", "")
     subjek = meta.get("subjek", "")
+    lokasi = meta.get("lokasi", "")
 
     paragraphs = text.split('\n\n')
     chunks = []
@@ -330,6 +339,7 @@ def chunk_by_size(text: str, doc_id: str, meta: dict) -> list[dict]:
                     "nomor":      nomor,
                     "tahun":      tahun,
                     "subjek":     subjek,
+                    "lokasi":     lokasi,
                     "chunk_type": "fixed_size",
                 })
             current = para
@@ -347,6 +357,7 @@ def chunk_by_size(text: str, doc_id: str, meta: dict) -> list[dict]:
             "nomor":      nomor,
             "tahun":      tahun,
             "subjek":     subjek,
+            "lokasi":     lokasi,
             "chunk_type": "fixed_size",
         })
 
@@ -629,7 +640,7 @@ def run_parse(state: dict, meta: dict, retry_errors: bool = False):
     return all_chunks
 
 
-def run_embed_and_store(chunks: list[dict], state: dict):
+def run_embed_and_store(chunks: list[dict], state: dict, meta_by_doc: dict):
     """Step 3+4: Embed chunks with Mistral (multi-key concurrent) and store in Qdrant."""
     if not chunks:
         console.print("[yellow]No chunks to embed.[/yellow]")
@@ -726,9 +737,22 @@ def run_embed_and_store(chunks: list[dict], state: dict):
                             "nomor":      chunk["nomor"],
                             "tahun":      chunk["tahun"],
                             "subjek":     chunk["subjek"],
+                            "lokasi":     chunk.get("lokasi", ""),
                             "chunk_type": chunk["chunk_type"],
                             "created_at": created_at,
                         }
+                        # Append all metadata from details page.
+                        doc_meta = meta_by_doc.get(chunk["doc_id"], {}) or {}
+                        if isinstance(doc_meta, dict):
+                            payload.update(doc_meta)
+
+                        # Enforce chunk-specific canonical keys.
+                        payload["doc_id"] = chunk["doc_id"]
+                        payload["pasal_ref"] = chunk["pasal_ref"]
+                        payload["content"] = chunk["content"]
+                        payload["source"] = chunk["source"]
+                        payload["chunk_type"] = chunk["chunk_type"]
+                        payload["created_at"] = created_at
                         points_to_upsert.append(
                             PointStruct(
                                 id=point_id,
@@ -790,6 +814,86 @@ def run_embed_and_store(chunks: list[dict], state: dict):
     )
 
 
+def backfill_existing_payload_metadata(meta_by_doc: dict, batch_size: int = 1000):
+    """Backfill all details-page metadata fields into existing Qdrant points."""
+    if not meta_by_doc:
+        console.print("[yellow]No metadata loaded from regulations_meta.json.[/yellow]")
+        return
+
+    if batch_size <= 0:
+        batch_size = 1000
+
+    try:
+        client = get_qdrant_client()
+        ensure_legal_collection(client)
+    except Exception as e:
+        console.print(f"[red]Qdrant setup error: {str(e)[:120]}[/red]")
+        return
+
+    scanned = 0
+    patched = 0
+    offset = None
+
+    console.print(
+        f"\n[bold blue]Backfill existing Qdrant payload metadata[/bold blue]\n"
+        f"  Collection: {LEGAL_COLLECTION}\n"
+        f"  Batch size: {batch_size}"
+    )
+
+    while True:
+        points, next_offset = client.scroll(
+            collection_name=LEGAL_COLLECTION,
+            limit=batch_size,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        if not points:
+            break
+
+        scanned += len(points)
+        ids_by_doc: dict[str, list] = {}
+
+        for point in points:
+            payload = point.payload or {}
+            doc_id = payload.get("doc_id")
+            if doc_id is None:
+                continue
+            doc_id = str(doc_id)
+            if doc_id not in meta_by_doc:
+                continue
+            ids_by_doc.setdefault(doc_id, []).append(point.id)
+
+        for doc_id, point_ids in ids_by_doc.items():
+            doc_meta = meta_by_doc.get(doc_id, {})
+            if isinstance(doc_meta, dict) and doc_meta:
+                client.set_payload(
+                    collection_name=LEGAL_COLLECTION,
+                    payload=doc_meta,
+                    points=point_ids,
+                )
+                patched += len(point_ids)
+
+        if scanned % max(batch_size * 20, 2000) == 0:
+            console.print(f"  📊 Scanned {scanned} points | patched {patched}")
+
+        if next_offset is None:
+            break
+        offset = next_offset
+
+    try:
+        client.close()
+    except Exception:
+        pass
+
+    console.print(
+        f"\n  ✅ Backfill complete\n"
+        f"  Points scanned: {scanned}\n"
+        f"  Points patched: {patched}"
+    )
+
+
 # ================================================================
 # STATS
 # ================================================================
@@ -826,6 +930,10 @@ def main():
     parser.add_argument("--stats",        action="store_true", help="Show ingestion stats")
     parser.add_argument("--retry-errors", action="store_true", help="Retry previously failed PDFs")
     parser.add_argument("--parse-only",   action="store_true", help="Parse + chunk only (no embedding)")
+    parser.add_argument("--backfill-metadata", action="store_true",
+                        help="Backfill all details metadata into existing Qdrant chunks")
+    parser.add_argument("--backfill-batch-size", type=int, default=1000,
+                        help="Batch size for Qdrant metadata backfill (default: 1000)")
     args = parser.parse_args()
 
     if args.stats:
@@ -838,6 +946,10 @@ def main():
 
     state = load_ingest_state()
     meta  = load_meta()
+
+    if args.backfill_metadata:
+        backfill_existing_payload_metadata(meta, batch_size=args.backfill_batch_size)
+        return
 
     console.rule("TanyaHukum Ingestion Pipeline")
 
@@ -870,7 +982,7 @@ def main():
                         pass
 
     # Step 3+4: Embed & Store
-    run_embed_and_store(chunks, state)
+    run_embed_and_store(chunks, state, meta)
 
     console.rule("INGESTION COMPLETE")
     print_stats()
