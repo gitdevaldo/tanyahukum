@@ -11,7 +11,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from api.models.schemas import AnalysisResponse
-from api.services.analyzer import analyze_contract
+from api.services.analyzer import analyze_contract, analyze_contract_text
 from api.services.storage import save_analysis, get_analysis, get_analysis_pdf
 from api.services.documents import attach_document_analysis, create_analyzed_document, resolve_document_analysis_quota_owner
 from api.services.guardrails import MAX_FILE_SIZE, validate_pdf_upload
@@ -38,7 +38,7 @@ async def analyze_pdf(
     document_id: str | None = Form(default=None),
     access_token: str | None = Depends(get_optional_bearer_token),
 ):
-    """Upload a contract PDF for legal risk analysis.
+    """Upload a contract document (PDF or plain text) for legal risk analysis.
 
     Supports public demo usage (no bearer token) and authenticated usage
     (with quota + document linkage).
@@ -51,18 +51,29 @@ async def analyze_pdf(
         raise HTTPException(status_code=413, detail="File terlalu besar.")
 
     try:
-        pdf_bytes = await file.read()
+        file_bytes = await file.read()
     except Exception:
         raise HTTPException(status_code=400, detail="Gagal membaca file.")
 
     # Double-check actual size after read
-    if len(pdf_bytes) > MAX_FILE_SIZE:
+    if len(file_bytes) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File terlalu besar.")
 
+    filename = file.filename or "dokumen.pdf"
+    content_type = (file.content_type or "").lower()
+    lower_name = filename.lower()
+    is_text_upload = lower_name.endswith(".txt") or content_type.startswith("text/")
+
     # Validate file type and structure before quota consumption
-    is_valid, error = validate_pdf_upload(pdf_bytes, file.filename)
-    if not is_valid:
-        raise HTTPException(status_code=422, detail=error)
+    text_input: str | None = None
+    if is_text_upload:
+        text_input = file_bytes.decode("utf-8", errors="ignore").strip()
+        if not text_input:
+            raise HTTPException(status_code=422, detail="Teks dokumen kosong atau tidak valid.")
+    else:
+        is_valid, error = validate_pdf_upload(file_bytes, filename)
+        if not is_valid:
+            raise HTTPException(status_code=422, detail=error)
 
     auth_user_id: str | None = None
     auth_email: str | None = None
@@ -107,10 +118,18 @@ async def analyze_pdf(
         raise HTTPException(status_code=401, detail="Bearer token diperlukan untuk analisis dokumen dashboard.")
 
     try:
-        result = await analyze_contract(pdf_bytes, file.filename)
-        # Persist result + PDF to Qdrant
+        if is_text_upload:
+            result = await analyze_contract_text(text_input or "", filename)
+        else:
+            result = await analyze_contract(file_bytes, filename)
+
+        # Persist result (+ PDF bytes when available) to Qdrant
         try:
-            await asyncio.to_thread(save_analysis, result.model_dump(), pdf_bytes)
+            await asyncio.to_thread(
+                save_analysis,
+                result.model_dump(),
+                None if is_text_upload else file_bytes,
+            )
         except Exception as e:
             logger.warning(f"Failed to persist analysis (non-fatal): {e}")
 
@@ -123,7 +142,7 @@ async def analyze_pdf(
                     auth_user_id,
                     auth_email,
                     result.analysis_id,
-                    file.filename,
+                    filename,
                     request_id=getattr(request.state, "request_id", None),
                 )
             except SupabaseServiceError as e:
@@ -138,7 +157,7 @@ async def analyze_pdf(
                     auth_email,
                     auth_name,
                     result.analysis_id,
-                    file.filename,
+                    filename,
                     getattr(request.state, "request_id", None),
                 )
             except SupabaseServiceError as e:

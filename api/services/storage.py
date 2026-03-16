@@ -28,11 +28,11 @@ def _find_analysis_point(analysis_id: str) -> tuple[int | None, dict | None]:
     return None, None
 
 
-def save_analysis(analysis_dict: dict, pdf_bytes: bytes) -> None:
-    """Save analysis result and original PDF to Qdrant."""
+def save_analysis(analysis_dict: dict, pdf_bytes: bytes | None = None) -> None:
+    """Save analysis result and optional original PDF to Qdrant."""
     client = get_qdrant()
 
-    pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+    pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8") if pdf_bytes else None
 
     # Get next ID
     info = client.get_collection(COLLECTION)
@@ -51,7 +51,10 @@ def save_analysis(analysis_dict: dict, pdf_bytes: bytes) -> None:
             collection_name=COLLECTION,
             points=[PointStruct(id=next_id, vector=[0.0, 0.0, 0.0, 0.0], payload=payload)],
         )
-        logger.info(f"Saved analysis {analysis_dict['analysis_id']} ({len(pdf_bytes)} bytes PDF)")
+        logger.info(
+            f"Saved analysis {analysis_dict['analysis_id']} "
+            f"({len(pdf_bytes) if pdf_bytes else 0} bytes PDF)"
+        )
     except Exception as e:
         logger.error(f"Failed to save analysis: {e}", exc_info=True)
 

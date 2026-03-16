@@ -84,7 +84,7 @@ def validate_pdf_upload(file_bytes: bytes, filename: str) -> tuple[bool, str]:
 def validate_extracted_text(text: str) -> tuple[bool, str]:
     """Validate that extracted text looks like a legal document."""
     if not text or len(text.strip()) < 100:
-        return False, "Tidak dapat mengekstrak teks dari PDF. Pastikan PDF mengandung teks (bukan scan/gambar)."
+        return False, "Teks dokumen tidak cukup untuk dianalisis. Pastikan dokumen berisi teks yang terbaca."
 
     return True, ""
 

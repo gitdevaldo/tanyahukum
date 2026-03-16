@@ -4,7 +4,6 @@ import uuid
 import logging
 import asyncio
 import concurrent.futures
-from openai import OpenAI
 
 from api.config import settings
 from api.models.schemas import (
@@ -201,6 +200,11 @@ async def analyze_contract(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
     return await asyncio.to_thread(_analyze_contract_sync, pdf_bytes, filename)
 
 
+async def analyze_contract_text(text: str, filename: str = "dokumen-teks.txt") -> AnalysisResponse:
+    """Analyze plain-text contract input (non-PDF mode)."""
+    return await asyncio.to_thread(_analyze_text_sync, text, filename)
+
+
 def _analyze_contract_sync(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
     """Full analysis pipeline: PDF → text → clauses → RAG → LLM → result."""
     # 1. Validate PDF
@@ -210,6 +214,12 @@ def _analyze_contract_sync(pdf_bytes: bytes, filename: str) -> AnalysisResponse:
 
     # 2. Extract text
     text = extract_text_from_pdf(pdf_bytes)
+
+    return _analyze_text_sync(text, filename)
+
+
+def _analyze_text_sync(text: str, filename: str) -> AnalysisResponse:
+    """Shared pipeline for already-extracted text."""
     valid, error = validate_extracted_text(text)
     if not valid:
         raise ValueError(error)
