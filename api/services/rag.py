@@ -50,6 +50,34 @@ FINANCE_KEYWORDS = (
 
 FINANCE_INSTITUTIONS = {"ojk", "bank_indonesia", "bappebti", "kementerian_keuangan"}
 NATIONAL_INSTITUTIONS = FINANCE_INSTITUTIONS | {"kementerian_kominfo"}
+JURISDICTION_NONE = "none"
+JURISDICTION_EXPLICIT = "explicit_jurisdiction_clause"
+JURISDICTION_SIGNING = "signing_or_notary_location"
+JURISDICTION_PARTY = "party_domicile_address"
+
+LOCATION_STOPWORDS = {
+    "jalan", "jl", "nomor", "no", "rt", "rw", "kelurahan", "kecamatan", "desa",
+    "kab", "kota", "provinsi", "kode", "pos", "hukum", "yang", "berlaku",
+    "berdomisili", "berkedudukan", "penyelesaian", "sengketa", "pengadilan",
+    "negeri", "dibuat", "hari", "ini", "pada", "tanggal", "bulan", "tahun",
+    "alamat", "pihak", "pertama", "kedua", "indonesia", "republik", "di",
+    "wilayah", "tanpa", "menyebut", "tertentu", "dan",
+    "januari", "februari", "maret", "april", "mei", "juni", "juli",
+    "agustus", "september", "oktober", "november", "desember",
+}
+
+GENERIC_NON_LOCATION_PHRASES = {
+    "hukum indonesia",
+    "negara republik indonesia",
+    "republik indonesia",
+    "wilayah tertentu",
+    "tertentu",
+    "timur",
+    "barat",
+    "utara",
+    "selatan",
+    "tengah",
+}
 
 
 def _norm(value: Any) -> str:
@@ -82,15 +110,133 @@ def _extract_institutions(text: str) -> set[str]:
     return found
 
 
+def _extract_geo_terms_from_phrase(phrase: str) -> set[str]:
+    text = _norm(phrase)
+    for marker in (
+        " pada hari ini",
+        " pada tanggal",
+        " tanggal ",
+        " antara ",
+        " yang bertanda tangan",
+        " selanjutnya",
+    ):
+        idx = text.find(marker)
+        if idx > 0:
+            text = text[:idx].strip()
+    terms: set[str] = set()
+    if not text:
+        return terms
+
+    for prov in PROVINCES:
+        if prov in text:
+            terms.add(prov)
+
+    for match in re.finditer(r"\b(kota|kabupaten|provinsi)\s+([a-z][a-z\s\-]{2,60})", text):
+        qualifier = match.group(1).strip()
+        name = _norm(match.group(2))
+        if name:
+            terms.add(f"{qualifier} {name}")
+            terms.add(name)
+
+    for match in re.finditer(r"\bpengadilan\s+negeri\s+([a-z][a-z\s\-]{2,60})", text):
+        name = _norm(match.group(1))
+        if name:
+            terms.add(name)
+
+    words_raw = [w for w in re.findall(r"[a-z]{2,}", text) if w not in LOCATION_STOPWORDS]
+    words: list[str] = []
+    seen_words: set[str] = set()
+    for w in words_raw:
+        if w in seen_words:
+            continue
+        seen_words.add(w)
+        words.append(w)
+    if 1 <= len(words) <= 2:
+        terms.add(" ".join(words))
+    elif len(words) > 2:
+        terms.add(" ".join(words[-2:]))
+        terms.add(words[-1])
+
+    cleaned: set[str] = set()
+    for term in terms:
+        value = _norm(term)
+        if not value or value in GENERIC_NON_LOCATION_PHRASES:
+            continue
+        if 2 <= len(value) <= 80:
+            cleaned.add(value)
+    return cleaned
+
+
+def _extract_with_patterns(text: str, patterns: tuple[str, ...]) -> set[str]:
+    hits: set[str] = set()
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+            phrase = match.group(1).strip(" \t\r\n.,;:-")
+            if phrase:
+                hits |= _extract_geo_terms_from_phrase(phrase)
+    return hits
+
+
+def _extract_priority_jurisdiction(text: str) -> tuple[set[str], str]:
+    explicit_patterns = (
+        r"tunduk\s+pada\s+hukum(?:\s+yang\s+berlaku)?(?:\s+di)?\s+([^.;\n]{2,140})",
+        r"berdomisili\s+hukum\s+di\s+([^.;\n]{2,140})",
+        r"penyelesaian\s+sengketa[^.\n]{0,180}?(?:pengadilan\s+negeri|pn)\s+([^.;\n]{2,120})",
+        r"pengadilan\s+negeri\s+([^.;\n]{2,120})",
+    )
+    explicit_terms = _extract_with_patterns(text, explicit_patterns)
+    if explicit_terms:
+        return explicit_terms, JURISDICTION_EXPLICIT
+
+    signing_patterns = (
+        r"dibuat\s+di\s+([^.;\n]{2,140}?)(?=\s+pada\s+hari\s+ini|\s+pada\s+tanggal|\s+tanggal|\n|[.;]|$)",
+        r"pada\s+hari\s+ini[^.\n]{0,180}?di\s+([^.;\n]{2,140}?)(?=\s+tanggal|\n|[.;]|$)",
+    )
+    signing_terms = _extract_with_patterns(text, signing_patterns)
+    if signing_terms:
+        return signing_terms, JURISDICTION_SIGNING
+
+    party_terms: set[str] = set()
+    block_match = re.search(r"pihak\s+pertama(.{0,700})", text, flags=re.IGNORECASE | re.DOTALL)
+    if block_match:
+        block = block_match.group(1)
+        next_party = re.search(r"pihak\s+kedua", block, flags=re.IGNORECASE)
+        if next_party:
+            block = block[:next_party.start()]
+
+        party_patterns = (
+            r"berdomisili\s+di\s+([^.;\n]{2,140})",
+            r"berkedudukan\s+di\s+([^.;\n]{2,140})",
+            r"alamat\s*[:\-]?\s*([^;\n]{4,200})",
+        )
+        party_terms = _extract_with_patterns(block, party_patterns)
+
+    if party_terms:
+        return party_terms, JURISDICTION_PARTY
+
+    return set(), JURISDICTION_NONE
+
+
 def build_retrieval_context(document_text: str, filename: str = "") -> dict[str, Any]:
     """Extract retrieval context hints from document text + filename."""
-    scope = _norm(f"{filename}\n{document_text}")[:24000]
+    raw_scope = f"{filename}\n{document_text}"[:60000]
+    scope = _norm(raw_scope)
     institutions = _extract_institutions(scope)
-    regions = {prov for prov in PROVINCES if prov in scope}
+    jurisdiction_terms, jurisdiction_source = _extract_priority_jurisdiction(raw_scope)
+    regions = {prov for prov in PROVINCES if any(prov in term for term in jurisdiction_terms)}
+    national_only = len(jurisdiction_terms) == 0
     finance_context = any(k in scope for k in FINANCE_KEYWORDS) or bool(institutions & FINANCE_INSTITUTIONS)
     return {
         "institutions": institutions,
         "regions": regions,
+        "jurisdiction_terms": jurisdiction_terms,
+        "jurisdiction_source": jurisdiction_source,
+        "national_only": national_only,
+        "scope_note": (
+            "wilayah tidak terdeteksi, analisis berdasarkan regulasi nasional saja"
+            if national_only
+            else ""
+        ),
         "finance_context": finance_context,
     }
 
@@ -99,19 +245,37 @@ def _merge_context(
     base_context: dict[str, Any] | None = None,
     clause_text: str | None = None,
 ) -> dict[str, Any]:
-    context = {"institutions": set(), "regions": set(), "finance_context": False}
+    context = {
+        "institutions": set(),
+        "regions": set(),
+        "jurisdiction_terms": set(),
+        "jurisdiction_source": JURISDICTION_NONE,
+        "national_only": True,
+        "scope_note": "",
+        "finance_context": False,
+    }
 
     if isinstance(base_context, dict):
         context["institutions"].update(base_context.get("institutions", set()) or set())
         context["regions"].update(base_context.get("regions", set()) or set())
+        context["jurisdiction_terms"].update(base_context.get("jurisdiction_terms", set()) or set())
+        context["jurisdiction_source"] = str(base_context.get("jurisdiction_source", JURISDICTION_NONE))
         context["finance_context"] = bool(base_context.get("finance_context", False))
+        context["scope_note"] = str(base_context.get("scope_note", "") or "")
 
     if clause_text:
         clause_context = build_retrieval_context(clause_text)
         context["institutions"].update(clause_context["institutions"])
-        context["regions"].update(clause_context["regions"])
         context["finance_context"] = context["finance_context"] or clause_context["finance_context"]
+        if not context["jurisdiction_terms"] and clause_context["jurisdiction_terms"]:
+            context["jurisdiction_terms"].update(clause_context["jurisdiction_terms"])
+            context["regions"].update(clause_context["regions"])
+            context["jurisdiction_source"] = clause_context["jurisdiction_source"]
+            context["scope_note"] = clause_context["scope_note"]
 
+    context["national_only"] = len(context["jurisdiction_terms"]) == 0
+    if context["national_only"] and not context["scope_note"]:
+        context["scope_note"] = "wilayah tidak terdeteksi, analisis berdasarkan regulasi nasional saja"
     return context
 
 
@@ -243,8 +407,8 @@ def _is_national_regulation(
     return False
 
 
-def _region_matches(payload: dict[str, Any], regions: set[str]) -> bool:
-    if not regions:
+def _region_matches(payload: dict[str, Any], jurisdiction_terms: set[str]) -> bool:
+    if not jurisdiction_terms:
         return False
     text = _norm(
         " ".join(
@@ -257,7 +421,7 @@ def _region_matches(payload: dict[str, Any], regions: set[str]) -> bool:
             ]
         )
     )
-    return any(region in text for region in regions)
+    return any(term in text for term in jurisdiction_terms if term)
 
 
 def _ensure_upper_tier_coverage(
@@ -340,10 +504,14 @@ def vector_search(
         semantic_score = float(hit.score or 0.0)
         adjusted_score = semantic_score + _authority_bonus(tier_rank) + _recency_bonus(year)
 
-        region_match = _region_matches(payload, context["regions"])
+        region_match = _region_matches(payload, context["jurisdiction_terms"])
         institution_match = bool(candidate_institutions & context["institutions"])
         local_regulation = _is_local_regulation(payload, tier_rank)
         national_regulation = _is_national_regulation(payload, tier_rank, candidate_institutions)
+
+        # Priority 4: if jurisdiction is not detected, skip local regulations (Perda/Perkada).
+        if context["national_only"] and local_regulation:
+            continue
 
         # Institution-aware reranking (instansi context should not mix unrelated agencies).
         if context["institutions"]:
@@ -360,13 +528,15 @@ def vector_search(
                 adjusted_score -= 0.08
 
         # Territorial relevance: strict for local regs, but keep national and sectoral rules.
-        if context["regions"]:
+        if context["jurisdiction_terms"]:
             if region_match:
                 adjusted_score += 0.30
             elif local_regulation and not national_regulation:
                 adjusted_score -= 0.36
             elif national_regulation:
                 adjusted_score += 0.06
+        elif national_regulation:
+            adjusted_score += 0.06
 
         ranked.append(
             {

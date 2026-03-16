@@ -302,6 +302,9 @@ def _analyze_text_sync(text: str, filename: str) -> AnalysisResponse:
 
     # Generate summary with LLM
     summary = _generate_summary(clause_results, filename)
+    scope_note = str(retrieval_context.get("scope_note", "") or "").strip()
+    if scope_note:
+        summary = f"{summary}\n\nCatatan: {scope_note}."
 
     return AnalysisResponse(
         analysis_id=str(uuid.uuid4()),
